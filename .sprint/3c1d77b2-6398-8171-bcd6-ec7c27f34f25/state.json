@@ -1,0 +1,18 @@
+{
+  "card_id": "3c1d77b2-6398-8171-bcd6-ec7c27f34f25",
+  "card_url": "https://app.notion.com/p/3c1d77b263988171bcd6ec7c27f34f25",
+  "title": "M1-S01 · Skeleton y comunicación .NET ↔ Python",
+  "stack": "React + TypeScript + Vite (frontend) · ASP.NET Core Web API (backend) · Python + FastAPI (motor) — derivado de la sección Arquitectura oficial",
+  "branch": "sprint/3c1d77b2-skeleton-net-python",
+  "column": "Done",
+  "phase": "review",
+  "fix_rounds": 0,
+  "preview_url": null,
+  "started_at": "2026-09-24T00:00:00Z",
+  "exceptions": [
+    "Board sin propiedad Tecnología/Stack: stack derivado del cuerpo de la tarjeta, no de una propiedad dedicada.",
+    "Tarjeta no es un sitio web: se saltan web-design-architect y web-qa-auditor por decisión explícita del usuario. Verificación por build/tests/docker compose locales en vez de Lighthouse/axe.",
+    "No hay deploy a Vercel: la app es multi-servicio (React+ASP.NET Core+Python vía Docker Compose), no aplica un preview de Vercel para esta tarjeta.",
+    "Por decisión explícita del usuario en el chat, el orquestador SÍ mueve la tarjeta a Done al terminar (excepción deliberada a la restricción original de sprint.md). El usuario mueve Done→Test manualmente."
+  ]
+}

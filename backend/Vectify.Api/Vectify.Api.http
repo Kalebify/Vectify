@@ -1,0 +1,24 @@
+@Vectify.Api_HostAddress = http://localhost:5080
+
+GET {{Vectify.Api_HostAddress}}/health
+Accept: application/json
+
+###
+
+GET {{Vectify.Api_HostAddress}}/api/v1/system/health
+Accept: application/json
+
+###
+
+POST {{Vectify.Api_HostAddress}}/api/v1/projects
+Accept: application/json
+Content-Type: multipart/form-data; boundary=VectifyBoundary
+
+--VectifyBoundary
+Content-Disposition: form-data; name="file"; filename="ejemplo.png"
+Content-Type: image/png
+
+< ./ejemplo.png
+--VectifyBoundary--
+
+###
