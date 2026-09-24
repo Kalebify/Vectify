@@ -8,10 +8,19 @@ Ejecutar desde la raíz salvo que se indique otra carpeta.
 dotnet test backend/Vectify.sln
 ```
 
-15 pruebas xUnit: 7 unitarias del cliente, 5 de integración HTTP y 3 de CORS.
-La integración HTTP utiliza **Kestrel con respuestas simuladas**, no Python.
-Cubre health, deserialización, caída, timeout y respuesta inválida. Kestrel
-usa puertos efímeros y no depende de HttpListener/HTTP.sys de Windows.
+49 pruebas xUnit:
+
+- 15 de M1-S01: 7 unitarias del cliente Python, 5 de integración HTTP
+  (health) y 3 de CORS. La integración HTTP utiliza **Kestrel con respuestas
+  simuladas**, no Python. Kestrel usa puertos efímeros y no depende de
+  HttpListener/HTTP.sys de Windows.
+- 34 de M1-S02 (carga de imágenes): 11 unitarias de `ImageUploadValidator`
+  (formato/tamaño/vacío/corrupto), 5 de `ImageDimensionsReader` (PNG/JPEG/WEBP),
+  5 de integración de `LocalFileStorage` contra el filesystem real (directorio
+  temporal), 4 unitarias de `ProjectUploadService` con storage fake, y 9 de
+  integración HTTP de `POST /api/v1/projects` / `GET .../original` contra la
+  Web API real (`WebApplicationFactory`), cubriendo carga válida, cada error
+  controlado del spec e idempotencia.
 
 ## Frontend
 
@@ -24,10 +33,17 @@ npm run build
 npm run lint
 ```
 
-8 pruebas con Vitest, Testing Library y jsdom. Montan la pantalla real y
-simulan fetch: loading, online, API offline, los cuatro fallos de Python y
-el ciclo online → unavailable → online. Verifican los textos visibles.
-jsdom no sustituye a un navegador real para comprobar CORS.
+23 pruebas con Vitest, Testing Library y jsdom:
+
+- 8 de M1-S01 (diagnóstico): loading, online, API offline, los cuatro fallos
+  de Python y el ciclo online → unavailable → online.
+- 7 unitarias de `validateImageFile` (validación UX de formato/tamaño/vacío).
+- 8 de `UploadPanel`: selección válida/inválida, cancelar en seleccionado y
+  en carga, progreso, éxito (proyecto creado), error controlado de la Web API
+  y fallo de red — con `XMLHttpRequest` estubado (fetch no expone progreso de
+  subida).
+
+jsdom no sustituye a un navegador real para comprobar CORS ni drag-and-drop real.
 
 ## Python
 
@@ -95,7 +111,9 @@ docker compose start python-engine
 # Comprobar recuperación en la misma página (polling cada 5 segundos).
 ```
 
-## Estado de verificación (2026-09-24)
+## Estado de verificación
+
+M1-S01 (2026-09-24):
 
 - Backend: 15/15 aprobadas.
 - Frontend: 8/8 aprobadas; build/TypeScript y lint correctos.
@@ -104,6 +122,19 @@ docker compose start python-engine
 - Integración local con FastAPI real: online → unavailable → online correcta.
 - Docker: no ejecutado porque no está instalado/disponible en este entorno.
 - Navegador real: pendiente; las pruebas de interfaz actuales usan jsdom.
+
+M1-S02 (2026-09-24), añadido sobre lo anterior:
+
+- Backend: 49/49 aprobadas (15 de M1-S01 + 34 de carga de imágenes).
+- Frontend: 23/23 aprobadas (8 de M1-S01 + 15 de carga de imágenes);
+  build/TypeScript y lint correctos.
+- `node tests/e2e/upload_e2e_test.mjs`: aprobado contra la Web API real
+  (Kestrel, sin `WebApplicationFactory`) — carga válida con recuperación
+  byte a byte del original, y los tres errores controlados principales
+  (formato no soportado, archivo vacío, archivo corrupto).
+- Docker y navegador real: mismo estado pendiente que M1-S01 (no ejecutado
+  en este entorno); tampoco se verificó drag-and-drop real de la Dropzone
+  fuera de jsdom.
 
 El sprint no tiene toda su Definition of Done verificada hasta completar
 Docker y la comprobación en navegador, independientemente de la columna del tablero.

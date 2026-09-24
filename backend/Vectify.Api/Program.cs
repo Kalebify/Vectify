@@ -1,8 +1,12 @@
 using Microsoft.Extensions.Options;
 using Vectify.Api.Clients;
 using Vectify.Api.Contracts;
+using Vectify.Api.Endpoints;
 using Vectify.Api.Middleware;
 using Vectify.Api.Options;
+using Vectify.Api.Projects;
+using Vectify.Api.Storage;
+using Vectify.Api.Validation;
 
 const string ApiVersion = "0.1.0";
 const string ApiServiceName = "vectify-api";
@@ -66,6 +70,25 @@ builder.Services
             .AllowAnyHeader()
             .AllowAnyMethod()
             .WithExposedHeaders(CorrelationIdMiddleware.HeaderName)));
+
+// Carga y almacenamiento de imágenes (M1-S02): validación configurable (Upload:*),
+// almacenamiento local para desarrollo (Storage:*, detrás de la abstracción
+// IFileStorage para poder sustituirla por S3-compatible sin tocar el endpoint) y
+// un registro de proyectos en memoria (todavía no hay base de datos de negocio).
+builder.Services
+    .AddOptions<UploadOptions>()
+    .Bind(builder.Configuration.GetSection(UploadOptions.SectionName))
+    .Validate(o => o.MaxFileSizeBytes > 0, "Upload:MaxFileSizeBytes debe ser mayor a 0.")
+    .Validate(o => o.GetAllowedContentTypes().Length > 0, "Upload:AllowedContentTypes no puede estar vacío.");
+
+builder.Services
+    .AddOptions<LocalStorageOptions>()
+    .Bind(builder.Configuration.GetSection(LocalStorageOptions.SectionName));
+
+builder.Services.AddSingleton<IImageUploadValidator, ImageUploadValidator>();
+builder.Services.AddSingleton<IFileStorage, LocalFileStorage>();
+builder.Services.AddSingleton<IProjectRegistry, InMemoryProjectRegistry>();
+builder.Services.AddScoped<IProjectUploadService, ProjectUploadService>();
 
 var app = builder.Build();
 
@@ -145,6 +168,8 @@ app.MapGet("/api/v1/system/health", async (
 })
 .WithName("GetSystemHealth")
 .WithTags("Health");
+
+app.MapProjectEndpoints();
 
 app.Run();
 

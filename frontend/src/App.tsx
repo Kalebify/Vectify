@@ -1,5 +1,6 @@
 import { ServiceCard } from "./components/ServiceCard";
 import type { StatusTone } from "./components/StatusPill";
+import { UploadPanel } from "./components/upload/UploadPanel";
 import { useSystemHealth } from "./hooks/useSystemHealth";
 import type { PythonStatus } from "./types/system";
 import "./App.css";
@@ -49,68 +50,80 @@ function App() {
   return (
     <>
       <header className="app-header">
-        <h1>Vectify — Diagnóstico del sistema</h1>
+        <h1>Vectify</h1>
         <p className="app-header__subtitle">
-          Sprint fundacional: verifica que React, ASP.NET Core y el motor Python estén
-          comunicados correctamente.
+          Vectorizá tus imágenes: cargá un original y verificá el estado del sistema.
         </p>
       </header>
 
       <main>
-        <section aria-label="Resumen general" className={`status-banner status-banner--${status}`}>
-          <p>{BANNER_COPY[status]}</p>
+        <section aria-labelledby="upload-heading" className="upload-section">
+          <h2 id="upload-heading">Nuevo proyecto</h2>
+          <p className="upload-section__hint">
+            Arrastrá o seleccioná una imagen para crear un proyecto a partir de ella. Todavía
+            no se procesa: solo se guarda el original.
+          </p>
+          <UploadPanel />
         </section>
 
-        <section aria-label="Estado de los servicios" className="service-grid">
-          <ServiceCard title="Web API (ASP.NET Core)" tone={apiTone} statusLabel={apiLabel}>
-            {status === "error" ? (
-              <p className="service-card__message">
-                {errorMessage ?? "No se pudo establecer conexión con la Web API."}
-              </p>
-            ) : status === "loading" ? (
-              <p className="service-card__message">Esperando la respuesta de la Web API.</p>
-            ) : (
-              <p className="service-card__message">
-                La Web API respondió correctamente a la última consulta de salud.
-              </p>
-            )}
-          </ServiceCard>
+        <section aria-labelledby="diagnostics-heading">
+          <h2 id="diagnostics-heading">Diagnóstico del sistema</h2>
 
-          <ServiceCard title="Motor Python (FastAPI)" tone={pythonTone} statusLabel={pythonLabel}>
-            {status === "loading" || status === "error" ? (
-              <p className="service-card__message">
-                El estado del motor Python depende de la Web API; todavía no hay datos.
-              </p>
-            ) : (
-              <dl className="service-card__details">
-                <div>
-                  <dt>Servicio</dt>
-                  <dd>{response!.python.service ?? "—"}</dd>
-                </div>
-                <div>
-                  <dt>Versión</dt>
-                  <dd>{response!.python.version ?? "—"}</dd>
-                </div>
-                {response!.python.message && (
+          <div aria-label="Resumen general" className={`status-banner status-banner--${status}`}>
+            <p>{BANNER_COPY[status]}</p>
+          </div>
+
+          <div aria-label="Estado de los servicios" className="service-grid">
+            <ServiceCard title="Web API (ASP.NET Core)" tone={apiTone} statusLabel={apiLabel}>
+              {status === "error" ? (
+                <p className="service-card__message">
+                  {errorMessage ?? "No se pudo establecer conexión con la Web API."}
+                </p>
+              ) : status === "loading" ? (
+                <p className="service-card__message">Esperando la respuesta de la Web API.</p>
+              ) : (
+                <p className="service-card__message">
+                  La Web API respondió correctamente a la última consulta de salud.
+                </p>
+              )}
+            </ServiceCard>
+
+            <ServiceCard title="Motor Python (FastAPI)" tone={pythonTone} statusLabel={pythonLabel}>
+              {status === "loading" || status === "error" ? (
+                <p className="service-card__message">
+                  El estado del motor Python depende de la Web API; todavía no hay datos.
+                </p>
+              ) : (
+                <dl className="service-card__details">
                   <div>
-                    <dt>Detalle</dt>
-                    <dd>{response!.python.message}</dd>
+                    <dt>Servicio</dt>
+                    <dd>{response!.python.service ?? "—"}</dd>
                   </div>
-                )}
-              </dl>
-            )}
-          </ServiceCard>
-        </section>
+                  <div>
+                    <dt>Versión</dt>
+                    <dd>{response!.python.version ?? "—"}</dd>
+                  </div>
+                  {response!.python.message && (
+                    <div>
+                      <dt>Detalle</dt>
+                      <dd>{response!.python.message}</dd>
+                    </div>
+                  )}
+                </dl>
+              )}
+            </ServiceCard>
+          </div>
 
-        <p className="last-checked">
-          {lastCheckedAt
-            ? `Última verificación: ${lastCheckedAt.toLocaleTimeString()}`
-            : "Aún no se realizó ninguna verificación."}
-        </p>
+          <p className="last-checked">
+            {lastCheckedAt
+              ? `Última verificación: ${lastCheckedAt.toLocaleTimeString()}`
+              : "Aún no se realizó ninguna verificación."}
+          </p>
+        </section>
       </main>
 
       <footer className="app-footer">
-        <p>Vectify · M1-S01 · Skeleton y comunicación .NET ↔ Python</p>
+        <p>Vectify · M1-S02 · Carga y almacenamiento de imágenes</p>
       </footer>
     </>
   );

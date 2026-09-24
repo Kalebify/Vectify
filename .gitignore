@@ -9,6 +9,7 @@ npm-debug.log*
 bin/
 obj/
 *.user
+backend/Vectify.Api/App_Data/
 
 # Python / services
 __pycache__/
