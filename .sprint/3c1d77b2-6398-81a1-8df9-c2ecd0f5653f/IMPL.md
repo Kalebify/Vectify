@@ -1,5 +1,24 @@
 status: ok
 
+## Segunda ronda de corrección — 2026-09-25 (rama fix/3c1d77b2-preprocess-corrections)
+
+El usuario probó manualmente el preprocesamiento y encontró 4 defectos más, verificados contra el código antes de corregir:
+
+- **A. Brillo negativo incorrecto**: `adjust_contrast_brightness` usaba `cv2.convertScaleAbs`, que aplica `abs()` después de `alpha*in+beta` y antes de saturar — un píxel negro con brightness=-100 daba 100 en vez de 0. Arreglo: cálculo en `float32` + `np.clip(0,255)` sin abs.
+- **B. Reset retrocedía la versión**: un cache-hit por parámetros devolvía el `PreprocessConfigRecord` viejo sin versionar de nuevo, así que `_latest` quedaba desincronizado del estado visible. Arreglo: cache-hit reutiliza los bytes/archivo ya generados pero crea y guarda un registro NUEVO con versión nueva (`NextVersion()` + `Save()`), separando el caché de píxeles del historial de versiones.
+- **C. Race condition**: requests concurrentes con los mismos parámetros podían pasar el chequeo de caché a la vez y llamar a Python dos veces. Arreglo: `SemaphoreSlim` por clave `(projectId, imageId, parametersCacheKey)` serializa la sección crítica.
+- **D. Bomba de descompresión**: se decodificaba la imagen completa antes de chequear dimensiones. Arreglo: `imagesize` lee ancho/alto de la cabecera sin decodificar píxeles y rechaza temprano; el chequeo post-decode se mantiene como red de seguridad.
+
+**Verificación de esta ronda:**
+- `dotnet build` → OK. `dotnet test` → **99/99 pasaron** (sin regresiones de rondas anteriores).
+- `pytest` (con `.venv` existente, Python 3.12.14) → **43/43 pasaron**.
+
+**Nota sobre el reporte de "punto 1" (licencia de ImageSharp 4.1.2)**: no se reprodujo contra el código de este repo — el `.csproj` en `main` y en todas las ramas de este sprint tiene `SixLabors.ImageSharp` fijado en `2.1.13` (Apache 2.0), nunca `4.1.2`, y no había cambios sin commit al momento del reporte. Se le pidió al usuario confirmar si probó desde un checkout separado.
+
+---
+
+**Reporte original de implementación (M1-S03), antes de las rondas de corrección:**
+
 Archivos (nuevos):
 - `services/python-engine/app/core/pipeline.py` — funciones puras deterministas: lectura segura, límites de dimensiones, grayscale, contraste/brillo, denoise (blur gaussiano), métricas, encode PNG.
 - `services/python-engine/app/core/errors.py` — `CorruptImageError`, `DimensionsExceededError`, `InvalidParametersError` con código estable.

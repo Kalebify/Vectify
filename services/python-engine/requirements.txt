@@ -6,3 +6,4 @@ python-dotenv==1.2.3
 python-multipart==0.0.32
 opencv-python-headless==5.0.0.93
 numpy==2.5.3
+imagesize==2.0.1

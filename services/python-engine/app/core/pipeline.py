@@ -73,14 +73,24 @@ def to_grayscale(image: np.ndarray, enabled: bool) -> np.ndarray:
 
 def adjust_contrast_brightness(image: np.ndarray, contrast: float, brightness: int) -> np.ndarray:
     """Contraste (factor multiplicativo) + brillo/normalización (offset
-    aditivo) en un solo paso lineal: out = saturate(contrast * in + brightness).
-    cv2.convertScaleAbs es determinista para los mismos alpha/beta. Sin cambios,
-    se evita una copia innecesaria.
+    aditivo) en un solo paso lineal: out = clip(contrast * in + brightness, 0, 255).
+
+    OJO: no se usa cv2.convertScaleAbs, porque esa función aplica valor
+    absoluto DESPUÉS de alpha*in+beta y ANTES de saturar
+    (dst = saturate(|alpha*in + beta|)), lo que produce resultados incorrectos
+    para brillo negativo (ej. un píxel negro con brightness=-100 da 100 en vez
+    de 0). En su lugar se calcula en float32 (ancho suficiente para no
+    desbordar con los rangos de contraste/brillo soportados), se clippea a
+    [0, 255] sin abs y se vuelve a uint8. Determinista: mismos
+    contrast/brightness sobre la misma imagen siempre dan el mismo resultado
+    byte a byte. Sin cambios, se evita una copia innecesaria.
     """
     if contrast == 1.0 and brightness == 0:
         return image
 
-    return cv2.convertScaleAbs(image, alpha=contrast, beta=brightness)
+    scaled = image.astype(np.float32) * contrast + brightness
+    clipped = np.clip(scaled, 0, 255)
+    return clipped.astype(np.uint8)
 
 
 def denoise(image: np.ndarray, strength: int) -> np.ndarray:

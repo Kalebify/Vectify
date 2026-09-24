@@ -114,6 +114,18 @@ def test_adjust_contrast_brightness_saturates_at_255():
     assert np.all(result == 255)
 
 
+def test_adjust_contrast_brightness_negative_brightness_clips_to_zero_without_abs():
+    # Regresión: cv2.convertScaleAbs aplicaba valor absoluto ANTES de saturar,
+    # así que un píxel negro con brightness=-100 daba |0 - 100| = 100 en vez
+    # de clippear a 0. La fórmula correcta es clip(contrast*in + brightness, 0, 255).
+    image = np.zeros((2, 2, 3), dtype=np.uint8)
+
+    result = pipeline.adjust_contrast_brightness(image, contrast=1.0, brightness=-100)
+
+    assert np.all(result == 0)
+    assert not np.all(result == 100)
+
+
 # --- denoise ---
 
 

@@ -98,9 +98,69 @@ public sealed class PreprocessServiceTests
         var secondReady = Assert.IsType<PreprocessResult.Ready>(second);
         Assert.False(firstReady.FromCache);
         Assert.True(secondReady.FromCache);
+        // El cache-hit reutiliza el mismo archivo/preview generado...
         Assert.Equal(firstReady.Record.PreviewId, secondReady.Record.PreviewId);
-        Assert.Equal(firstReady.Record.Version, secondReady.Record.Version);
+        Assert.Equal(firstReady.Record.PreviewStorageKey, secondReady.Record.PreviewStorageKey);
+        // ...pero SÍ avanza la versión del historial (defecto corregido: antes
+        // un cache-hit devolvía la versión vieja y no actualizaba _latest).
+        Assert.Equal(firstReady.Record.Version + 1, secondReady.Record.Version);
         Assert.Equal(1, pythonClient.CallCount); // no se volvió a llamar a Python
+    }
+
+    [Fact]
+    public async Task GeneratePreviewAsync_WhenResetMatchesEarlierVersion_CreatesNewVersionReusingSamePreviewFile()
+    {
+        // Escenario del defecto: preview inicial (v1, params por defecto) ->
+        // cambio de parámetros (v2) -> reset a los valores por defecto ->
+        // debe ser v3 mostrando los valores por defecto, reutilizando el
+        // archivo de v1, y _latest debe reflejar v3 (no quedarse en v2).
+        var (service, storage, preprocessRegistry, pythonClient) = CreateService();
+
+        var initial = await service.GeneratePreviewAsync(ProjectId, ImageId, DefaultRequest(), CancellationToken.None);
+        var changed = await service.GeneratePreviewAsync(ProjectId, ImageId, DefaultRequest(brightness: 30), CancellationToken.None);
+        var reset = await service.GeneratePreviewAsync(ProjectId, ImageId, DefaultRequest(), CancellationToken.None);
+
+        var initialReady = Assert.IsType<PreprocessResult.Ready>(initial);
+        var changedReady = Assert.IsType<PreprocessResult.Ready>(changed);
+        var resetReady = Assert.IsType<PreprocessResult.Ready>(reset);
+
+        Assert.Equal(1, initialReady.Record.Version);
+        Assert.Equal(2, changedReady.Record.Version);
+        Assert.True(resetReady.FromCache);
+        Assert.Equal(3, resetReady.Record.Version);
+
+        // Mismo archivo/preview que la generación original (no se regeneró).
+        Assert.Equal(initialReady.Record.PreviewId, resetReady.Record.PreviewId);
+        Assert.Equal(initialReady.Record.PreviewStorageKey, resetReady.Record.PreviewStorageKey);
+        Assert.Equal(2, pythonClient.CallCount); // solo 2 llamadas reales a Python (v1 y v2)
+
+        // _latest queda en v3, no en v2.
+        var latest = preprocessRegistry.FindLatest(ProjectId, ImageId);
+        Assert.NotNull(latest);
+        Assert.Equal(3, latest!.Version);
+        Assert.Equal(resetReady.Record.PreviewId, latest.PreviewId);
+    }
+
+    [Fact]
+    public async Task GeneratePreviewAsync_WhenConcurrentRequestsWithSameParams_CallsPythonOnlyOnce()
+    {
+        var (service, _, preprocessRegistry, pythonClient) = CreateService();
+        pythonClient.Delay = TimeSpan.FromMilliseconds(50);
+        var request = DefaultRequest(contrast: 1.2, brightness: 5);
+
+        var task1 = service.GeneratePreviewAsync(ProjectId, ImageId, request, CancellationToken.None);
+        var task2 = service.GeneratePreviewAsync(ProjectId, ImageId, request, CancellationToken.None);
+        var results = await Task.WhenAll(task1, task2);
+
+        Assert.Equal(1, pythonClient.CallCount);
+
+        var ready1 = Assert.IsType<PreprocessResult.Ready>(results[0]);
+        var ready2 = Assert.IsType<PreprocessResult.Ready>(results[1]);
+        Assert.Equal(ready1.Record.PreviewId, ready2.Record.PreviewId);
+
+        var latest = preprocessRegistry.FindLatest(ProjectId, ImageId);
+        Assert.NotNull(latest);
+        Assert.Equal(ready1.Record.PreviewId, latest!.PreviewId);
     }
 
     [Fact]

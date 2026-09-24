@@ -5,6 +5,7 @@ extremo a extremo, respeto de los límites de dimensiones y que el original
 
 import pytest
 
+from app.core import pipeline
 from app.core.config import Settings
 from app.core.errors import CorruptImageError, DimensionsExceededError
 from app.models.schemas import PreprocessParams
@@ -66,6 +67,28 @@ def test_process_raises_dimensions_exceeded_for_oversized_image():
         Settings(max_image_width=4, max_image_height=4, max_image_pixels=16)
     )
     data = make_png_bytes(50, 50)
+
+    with pytest.raises(DimensionsExceededError):
+        tiny_limits_service.process(data, PreprocessParams())
+
+
+def test_process_rejects_oversized_image_by_header_without_full_decode(monkeypatch):
+    # Defensa contra bombas de descompresión: el chequeo de dimensiones por
+    # cabecera debe rechazar la imagen ANTES de que se llame a
+    # pipeline.read_image_safely (que decodificaría todos los píxeles). Se
+    # fuerza el fallo del test si esa función llega a invocarse.
+    tiny_limits_service = PreprocessingService(
+        Settings(max_image_width=4, max_image_height=4, max_image_pixels=16)
+    )
+    data = make_png_bytes(50, 50)
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError(
+            "read_image_safely no debería llamarse: el chequeo por cabecera "
+            "tiene que rechazar la imagen antes de decodificarla por completo."
+        )
+
+    monkeypatch.setattr(pipeline, "read_image_safely", fail_if_called)
 
     with pytest.raises(DimensionsExceededError):
         tiny_limits_service.process(data, PreprocessParams())
