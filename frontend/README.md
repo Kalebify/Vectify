@@ -28,3 +28,7 @@ npm run dev
   `loading` / `online` / `degraded` / `error`.
 - `src/components/` — `StatusPill`, `ServiceCard`.
 - `src/App.tsx` — pantalla Home/Diagnostics.
+
+## Pruebas
+
+Ejecutar npm test para las 8 pruebas de diagnóstico (Vitest y Testing Library). Simulan HTTP y verifican loading, servicios online/offline y recuperación. Ver ../tests/README.md para integración real y Docker.

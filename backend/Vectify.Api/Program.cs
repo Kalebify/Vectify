@@ -47,9 +47,42 @@ builder.Services.AddHttpClient<IPythonVectorizationClient, PythonVectorizationCl
     client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
 });
 
+// CORS: React se sirve desde otro origen (p. ej. http://localhost:5173) que la
+// Web API (http://localhost:5080), así que sin esta política el navegador bloquearía
+// la lectura de las respuestas. Los orígenes salen de configuración (sección "Cors"),
+// nunca hardcodeados, y se resuelven de forma diferida (igual que PythonEngineOptions)
+// para respetar overrides de entorno y de WebApplicationFactory en los tests.
+// Se expone X-Correlation-Id para que el frontend pueda leerlo.
+builder.Services
+    .AddOptions<FrontendCorsOptions>()
+    .Bind(builder.Configuration.GetSection(FrontendCorsOptions.SectionName));
+
+builder.Services.AddCors();
+builder.Services
+    .AddOptions<Microsoft.AspNetCore.Cors.Infrastructure.CorsOptions>()
+    .Configure<IOptions<FrontendCorsOptions>>((cors, frontend) =>
+        cors.AddPolicy(FrontendCorsOptions.PolicyName, policy => policy
+            .WithOrigins(frontend.Value.GetOrigins())
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .WithExposedHeaders(CorrelationIdMiddleware.HeaderName)));
+
 var app = builder.Build();
 
+var allowedOrigins = app.Services.GetRequiredService<IOptions<FrontendCorsOptions>>().Value.GetOrigins();
+if (allowedOrigins.Length == 0)
+{
+    app.Logger.LogWarning(
+        "Cors:AllowedOrigins está vacío: ningún navegador podrá leer las respuestas de la Web API.");
+}
+else
+{
+    app.Logger.LogInformation("CORS habilitado para los orígenes {AllowedOrigins}", string.Join(", ", allowedOrigins));
+}
+
 app.UseMiddleware<CorrelationIdMiddleware>();
+
+app.UseCors(FrontendCorsOptions.PolicyName);
 
 if (app.Environment.IsDevelopment())
 {

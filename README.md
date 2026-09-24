@@ -17,6 +17,10 @@ pasa por la Web API de ASP.NET Core, que expone un cliente tipado
 (`IPythonVectorizationClient`, vía `IHttpClientFactory`) hacia FastAPI y
 compone un estado global (`online` / `degraded`) que consume React.
 
+Como React y la Web API se sirven en orígenes distintos (puertos 5173 y 5080),
+la Web API aplica una política CORS con los orígenes configurados en
+`Cors__AllowedOrigins`. Si abres React desde otra URL o puerto, añádela ahí.
+
 - **Frontend** (`frontend/`): React + TypeScript + Vite. Pantalla única de
   diagnóstico ("Home/Diagnostics") que consulta el estado de la Web API y del
   motor Python cada 5 segundos y representa los estados `loading`, `online`,
@@ -88,7 +92,7 @@ npm run dev
 ## Tests
 
 ```bash
-# Backend (xUnit): unitarias del cliente Python + integración end-to-end real
+# Backend (xUnit): cliente Python + integración HTTP con motor simulado
 cd backend
 dotnet test
 
@@ -97,12 +101,21 @@ cd services/python-engine
 pip install -r requirements-dev.txt
 pytest
 
-# End-to-end de humo (con la pila arriba, Docker o local)
+# Smoke HTTP (con la pila arriba, Docker o local; no verifica la UI)
 BACKEND_URL=http://localhost:5080 PYTHON_URL=http://localhost:8001 \
   bash tests/e2e/smoke-test.sh
 ```
 
-Ver `tests/README.md` para el detalle de qué cubre cada suite.
+Desde `frontend/`, ejecutar `npm ci`, `npm test`, `npm run build` y `npm run lint`.
+Para verificar FastAPI real, desde la raíz y con el entorno Python activo:
+`dotnet build backend/Vectify.sln` y `python tests/e2e/real_stack_test.py`.
+Con Docker disponible: `python tests/e2e/docker_stack_test.py` construye una pila
+isolada y verifica health, CORS y recuperación. Para smoke sin Bash:
+`python tests/e2e/smoke_test.py`.
+
+Ver `tests/README.md` para cobertura, comandos y resultados. **Docker y la
+comprobación en navegador real siguen pendientes de verificación**; los tests
+de React usan jsdom. El estado administrativo Done no acredita esos criterios.
 
 ## Variables de entorno
 
@@ -115,6 +128,8 @@ secretos reales.
 | `VITE_API_BASE_URL` | `frontend/.env` | `http://localhost:5080` | URL de la Web API que usa el navegador |
 | `PythonEngine__BaseUrl` | `backend` (appsettings o env) | `http://localhost:8001` | URL del motor Python vista por ASP.NET Core |
 | `PythonEngine__TimeoutSeconds` | `backend` (appsettings o env) | `5` | Timeout del cliente HTTP hacia Python |
+| `Cors__AllowedOrigins` | `backend` (appsettings o env) | `http://localhost:5173,http://127.0.0.1:5173` | Orígenes del navegador (separados por comas) autorizados a llamar a la Web API |
+| `CORS_ALLOWED_ORIGINS` | `.env` (raíz) | `http://localhost:5173,http://127.0.0.1:5173` | Valor que docker-compose pasa a `Cors__AllowedOrigins`; si cambias `FRONTEND_PORT`, actualízalo |
 | `SERVICE_NAME` / `SERVICE_VERSION` | `services/python-engine/.env` | `vectify-python-engine` / `0.1.0` | Identidad reportada en `/health` y `/api/v1/info` |
 | `HOST` / `PORT` | `services/python-engine/.env` | `0.0.0.0` / `8000` | Bind del servidor uvicorn |
 | `LOG_LEVEL` | `services/python-engine/.env` | `info` | Nivel de logging del motor |

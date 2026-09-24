@@ -1,108 +1,53 @@
 using System.Net;
-using System.Net.Sockets;
-using System.Text;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace Vectify.Api.Tests.TestSupport;
 
-/// <summary>
-/// Servidor HTTP real y mínimo que simula al motor Python/FastAPI para las pruebas
-/// de integración: escucha en un puerto libre de loopback y responde /health con
-/// el cuerpo, código y demora que la prueba necesite. Permite ejercitar el cliente
-/// real de ASP.NET Core (IPythonVectorizationClient) contra una llamada HTTP real,
-/// en vez de mockear el HttpMessageHandler.
-/// </summary>
+/// <summary>Servidor Kestrel con respuestas simuladas; no ejecuta Python.</summary>
 public sealed class FakePythonServer : IAsyncDisposable
 {
-    private readonly HttpListener _listener;
-    private readonly CancellationTokenSource _cts = new();
-    private readonly Task _acceptLoop;
-
+    private readonly WebApplication _app;
     public string BaseUrl { get; }
-
-    private FakePythonServer(HttpListener listener, string baseUrl, string responseBody, int statusCode, TimeSpan? delay)
+    private FakePythonServer(WebApplication app, string baseUrl)
     {
-        _listener = listener;
+        _app = app;
         BaseUrl = baseUrl;
-        _acceptLoop = AcceptLoopAsync(responseBody, statusCode, delay);
     }
-
-    public static FakePythonServer Start(string responseBody, int statusCode = 200, TimeSpan? delay = null)
+    public static async Task<FakePythonServer> StartAsync(string responseBody, int statusCode = 200, TimeSpan? delay = null)
     {
-        var port = GetFreeTcpPort();
-        var baseUrl = $"http://127.0.0.1:{port}/";
-        var listener = new HttpListener();
-        listener.Prefixes.Add(baseUrl);
-        listener.Start();
-        return new FakePythonServer(listener, baseUrl, responseBody, statusCode, delay);
-    }
-
-    private async Task AcceptLoopAsync(string responseBody, int statusCode, TimeSpan? delay)
-    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Logging.ClearProviders();
+        builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, 0));
+        var app = builder.Build();
+        app.MapGet("/health", async context =>
+        {
+            if (delay is { } duration) await Task.Delay(duration, context.RequestAborted);
+            context.Response.StatusCode = statusCode;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(responseBody, context.RequestAborted);
+        });
         try
         {
-            while (!_cts.IsCancellationRequested)
-            {
-                HttpListenerContext context;
-                try
-                {
-                    context = await _listener.GetContextAsync().WaitAsync(_cts.Token);
-                }
-                catch (OperationCanceledException)
-                {
-                    break;
-                }
-
-                if (delay is { } d)
-                {
-                    try
-                    {
-                        await Task.Delay(d, _cts.Token);
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        // El servidor se está apagando mientras "dormía": cerramos igual.
-                    }
-                }
-
-                context.Response.StatusCode = statusCode;
-                context.Response.ContentType = "application/json";
-                var bytes = Encoding.UTF8.GetBytes(responseBody);
-                await context.Response.OutputStream.WriteAsync(bytes);
-                context.Response.OutputStream.Close();
-            }
-        }
-        catch (ObjectDisposedException)
-        {
-            // El listener se cerró mientras esperaba una conexión: fin esperado.
-        }
-        catch (HttpListenerException)
-        {
-            // Idem, en algunas plataformas se manifiesta como HttpListenerException.
-        }
-    }
-
-    private static int GetFreeTcpPort()
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        _cts.Cancel();
-        _listener.Stop();
-        _listener.Close();
-        try
-        {
-            await _acceptLoop.WaitAsync(TimeSpan.FromSeconds(2));
+            await app.StartAsync();
+            var addresses = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!;
+            return new FakePythonServer(app, addresses.Addresses.Single());
         }
         catch
         {
-            // best-effort cleanup
+            await app.DisposeAsync();
+            throw;
         }
-        _cts.Dispose();
+    }
+    public async ValueTask DisposeAsync()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        try { await _app.StopAsync(timeout.Token); }
+        finally { await _app.DisposeAsync(); }
     }
 }

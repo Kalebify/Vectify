@@ -63,3 +63,21 @@ Supuestos que se tuvieron que hacer:
 - Puertos elegidos (no especificados en el spec): frontend 5173, backend 5080 (interno 8080 en Docker), motor Python 8001 (interno 8000 en Docker) — documentados en el README y configurables por `.env`.
 - `/api/v1/info` de Python responde `capabilities: ["health-check"]` (única capacidad real de este sprint fundacional).
 - Se usó Swashbuckle.AspNetCore en vez del `Microsoft.AspNetCore.OpenApi` nativo del template, por conflicto real de versiones de `Microsoft.OpenApi` (rompía el build con `TypeLoadException` en ejecución).
+
+## Revisión posterior — 2026-09-24
+
+Esta revisión actualiza las afirmaciones de verificación anteriores:
+- Integración xUnit usa Kestrel con respuestas simuladas, no FastAPI real.
+- Backend: 15/15 aprobadas, incluidas las pruebas de CORS.
+- Frontend: 8/8 pruebas de pantalla (jsdom), build y lint correctos.
+- Python: 3/3 aprobadas. Validador smoke: 3/3 aprobadas.
+- Integración HTTP real automatizada: FastAPI online, apagado y recuperado
+  sin reiniciar la API, con contrato tipado e identidad configurada comprobados.
+- Smoke ahora valida campos JSON exactos y CORS; ya no confunde API online
+  con estado global online.
+- Docker no ejecutado: no disponible en el entorno. Se añadió verificación
+  automatizada en tests/e2e/docker_stack_test.py para un equipo con Docker.
+- Navegador real pendiente; no confundir jsdom ni consultas HTTP con una
+  comprobación visual del flujo completo React → API → FastAPI.
+- La columna Done se conserva como estado administrativo previo, pero no
+  significa que toda la Definition of Done esté verificada.

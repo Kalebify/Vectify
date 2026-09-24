@@ -67,6 +67,8 @@ function App() {
               <p className="service-card__message">
                 {errorMessage ?? "No se pudo establecer conexión con la Web API."}
               </p>
+            ) : status === "loading" ? (
+              <p className="service-card__message">Esperando la respuesta de la Web API.</p>
             ) : (
               <p className="service-card__message">
                 La Web API respondió correctamente a la última consulta de salud.
