@@ -10,6 +10,7 @@ bin/
 obj/
 *.user
 backend/Vectify.Api/App_Data/
+backend/.publish-check/
 
 # Python / services
 __pycache__/

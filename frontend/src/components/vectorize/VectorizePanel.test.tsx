@@ -44,9 +44,9 @@ function renderPanel() {
       imageId={IMAGE_ID}
       fileName="logo.png"
       sourceMaskId={MASK_ID}
-      sourceMaskUrl={`/api/v1/projects/${PROJECT_ID}/images/${IMAGE_ID}/masks/${MASK_ID}`}
-      sourceWidth={10}
-      sourceHeight={10}
+      originalUrl={`/api/v1/projects/${PROJECT_ID}/images/${IMAGE_ID}/original`}
+      originalWidth={10}
+      originalHeight={10}
     />,
   );
 }
@@ -65,6 +65,7 @@ describe("VectorizePanel — estado inicial", () => {
     expect(screen.getByRole("button", { name: "Vectorizar" })).toBeInTheDocument();
     expect(fetch).not.toHaveBeenCalled();
     expect(screen.queryByText("Versión del vector")).not.toBeInTheDocument();
+    expect(screen.queryByText("SVG vectorizado")).not.toBeInTheDocument();
   });
 });
 
@@ -79,7 +80,9 @@ describe("VectorizePanel — flujo processing/success", () => {
 
     expect(screen.getByRole("button", { name: "Vectorizando…" })).toBeDisabled();
 
-    expect(await screen.findByText("SVG resultante")).toBeInTheDocument();
+    expect(await screen.findByText("SVG vectorizado")).toBeInTheDocument();
+    expect(screen.getByText("Original")).toBeInTheDocument();
+    expect(screen.getByRole("toolbar", { name: "Controles de zoom y desplazamiento" })).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledWith(
       expect.stringMatching(new RegExp(`/api/v1/projects/${PROJECT_ID}/images/${IMAGE_ID}/vectorize$`)),
       expect.objectContaining({ method: "POST" }),

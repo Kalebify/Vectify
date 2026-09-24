@@ -642,41 +642,6 @@ main {
   color: var(--text);
 }
 
-.vectorize-comparison {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 16px;
-}
-
-@media (min-width: 640px) {
-  .vectorize-comparison {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-.vectorize-comparison__item {
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  align-items: center;
-}
-
-.vectorize-comparison__item img,
-.vectorize-comparison__placeholder {
-  max-width: 100%;
-  height: auto;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--code-bg);
-  object-fit: contain;
-}
-
-.vectorize-comparison__item figcaption {
-  font-size: 12px;
-  color: var(--text);
-}
-
 .vectorize-panel__metrics {
   border-top: 1px solid var(--border);
   padding-top: 12px;
@@ -687,5 +652,110 @@ main {
     flex-direction: column;
     align-items: flex-start;
     gap: 6px;
+  }
+}
+
+.vectorize-panel__hint {
+  font-size: 13px;
+  color: var(--text);
+}
+
+/* --- Visualizador SVG y comparación (M1-S06) --- */
+
+.vector-comparison {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.vector-comparison__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.vector-comparison__zoom-readout {
+  min-width: 48px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text-h);
+}
+
+.vector-comparison__note {
+  color: var(--warn);
+  background: var(--warn-bg);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.vector-comparison__panes {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+@media (min-width: 640px) {
+  .vector-comparison__panes {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.vector-comparison__pane {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.vector-comparison__pane figcaption {
+  font-size: 12px;
+  color: var(--text);
+  text-align: center;
+}
+
+/*
+ * Alto fijo (en vez de aspect-ratio del recurso): el panel es una ventana de
+ * recorte para el pan, no un contenedor que deba ajustarse al contenido.
+ * overflow: hidden es lo que hace que "pan" tenga sentido (si no, no habría
+ * nada que recortar al desplazar). touch-action: none evita que el gesto de
+ * arrastre en pantallas táctiles dispare también el scroll nativo de la
+ * página.
+ */
+.vector-canvas {
+  position: relative;
+  overflow: hidden;
+  height: 320px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--code-bg);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.vector-canvas:active {
+  cursor: grabbing;
+}
+
+.vector-canvas__image {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  max-width: none;
+  transform-origin: center center;
+  pointer-events: none;
+}
+
+@media (max-width: 400px) {
+  .vector-canvas {
+    height: 220px;
+  }
+
+  .vector-comparison__toolbar {
+    justify-content: space-between;
   }
 }
