@@ -1,0 +1,11 @@
+@Vectify.Api_HostAddress = http://localhost:5080
+
+GET {{Vectify.Api_HostAddress}}/health
+Accept: application/json
+
+###
+
+GET {{Vectify.Api_HostAddress}}/api/v1/system/health
+Accept: application/json
+
+###

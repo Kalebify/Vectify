@@ -1,0 +1,36 @@
+# Node / frontend
+node_modules/
+dist/
+dist-ssr/
+*.local
+npm-debug.log*
+
+# .NET / backend
+bin/
+obj/
+*.user
+
+# Python / services
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+
+# Entornos y secretos (nunca versionar valores reales)
+.env
+.env.*
+!.env.example
+!frontend/.env.example
+!services/python-engine/.env.example
+
+# Editores / SO
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# Node.js portable usado localmente (activar-node.ps1)
+node-v*-win-x64/

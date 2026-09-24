@@ -1,0 +1,43 @@
+services:
+  python-engine:
+    build:
+      context: ./services/python-engine
+    ports:
+      - "${PYTHON_PORT:-8001}:8000"
+    environment:
+      SERVICE_NAME: ${SERVICE_NAME:-vectify-python-engine}
+      SERVICE_VERSION: ${SERVICE_VERSION:-0.1.0}
+      HOST: 0.0.0.0
+      PORT: 8000
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "${BACKEND_PORT:-5080}:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ASPNETCORE_URLS: http://+:8080
+      # Nombre del servicio en la red de docker-compose, no localhost.
+      PythonEngine__BaseUrl: ${PYTHON_ENGINE_INTERNAL_URL:-http://python-engine:8000}
+      PythonEngine__TimeoutSeconds: ${PYTHON_ENGINE_TIMEOUT_SECONDS:-5}
+    depends_on:
+      - python-engine
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # URL que usa el NAVEGADOR (fuera de la red docker), por eso apunta al
+        # puerto publicado en el host, no al nombre del servicio "backend".
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:5080}
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+    depends_on:
+      - backend

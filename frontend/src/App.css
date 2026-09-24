@@ -1,0 +1,154 @@
+#root {
+  max-width: 720px;
+  margin: 0 auto;
+  min-height: 100svh;
+  padding: 32px 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.app-header__subtitle {
+  color: var(--text);
+  font-size: 14px;
+  margin-top: 4px;
+}
+
+main {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  flex: 1;
+}
+
+.status-banner {
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-radius: 8px;
+  padding: 14px 16px;
+  font-size: 14px;
+  text-align: left;
+}
+
+.status-banner--loading {
+  border-left-color: var(--neutral);
+}
+
+.status-banner--online {
+  border-left-color: var(--ok);
+  background: var(--ok-bg);
+}
+
+.status-banner--degraded {
+  border-left-color: var(--warn);
+  background: var(--warn-bg);
+}
+
+.status-banner--error {
+  border-left-color: var(--error);
+  background: var(--error-bg);
+}
+
+.service-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+@media (min-width: 640px) {
+  .service-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.service-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.service-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.service-card__message {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.service-card__details {
+  margin: 0;
+}
+
+.service-card__details > div {
+  margin-bottom: 4px;
+}
+
+.last-checked {
+  font-size: 12px;
+  color: var(--text);
+  text-align: left;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-pill__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.status-pill--ok {
+  color: var(--ok);
+  background: var(--ok-bg);
+}
+
+.status-pill--warn {
+  color: var(--warn);
+  background: var(--warn-bg);
+}
+
+.status-pill--error {
+  color: var(--error);
+  background: var(--error-bg);
+}
+
+.status-pill--neutral {
+  color: var(--neutral);
+  background: var(--neutral-bg);
+}
+
+.app-footer {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+  font-size: 12px;
+  color: var(--text);
+  text-align: left;
+}
+
+@media (max-width: 400px) {
+  #root {
+    padding: 20px 14px 16px;
+  }
+
+  h1 {
+    font-size: 22px;
+  }
+}
