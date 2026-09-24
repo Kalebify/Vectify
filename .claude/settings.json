@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./**/.env)",
+      "Read(./**/.env.*)",
+      "Read(./**/*.pem)",
+      "Read(./**/*.key)",
+      "Read(./**/id_rsa*)",
+      "Read(./**/credentials.json)",
+      "Read(./**/service-account*.json)",
+      "Read(./**/.npmrc)"
+    ],
+    "ask": [
+      "Bash(git push:*)",
+      "Bash(npx vercel:*)",
+      "mcp__Notion__notion-update-page",
+      "mcp__Notion__notion-create-comment"
+    ],
+    "allow": [
+      "Read(./**)",
+      "Edit(./**)",
+      "Write(./**)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git switch:*)",
+      "Bash(git checkout:*)",
+      "Bash(git branch:*)",
+      "Bash(npm run:*)",
+      "Bash(npm install:*)",
+      "Bash(npm ci:*)",
+      "Bash(npm view:*)",
+      "Bash(npm test:*)",
+      "Bash(pnpm:*)",
+      "Bash(yarn:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx -y lighthouse:*)",
+      "Bash(npx -y @axe-core/cli:*)",
+      "Bash(npx -y playwright:*)",
+      "Bash(node:*)",
+      "Bash(curl -sS -o /dev/null:*)",
+      "mcp__Notion__notion-fetch",
+      "mcp__Notion__notion-search",
+      "mcp__Notion__notion-query-data-sources",
+      "mcp__Notion__notion-get-comments",
+      "mcp__Vercel__list_projects",
+      "mcp__Vercel__get_project",
+      "mcp__Vercel__list_deployments",
+      "mcp__Vercel__get_deployment",
+      "mcp__Vercel__list_deployment_events",
+      "mcp__Vercel__get_runtime_errors"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__Notion__notion-update-page",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-notion-done.mjs\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__Vercel__.*deploy.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-vercel-preview.mjs\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-git.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
