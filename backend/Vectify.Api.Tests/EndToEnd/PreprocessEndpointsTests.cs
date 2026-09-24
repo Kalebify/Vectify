@@ -19,6 +19,7 @@ namespace Vectify.Api.Tests.EndToEnd;
 public sealed class PreprocessEndpointsTests : IDisposable
 {
     private readonly string _storageRoot = Path.Combine(Path.GetTempPath(), "vectify-preprocess-tests-" + Guid.NewGuid().ToString("n"));
+    private readonly string _projectRegistryRoot = Path.Combine(Path.GetTempPath(), "vectify-preprocess-tests-registry-" + Guid.NewGuid().ToString("n"));
 
     [Fact]
     public async Task PostPreview_WhenParamsAreValid_CreatesPreviewAndItIsRetrievable()
@@ -182,6 +183,7 @@ public sealed class PreprocessEndpointsTests : IDisposable
                     ["PythonEngine:BaseUrl"] = pythonBaseUrl,
                     ["Cors:AllowedOrigins"] = "http://localhost:5173",
                     ["Storage:RootPath"] = _storageRoot,
+                    ["ProjectRegistry:RootPath"] = _projectRegistryRoot,
                 });
             });
         });
@@ -192,6 +194,11 @@ public sealed class PreprocessEndpointsTests : IDisposable
         if (Directory.Exists(_storageRoot))
         {
             Directory.Delete(_storageRoot, recursive: true);
+        }
+
+        if (Directory.Exists(_projectRegistryRoot))
+        {
+            Directory.Delete(_projectRegistryRoot, recursive: true);
         }
     }
 }

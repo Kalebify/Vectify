@@ -86,9 +86,17 @@ builder.Services
     .AddOptions<LocalStorageOptions>()
     .Bind(builder.Configuration.GetSection(LocalStorageOptions.SectionName));
 
+// El registro de proyectos persiste un sidecar JSON por proyecto junto al
+// almacenamiento local (Defecto 4 de QA sobre M1-S02: antes era puramente en
+// memoria y se perdía todo al reiniciar el proceso). Sigue sin haber una base de
+// datos de negocio real -- eso sigue fuera de alcance de este sprint.
+builder.Services
+    .AddOptions<ProjectRegistryOptions>()
+    .Bind(builder.Configuration.GetSection(ProjectRegistryOptions.SectionName));
+
 builder.Services.AddSingleton<IImageUploadValidator, ImageUploadValidator>();
 builder.Services.AddSingleton<IFileStorage, LocalFileStorage>();
-builder.Services.AddSingleton<IProjectRegistry, InMemoryProjectRegistry>();
+builder.Services.AddSingleton<IProjectRegistry, PersistentProjectRegistry>();
 builder.Services.AddScoped<IProjectUploadService, ProjectUploadService>();
 
 // Preprocesamiento de imagen (M1-S03): rangos de sliders configurables

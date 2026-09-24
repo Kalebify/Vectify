@@ -1,13 +1,16 @@
 using Microsoft.Extensions.Options;
+using SixLabors.ImageSharp;
 using Vectify.Api.Options;
 
 namespace Vectify.Api.Validation;
 
 /// <summary>
 /// Implementación de <see cref="IImageUploadValidator"/>: valida, en orden,
-/// archivo vacío/ausente, tamaño máximo, MIME type + extensión permitidos y
-/// finalmente la firma binaria del contenido (detecta corrupción o un
-/// Content-Type/extensión que no coincide con los bytes reales).
+/// archivo vacío/ausente, tamaño máximo, MIME type + extensión permitidos,
+/// la firma binaria del contenido (descarta basura obvia barato y rápido) y
+/// finalmente una decodificación real vía ImageSharp (detecta archivos
+/// truncados/corruptos que solo tienen una cabecera válida pero no son una
+/// imagen decodificable completa).
 /// </summary>
 public sealed class ImageUploadValidator : IImageUploadValidator
 {
@@ -66,6 +69,39 @@ public sealed class ImageUploadValidator : IImageUploadValidator
                 "El archivo parece estar corrupto: su contenido no coincide con el formato declarado.");
         }
 
+        if (!TryDecode(stream))
+        {
+            return ImageValidationResult.Failure(
+                "corrupt_file",
+                "El archivo parece estar corrupto: su contenido no coincide con el formato declarado.");
+        }
+
         return ImageValidationResult.Success(contentType, extension);
+    }
+
+    /// <summary>
+    /// Intenta decodificar la imagen completa con ImageSharp para detectar archivos
+    /// truncados/corruptos que solo tienen una firma inicial válida (el chequeo de
+    /// ImageSignature es barato pero no alcanza para eso). Deja el stream
+    /// reposicionado en 0 si es seekable, igual que ImageSignature.Matches.
+    /// </summary>
+    private static bool TryDecode(Stream stream)
+    {
+        try
+        {
+            using var image = Image.Load(stream);
+            return true;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return false;
+        }
+        finally
+        {
+            if (stream.CanSeek)
+            {
+                stream.Position = 0;
+            }
+        }
     }
 }

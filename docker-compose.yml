@@ -21,6 +21,11 @@ services:
       context: ./backend
     ports:
       - "${BACKEND_PORT:-5080}:8080"
+    volumes:
+      # Los originales subidos (LocalFileStorage) y los sidecars de metadata de
+      # proyecto (PersistentProjectRegistry) viven bajo App_Data dentro del
+      # contenedor; sin este volumen se pierden en cada `docker compose down`/restart.
+      - vectify_backend_data:/app/App_Data
     environment:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: http://+:8080
@@ -43,3 +48,6 @@ services:
       - "${FRONTEND_PORT:-5173}:80"
     depends_on:
       - backend
+
+volumes:
+  vectify_backend_data:

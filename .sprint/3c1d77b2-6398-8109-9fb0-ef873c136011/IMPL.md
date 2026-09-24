@@ -1,5 +1,28 @@
 status: ok
 
+## Ronda de corrección — 2026-09-25
+
+El usuario probó manualmente el endpoint ya en Done y encontró 4 defectos reales, verificados contra el código antes de corregir:
+
+1. **Validación de corrupción insuficiente** — `ImageSignature` solo comparaba los primeros 8-12 bytes (magic number); un archivo de 8 bytes con solo la cabecera PNG pasaba con `201`. Arreglo: `SixLabors.ImageSharp 2.1.13` (Apache 2.0, se evitó la 4.x por licencia comercial no-OSS) intenta una decodificación real después del chequeo de firma; si falla, `corrupt_file`. Tests nuevos con PNG/JPEG/WEBP truncados a mitad de contenido.
+2. **Frontend no enviaba `Idempotency-Key`** — el backend y el cliente lo soportaban, pero `useImageUpload.ts` nunca lo pasaba. Arreglo: clave generada (`crypto.randomUUID()`) al seleccionar archivo, conservada entre reintentos, renovada al elegir otro archivo o resetear.
+3. **Documentación desactualizada** — `frontend/README.md` seguía diciendo "no implementa upload"; el `README.md` raíz no mencionaba M1-S03 y listaba OpenCV/preprocesamiento como "fuera de alcance" cuando ya estaba implementado. Ambos actualizados.
+4. **Persistencia insuficiente** — el registro de proyectos era un `ConcurrentDictionary` puro sin backing en disco, y `docker-compose.yml` no montaba volumen para `App_Data` (ni siquiera los archivos de `LocalFileStorage` sobrevivían a un restart del contenedor). Arreglo: `PersistentProjectRegistry` persiste cada `ProjectRecord` como sidecar JSON (escritura atómica temp+move) y rehidrata el diccionario en memoria al arrancar; `docker-compose.yml` monta un volumen nombrado `vectify_backend_data` en `/app/App_Data`. Sigue sin haber una base de datos real (fuera de alcance del sprint, como ya declaraba el spec).
+
+**Verificación de la ronda de corrección:**
+- `dotnet build` → OK, 0 advertencias, 0 errores.
+- `dotnet test` (backend completo) → **97/97 pasaron** (92 preexistentes + 5 nuevos de `PersistentProjectRegistry`, más los casos de corrupción sumados a `ImageUploadValidatorTests`).
+- `npm run build` + `npm run lint` (frontend) → OK.
+- `npm test` (vitest) → **29/29 pasaron** (incluye 2 nuevos de Idempotency-Key).
+- **Tests Python (`pytest` en `services/python-engine`): NO se corrieron** — no había intérprete Python disponible en este entorno para esta ronda (el portable de rondas anteriores no persistió, por diseño). Esta ronda no tocó ningún archivo de `services/python-engine`, así que no hay motivo para esperar una regresión, pero no está confirmado con una corrida real.
+- Docker (`docker compose up --build`) y navegador real: **sigue sin verificarse**, mismo motivo que M1-S01/M1-S02/M1-S03 (sin Docker en esta máquina).
+
+**Supuesto adicional de esta ronda:** SixLabors.ImageSharp fijado en 2.1.13 en vez de la última 4.x, para no introducir una dependencia con licencia comercial no solicitada.
+
+---
+
+**Reporte original de implementación (M1-S02), antes de la ronda de corrección:**
+
 **Backend (ASP.NET Core) — nuevos archivos**
 - `backend/Vectify.Api/Options/UploadOptions.cs` — límite de tamaño y MIME types permitidos, configurable.
 - `backend/Vectify.Api/Options/LocalStorageOptions.cs` — carpeta raíz del storage local.

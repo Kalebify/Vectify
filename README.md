@@ -6,6 +6,9 @@ de vectorización. Todavía **no** implementa vectorización real:
 - **M1-S01**: el "esqueleto" y la comunicación entre los tres servicios.
 - **M1-S02**: primer flujo funcional de entrada — cargar una imagen
   (PNG/JPG/WEBP) crea un proyecto y guarda el original sin procesarlo.
+- **M1-S03**: preprocesamiento de imagen (escala de grises, contraste,
+  brillo, reducción de ruido) con OpenCV en el motor Python, orquestado por
+  la Web API, con preview cacheado por parámetros. Ver más abajo.
 
 ## Arquitectura
 
@@ -23,10 +26,11 @@ Como React y la Web API se sirven en orígenes distintos (puertos 5173 y 5080),
 la Web API aplica una política CORS con los orígenes configurados en
 `Cors__AllowedOrigins`. Si abres React desde otra URL o puerto, añádela ahí.
 
-- **Frontend** (`frontend/`): React + TypeScript + Vite. Pantalla única de
-  diagnóstico ("Home/Diagnostics") que consulta el estado de la Web API y del
-  motor Python cada 5 segundos y representa los estados `loading`, `online`,
-  `degraded` y `error`.
+- **Frontend** (`frontend/`): React + TypeScript + Vite. Diagnóstico
+  ("Home/Diagnostics") que consulta el estado de la Web API y del motor
+  Python cada 5 segundos (`loading`, `online`, `degraded`, `error`), más el
+  flujo de carga de imagen (M1-S02) y el panel de preprocesamiento (M1-S03)
+  una vez que hay un proyecto creado.
 - **Backend/orquestador** (`backend/`): ASP.NET Core Web API (Minimal APIs).
   Expone `/health` (liveness propio), `/api/v1/system/health` (estado
   compuesto) y `/api/v1/projects` (M1-S02: crea un proyecto a partir de una
@@ -34,9 +38,10 @@ la Web API aplica una política CORS con los orígenes configurados en
   Nunca deja de responder aunque Python esté caído: si Python falla, el estado
   global pasa a `degraded` en vez de que la API se rompa.
 - **Motor de procesamiento** (`services/python-engine/`): Python + FastAPI.
-  Expone `/health` y `/api/v1/info`. Estructura por `api/`, `services/`,
-  `models/` y `core/`. Sin OpenCV/VTracer/Potrace todavía — eso es de
-  sprints futuros.
+  Expone `/health`, `/api/v1/info` y `/api/v1/preprocess` (M1-S03: pipeline
+  determinista con OpenCV — escala de grises, contraste, brillo, denoise).
+  Estructura por `api/`, `services/`, `models/` y `core/`. Sin
+  VTracer/Potrace todavía — eso es de sprints futuros.
 
 ## Requisitos
 
@@ -57,6 +62,11 @@ Con la configuración por defecto:
 - Frontend: http://localhost:5173
 - Backend (Web API): http://localhost:5080 (`/health`, `/api/v1/system/health`, Swagger en `/swagger`)
 - Motor Python: http://localhost:8001 (`/health`, `/api/v1/info`, docs en `/docs`)
+
+`docker-compose.yml` monta un volumen nombrado (`vectify_backend_data`) en
+`/app/App_Data` del contenedor `backend`, así que los originales
+(`LocalFileStorage`) y los sidecars de metadata de proyecto
+(`PersistentProjectRegistry`) sobreviven a `docker compose down`/restart.
 
 Abrir http://localhost:5173 debería mostrar "API Online" y "Python Online".
 Para probar la recuperación ante fallos:
@@ -97,7 +107,8 @@ npm run dev
 
 ```bash
 # Backend (xUnit): cliente Python, integración HTTP con motor simulado,
-# validación/almacenamiento/dimensiones y el endpoint de carga de imágenes
+# validación/almacenamiento/dimensiones, el endpoint de carga de imágenes,
+# el registro de proyectos persistente y el endpoint de preprocesamiento (M1-S03)
 cd backend
 dotnet test
 
@@ -141,7 +152,12 @@ secretos reales.
 | `Cors__AllowedOrigins` | `backend` (appsettings o env) | `http://localhost:5173,http://127.0.0.1:5173` | Orígenes del navegador (separados por comas) autorizados a llamar a la Web API |
 | `Upload__MaxFileSizeBytes` | `backend` (appsettings o env) | `15728640` (15 MB) | Tamaño máximo aceptado en `POST /api/v1/projects` (supuesto: el spec no cuantifica un límite) |
 | `Upload__AllowedContentTypes` | `backend` (appsettings o env) | `image/png,image/jpeg,image/webp` | MIME types aceptados en `POST /api/v1/projects` |
-| `Storage__RootPath` | `backend` (appsettings o env) | `App_Data/uploads` | Carpeta local donde `LocalFileStorage` guarda los originales (nunca se versiona) |
+| `Storage__RootPath` | `backend` (appsettings o env) | `App_Data/uploads` | Carpeta local donde `LocalFileStorage` guarda los originales y los previews de M1-S03 (nunca se versiona) |
+| `ProjectRegistry__RootPath` | `backend` (appsettings o env) | `App_Data/projects` | Carpeta donde `PersistentProjectRegistry` guarda un sidecar JSON por proyecto (nunca se versiona) |
+| `Preprocess__MinContrast` / `Preprocess__MaxContrast` | `backend` (appsettings o env) | `0.5` / `3.0` | Rango válido de `contrast` en `POST .../preview` (supuesto: el spec no cuantifica valores) |
+| `Preprocess__MinBrightness` / `Preprocess__MaxBrightness` | `backend` (appsettings o env) | `-100` / `100` | Rango válido de `brightness` en `POST .../preview` |
+| `Preprocess__MinDenoise` / `Preprocess__MaxDenoise` | `backend` (appsettings o env) | `0` / `10` | Rango válido de `denoise` en `POST .../preview` |
+| `Preprocess__TimeoutSeconds` | `backend` (appsettings o env) | `20` | Timeout del cliente HTTP hacia Python al generar un preview |
 | `CORS_ALLOWED_ORIGINS` | `.env` (raíz) | `http://localhost:5173,http://127.0.0.1:5173` | Valor que docker-compose pasa a `Cors__AllowedOrigins`; si cambias `FRONTEND_PORT`, actualízalo |
 | `SERVICE_NAME` / `SERVICE_VERSION` | `services/python-engine/.env` | `vectify-python-engine` / `0.1.0` | Identidad reportada en `/health` y `/api/v1/info` |
 | `HOST` / `PORT` | `services/python-engine/.env` | `0.0.0.0` / `8000` | Bind del servidor uvicorn |
@@ -180,8 +196,10 @@ de responder 200.
 (PNG, JPG/JPEG o WEBP; 15 MB máximo por defecto, ver `Upload:*` abajo — el
 spec de la tarjeta no cuantifica un límite, así que este valor es un supuesto
 documentado). Valida, en orden: archivo vacío/ausente, tamaño máximo, MIME
-type + extensión permitidos y finalmente la firma binaria del contenido
-(detecta corrupción). Si todo es válido, genera `projectId`/`imageId`, guarda
+type + extensión permitidos, la firma binaria del contenido (descarta basura
+obvia barato) y finalmente una decodificación real con ImageSharp (detecta
+archivos truncados/corruptos que solo tienen una cabecera válida pero no son
+una imagen completa). Si todo es válido, genera `projectId`/`imageId`, guarda
 el original mediante `IFileStorage` (implementación local en desarrollo,
 contrato preparado para sustituirse por almacenamiento S3-compatible sin
 tocar el endpoint) y responde `201 Created` con:
@@ -206,7 +224,7 @@ el cuerpo `{ "code": "...", "message": "..." }`:
 | `empty_file` | No se envió archivo, o pesa 0 bytes |
 | `file_too_large` | Supera `Upload:MaxFileSizeBytes` |
 | `unsupported_format` | MIME type/extensión fuera de `Upload:AllowedContentTypes` |
-| `corrupt_file` | El contenido no coincide con la firma binaria esperada |
+| `corrupt_file` | El contenido no coincide con la firma binaria esperada, o no se pudo decodificar como imagen completa |
 | `upload_interrupted` | La conexión se cortó o el formulario multipart no se pudo leer |
 | `storage_failure` | Falló `IFileStorage` al guardar (disco, permisos, etc.) |
 | `not_found` | `GET .../original` con un `projectId`/`imageId` que no existe |
@@ -214,15 +232,69 @@ el cuerpo `{ "code": "...", "message": "..." }`:
 El header opcional `Idempotency-Key` evita crear un proyecto duplicado ante
 un reintento del mismo envío (doble click, retry tras un error de red que sí
 llegó a completarse): si se repite la clave, la Web API responde `200 OK`
-con el proyecto ya creado en vez de generar uno nuevo. Los proyectos viven en
-memoria en este sprint (todavía no hay base de datos de negocio) y se
-pierden al reiniciar la Web API. Ver Swagger (`/swagger`) para el contrato
-completo y `backend/Vectify.Api/Vectify.Api.http` para ejemplos de request.
+con el proyecto ya creado en vez de generar uno nuevo. El frontend
+(`useImageUpload`) genera una clave (`crypto.randomUUID()`) al elegir un
+archivo, la reutiliza entre reintentos del mismo archivo y la renueva al
+elegir uno nuevo o al cancelar/resetear. La metadata de cada proyecto se
+guarda en memoria (lecturas O(1)) y además se persiste como un sidecar JSON
+en disco junto al original (`App_Data/projects/{projectId}/{imageId}.json`
+por defecto, ver `ProjectRegistry:*` abajo); al reiniciar el proceso, la Web
+API rehidrata el registro en memoria escaneando esos sidecars — sigue sin
+haber una base de datos de negocio real. Ver Swagger (`/swagger`) para el
+contrato completo y `backend/Vectify.Api/Vectify.Api.http` para ejemplos de
+request.
+
+## Preprocesamiento de imagen (M1-S03)
+
+`POST /api/v1/projects/{projectId}/images/{imageId}/preview` recibe un JSON
+con los parámetros del pipeline (`grayscale`, `contrast`, `brightness`,
+`denoise`; rangos configurables vía `Preprocess:*`, ver variables de entorno
+abajo — spec.md no los cuantifica, así que son un supuesto documentado, ver
+`.sprint/3c1d77b2-6398-81a1-8df9-c2ecd0f5653f/spec.md`). La Web API valida
+los rangos, y si ya existe un preview generado con exactamente esos
+parámetros para esa imagen lo devuelve (`200 OK`, cacheado) en vez de volver
+a llamar a Python; si no existe, reenvía el original (sin modificarlo) al
+motor Python (`POST /api/v1/preprocess`, que aplica el pipeline determinista
+con OpenCV), guarda el preview resultante bajo una nueva versión y responde
+`201 Created` con:
+
+```json
+{
+  "projectId": "…", "imageId": "…", "previewId": "…",
+  "previewUrl": "/api/v1/projects/{projectId}/images/{imageId}/previews/{previewId}",
+  "version": 1, "width": 800, "height": 600,
+  "originalWidth": 800, "originalHeight": 600,
+  "effectiveParams": { "grayscale": false, "contrast": 1.4, "brightness": 5, "denoise": 2 },
+  "metrics": { "meanBrightness": 128.4, "stdDev": 42.1, "minValue": 0, "maxValue": 255 },
+  "cached": false
+}
+```
+
+"Resetear" es simplemente volver a llamar con los valores por defecto
+(`grayscale=false, contrast=1.0, brightness=0, denoise=0`), que genera una
+nueva versión de forma reproducible. El preview se recupera, en bytes, en
+`GET /api/v1/projects/{projectId}/images/{imageId}/previews/{previewId}`.
+
+Errores controlados con el mismo cuerpo `{ "code": "...", "message": "..." }`:
+
+| Code | HTTP | Motivo |
+|---|---|---|
+| `invalid_parameters` | 422 | Algún parámetro está fuera de los rangos de `Preprocess:*` |
+| `not_found` | 404 | `projectId`/`imageId` no existen (o el preview, en el GET) |
+| `dimensions_exceeded` | 413 | La imagen supera el límite de dimensiones que acepta Python |
+| `corrupt_file` | 400 | Python no pudo decodificar el original |
+| `timeout` | 504 | El motor Python no respondió dentro de `Preprocess:TimeoutSeconds` |
+| `engine_unavailable` | 503 | No se pudo contactar al motor Python |
+| `invalid_response` | 502 | El motor Python respondió algo que la Web API no pudo interpretar |
+
+Ver Swagger (`/swagger`) para el contrato completo.
 
 ## Fuera de alcance de este sprint
 
-Preprocesamiento de imagen, quitar fondo, threshold, OpenCV, VTracer/Potrace,
-generación de SVG, base de datos de negocio, autenticación, editor vectorial,
-IA, detección de colores, DXF, integración LightBurn y almacenamiento cloud
-productivo (la abstracción `IFileStorage` está preparada para S3-compatible,
-pero solo tiene implementación local en este sprint).
+Quitar fondo, threshold avanzado, VTracer/Potrace, generación de SVG, base
+de datos de negocio real, autenticación, editor vectorial, IA, detección de
+colores, DXF, integración LightBurn y almacenamiento cloud productivo (la
+abstracción `IFileStorage` está preparada para S3-compatible, pero solo
+tiene implementación local en este sprint; lo mismo el registro de
+proyectos, que persiste en sidecars JSON en disco — no en una base de datos
+real).

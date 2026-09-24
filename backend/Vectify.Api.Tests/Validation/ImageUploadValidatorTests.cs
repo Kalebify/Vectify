@@ -135,4 +135,55 @@ public sealed class ImageUploadValidatorTests
         Assert.Equal("image/webp", result.ContentType);
         Assert.Equal(".webp", result.Extension);
     }
+
+    // Defecto 1 (QA sobre M1-S02): un archivo con firma binaria válida pero
+    // truncado a mitad de su contenido real (no solo el caso trivial de 8 bytes con
+    // la cabecera PNG) pasaba ImageSignature.Matches y la API respondía 201. Ahora
+    // ImageUploadValidator también intenta una decodificación real con ImageSharp.
+
+    [Fact]
+    public void Validate_WhenPngHasOnlyTheEightByteSignature_ReturnsCorruptFile()
+    {
+        // Caso exacto reportado por QA: 8 bytes, solo la firma PNG, nada más.
+        byte[] onlySignature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        var file = CreateFile(onlySignature, "imagen.png", "image/png");
+
+        var result = CreateValidator().Validate(file);
+
+        Assert.False(result.IsValid);
+        Assert.Equal("corrupt_file", result.ErrorCode);
+    }
+
+    [Fact]
+    public void Validate_WhenPngIsTruncatedMidContent_ReturnsCorruptFile()
+    {
+        var file = CreateFile(SampleImages.TruncatedPng, "imagen.png", "image/png");
+
+        var result = CreateValidator().Validate(file);
+
+        Assert.False(result.IsValid);
+        Assert.Equal("corrupt_file", result.ErrorCode);
+    }
+
+    [Fact]
+    public void Validate_WhenJpegIsTruncatedMidContent_ReturnsCorruptFile()
+    {
+        var file = CreateFile(SampleImages.TruncatedJpeg, "imagen.jpg", "image/jpeg");
+
+        var result = CreateValidator().Validate(file);
+
+        Assert.False(result.IsValid);
+        Assert.Equal("corrupt_file", result.ErrorCode);
+    }
+
+    [Fact]
+    public void Validate_WhenWebpIsTruncatedMidContent_ReturnsCorruptFile()
+    {
+        var file = CreateFile(SampleImages.TruncatedWebp, "imagen.webp", "image/webp");
+
+        var result = CreateValidator().Validate(file);
+
+        Assert.False(result.IsValid);
+        Assert.Equal("corrupt_file", result.ErrorCode);
+    }
 }

@@ -50,6 +50,11 @@ export function useImageUpload(): UseImageUploadState {
   const [result, setResult] = useState<UploadImageResponse | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  // Una clave por archivo seleccionado: se mantiene igual entre reintentos del mismo
+  // archivo (confirm() llamado de nuevo tras un error) y se renueva al elegir un
+  // archivo nuevo o al cancelar/resetear, para que la Web API pueda deduplicar
+  // reintentos sin crear un proyecto duplicado (ver Idempotency-Key en projectsApi.ts).
+  const idempotencyKeyRef = useRef<string | null>(null);
 
   // El object URL de preview se libera cada vez que cambia o al desmontar, para no
   // filtrar memoria mientras el usuario prueba varios archivos.
@@ -62,6 +67,7 @@ export function useImageUpload(): UseImageUploadState {
   }, [previewUrl]);
 
   const selectFile = useCallback((selected: File) => {
+    idempotencyKeyRef.current = crypto.randomUUID();
     setFile(selected);
     setPreviewUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev);
@@ -85,6 +91,7 @@ export function useImageUpload(): UseImageUploadState {
   const reset = useCallback(() => {
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
+    idempotencyKeyRef.current = null;
     setStatus("idle");
     setFile(null);
     setPreviewUrl((prev) => {
@@ -120,6 +127,7 @@ export function useImageUpload(): UseImageUploadState {
     uploadProjectImage(file, {
       signal: controller.signal,
       onProgress: setProgress,
+      idempotencyKey: idempotencyKeyRef.current ?? undefined,
     })
       .then((response) => {
         abortControllerRef.current = null;
