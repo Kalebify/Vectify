@@ -1,13 +1,16 @@
 import { useState } from "react";
 import { getPreviewImageUrl } from "./api/preprocessApi";
+import { getThresholdMaskImageUrl } from "./api/thresholdApi";
 import { ServiceCard } from "./components/ServiceCard";
 import type { StatusTone } from "./components/StatusPill";
 import { PreprocessPanel } from "./components/preprocess/PreprocessPanel";
 import { ThresholdPanel } from "./components/threshold/ThresholdPanel";
 import { UploadPanel } from "./components/upload/UploadPanel";
+import { VectorizePanel } from "./components/vectorize/VectorizePanel";
 import { useSystemHealth } from "./hooks/useSystemHealth";
 import type { PreprocessResponse } from "./types/preprocess";
 import type { PythonStatus } from "./types/system";
+import type { ThresholdResponse } from "./types/threshold";
 import type { UploadImageResponse } from "./types/upload";
 import "./App.css";
 
@@ -38,10 +41,17 @@ function App() {
   const { status, response, errorMessage, lastCheckedAt } = useSystemHealth();
   const [activeProject, setActiveProject] = useState<UploadImageResponse | null>(null);
   const [readyPreview, setReadyPreview] = useState<PreprocessResponse | null>(null);
+  const [readyMask, setReadyMask] = useState<ThresholdResponse | null>(null);
 
   const handleProjectCreated = (project: UploadImageResponse | null) => {
     setReadyPreview(null);
+    setReadyMask(null);
     setActiveProject(project);
+  };
+
+  const handlePreviewReady = (preview: PreprocessResponse) => {
+    setReadyMask(null);
+    setReadyPreview(preview);
   };
 
   const apiTone: StatusTone =
@@ -93,7 +103,7 @@ function App() {
               fileName={activeProject.filename}
               originalWidth={activeProject.width}
               originalHeight={activeProject.height}
-              onPreviewReady={setReadyPreview}
+              onPreviewReady={handlePreviewReady}
             />
           </section>
         )}
@@ -114,6 +124,27 @@ function App() {
               sourcePreviewUrl={getPreviewImageUrl(activeProject.projectId, activeProject.imageId, readyPreview.previewId)}
               sourceWidth={readyPreview.width}
               sourceHeight={readyPreview.height}
+              onMaskReady={setReadyMask}
+            />
+          </section>
+        )}
+
+        {activeProject && readyMask && (
+          <section aria-labelledby="vectorize-heading" className="vectorize-section">
+            <h2 id="vectorize-heading">Vectorización</h2>
+            <p className="upload-section__hint">
+              Pulsá "Vectorizar" para convertir la máscara binaria en un SVG. El motor de
+              trazado corre del lado del servidor; la máscara nunca se modifica.
+            </p>
+            <VectorizePanel
+              key={`${activeProject.projectId}-${activeProject.imageId}-${readyMask.maskId}`}
+              projectId={activeProject.projectId}
+              imageId={activeProject.imageId}
+              fileName={activeProject.filename}
+              sourceMaskId={readyMask.maskId}
+              sourceMaskUrl={getThresholdMaskImageUrl(activeProject.projectId, activeProject.imageId, readyMask.maskId)}
+              sourceWidth={readyMask.width}
+              sourceHeight={readyMask.height}
             />
           </section>
         )}
@@ -175,7 +206,7 @@ function App() {
       </main>
 
       <footer className="app-footer">
-        <p>Vectify · M1-S04 · Threshold blanco y negro</p>
+        <p>Vectify · M1-S05 · Vectorización raster → SVG</p>
       </footer>
     </>
   );

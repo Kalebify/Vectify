@@ -101,6 +101,47 @@ class ThresholdResponse(BaseModel):
     metrics: ThresholdMetrics
 
 
+class VectorBounds(BaseModel):
+    """Caja delimitadora (aproximada -- ver
+    app.core.svg_processing.compute_svg_stats) del contenido dibujado, en las
+    mismas unidades que el `viewBox`/coordenadas del SVG (no necesariamente
+    igual al lienzo completo: un logo pequeño centrado en una máscara grande
+    tiene bounds más chicos que width/height). Ver spec.md M1-S05: "devolver
+    estadísticas como ... bounds"."""
+
+    min_x: float
+    min_y: float
+    max_x: float
+    max_y: float
+    width: float
+    height: float
+
+
+class VectorMetrics(BaseModel):
+    """Estadísticas del SVG YA sanitizado. `approx_node_count` es aproximado a
+    propósito (ver spec.md, criterios de aceptación: "nodos aproximados"):
+    cuenta comandos de trazado (M/L/C), no un conteo geométrico exacto de
+    vértices tras posibles optimizaciones futuras del motor."""
+
+    path_count: int = Field(examples=[1], ge=0)
+    approx_node_count: int = Field(examples=[4], ge=0)
+    bounds: VectorBounds
+
+
+class VectorizeResponse(BaseModel):
+    """Respuesta de POST /api/v1/vectorize. Misma convención que
+    Preprocess/ThresholdResponse (consumida únicamente por Vectify.Api), pero
+    el SVG viaja como texto plano en `svg` (no base64): es XML/texto válido,
+    no bytes binarios, así que no hace falta codificarlo -- FastAPI/Pydantic
+    ya lo serializan como un string JSON correctamente escapado."""
+
+    svg: str = Field(description="Marcado SVG YA sanitizado (ver app.core.svg_processing.sanitize_svg)")
+    content_type: str = Field(default="image/svg+xml", examples=["image/svg+xml"])
+    width: int
+    height: int
+    metrics: VectorMetrics
+
+
 class ErrorResponse(BaseModel):
     """Forma común de error controlado, igual convención que
     Vectify.Api.Contracts.ApiErrorResponse: `code` es estable, `message` es

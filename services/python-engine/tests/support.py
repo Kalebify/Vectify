@@ -45,4 +45,44 @@ def make_rgba_png_bytes(
     return buffer.tobytes()
 
 
+def make_mask_png_bytes(width: int, height: int, invert: bool = False) -> bytes:
+    """Máscara B/N determinista (formato de salida de Threshold, M1-S04): todo
+    negro (background, valor 0) por defecto -- útil como base de "máscara
+    vacía" para tests de M1-S05.
+    """
+    value = 255 if invert else 0
+    image = np.full((height, width), value, dtype=np.uint8)
+    success, buffer = cv2.imencode(".png", image)
+    assert success
+    return buffer.tobytes()
+
+
+def make_square_mask_png_bytes(size: int = 60, square: int = 30) -> bytes:
+    """Máscara B/N con un cuadrado blanco (foreground=255) centrado sobre
+    fondo negro -- silueta simple, ver spec.md M1-S05, "Pruebas": "logos/
+    siluetas simples".
+    """
+    image = np.zeros((size, size), dtype=np.uint8)
+    offset = (size - square) // 2
+    image[offset : offset + square, offset : offset + square] = 255
+    success, buffer = cv2.imencode(".png", image)
+    assert success
+    return buffer.tobytes()
+
+
+def make_ring_mask_png_bytes(size: int = 80, outer_radius: int = 30, inner_radius: int = 12) -> bytes:
+    """Máscara B/N con un anillo (círculo blanco con un agujero negro
+    concéntrico) -- topología con un agujero interno, ver spec.md M1-S05,
+    "Pruebas": "formas con agujeros internos (topología con paths anidados/
+    fill-rule)".
+    """
+    image = np.zeros((size, size), dtype=np.uint8)
+    center = (size // 2, size // 2)
+    cv2.circle(image, center, outer_radius, 255, -1)
+    cv2.circle(image, center, inner_radius, 0, -1)
+    success, buffer = cv2.imencode(".png", image)
+    assert success
+    return buffer.tobytes()
+
+
 NOT_AN_IMAGE = b"esto no es una imagen"

@@ -1,5 +1,7 @@
+import { useEffect } from "react";
 import { getThresholdMaskImageUrl } from "../../api/thresholdApi";
 import { useThreshold } from "../../hooks/useThreshold";
+import type { ThresholdResponse } from "../../types/threshold";
 import { MaskComparison } from "./MaskComparison";
 import { ThresholdControls } from "./ThresholdControls";
 
@@ -11,6 +13,13 @@ interface ThresholdPanelProps {
   sourcePreviewUrl: string;
   sourceWidth: number | null;
   sourceHeight: number | null;
+  /**
+   * Notifica al padre cada vez que hay una máscara nueva lista (M1-S05: la
+   * vectorización es la etapa siguiente del mismo pipeline y opera sobre
+   * esta máscara, nunca sobre el preview preprocesado). Opcional, mismo
+   * criterio que PreprocessPanel.onPreviewReady.
+   */
+  onMaskReady?: (mask: ThresholdResponse) => void;
 }
 
 /**
@@ -29,12 +38,19 @@ export function ThresholdPanel({
   sourcePreviewUrl,
   sourceWidth,
   sourceHeight,
+  onMaskReady,
 }: ThresholdPanelProps) {
   const { params, status, mask, errorMessage, isAtDefaults, setValue, setInvert, reset } = useThreshold(
     projectId,
     imageId,
     sourcePreviewId,
   );
+
+  useEffect(() => {
+    if (status === "ready" && mask) {
+      onMaskReady?.(mask);
+    }
+  }, [status, mask, onMaskReady]);
 
   const maskUrl = mask ? getThresholdMaskImageUrl(projectId, imageId, mask.maskId) : null;
 

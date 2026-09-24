@@ -13,8 +13,19 @@ from app.api.routes.health import router as health_router
 from app.api.routes.info import router as info_router
 from app.api.routes.preprocess import router as preprocess_router
 from app.api.routes.threshold import router as threshold_router
+from app.api.routes.vectorize import router as vectorize_router
 from app.core.config import get_settings
-from app.core.errors import CorruptImageError, DimensionsExceededError, InvalidParametersError, PreprocessingError
+from app.core.errors import (
+    CorruptImageError,
+    DimensionsExceededError,
+    EmptyMaskError,
+    InvalidParametersError,
+    InvalidSvgError,
+    PreprocessingError,
+    SvgOutputTooLargeError,
+    VectorizationEngineError,
+    VectorizationTimeoutError,
+)
 from app.core.logging import configure_logging
 
 settings = get_settings()
@@ -25,9 +36,10 @@ app = FastAPI(
     title="Vectify — Motor Python",
     description=(
         "Microservicio de procesamiento/vectorización. Expone chequeos de salud, "
-        "información del servicio y el pipeline determinista de preprocesamiento "
-        "de imágenes (grayscale, contraste/brillo, suavizado/denoise) y de "
-        "threshold B/N (umbral global, inversión)."
+        "información del servicio, el pipeline determinista de preprocesamiento "
+        "de imágenes (grayscale, contraste/brillo, suavizado/denoise), de "
+        "threshold B/N (umbral global, inversión) y de vectorización raster -> SVG "
+        "(motor VTracer, encapsulado detrás de app.core.vector_engine.VectorEngine)."
     ),
     version=settings.service_version,
 )
@@ -36,15 +48,24 @@ app.include_router(health_router)
 app.include_router(info_router)
 app.include_router(preprocess_router)
 app.include_router(threshold_router)
+app.include_router(vectorize_router)
 
-# Códigos HTTP por tipo de error controlado del pipeline de preprocesamiento
-# (ver "Errores y límites" de spec.md): imagen corrupta -> 400, dimensiones
-# excesivas -> 413, parámetros inválidos -> 422. Cualquier otro
-# PreprocessingError (memoria, fallo inesperado de OpenCV) cae a 500.
+# Códigos HTTP por tipo de error controlado del pipeline (ver "Errores y
+# límites" de spec.md): imagen corrupta -> 400, dimensiones excesivas -> 413,
+# parámetros inválidos -> 422, máscara vacía -> 422 (M1-S05: nada para
+# vectorizar), SVG de salida demasiado grande -> 413, timeout de trazado ->
+# 504, fallo inesperado del motor de trazado o SVG crudo inválido -> 500.
+# Cualquier otro PreprocessingError (memoria, fallo inesperado de OpenCV)
+# cae a 500.
 _STATUS_BY_ERROR: dict[type[PreprocessingError], int] = {
     CorruptImageError: 400,
     DimensionsExceededError: 413,
     InvalidParametersError: 422,
+    EmptyMaskError: 422,
+    SvgOutputTooLargeError: 413,
+    VectorizationTimeoutError: 504,
+    VectorizationEngineError: 500,
+    InvalidSvgError: 500,
 }
 
 
