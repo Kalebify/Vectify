@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Vectify.Api.Clients;
 using Vectify.Api.Contracts;
 using Vectify.Api.Projects;
@@ -20,6 +21,15 @@ public sealed class PreprocessService : IPreprocessService
     private readonly IPythonPreprocessClient _pythonClient;
     private readonly IFileStorage _fileStorage;
     private readonly ILogger<PreprocessService> _logger;
+
+    // Lock asíncrono por clave (proyecto, imagen, parámetros efectivos): evita
+    // que dos requests concurrentes con exactamente los mismos parámetros
+    // pasen ambas el chequeo de caché como "miss" y dupliquen la llamada a
+    // Python (ver spec.md M1-S03: "cachear/referenciar preview"). Los
+    // semáforos quedan vivos en este diccionario para todo el ciclo de vida
+    // del proceso (no se limpian) — aceptable para este sprint, sin base de
+    // datos ni infra distribuida detrás.
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> _generationLocks = new();
 
     public PreprocessService(
         IProjectRegistry projectRegistry,
@@ -54,79 +64,109 @@ public sealed class PreprocessService : IPreprocessService
 
         var parameters = validation.Parameters!;
 
-        // Cache: mismos parámetros efectivos para esta imagen ya generaron un
-        // preview antes -> se referencia el existente en vez de volver a llamar
-        // a Python (spec.md: "cachear/referenciar preview").
-        var cached = _preprocessRegistry.FindByParams(projectId, imageId, parameters);
-        if (cached is not null)
-        {
-            return new PreprocessResult.Ready(cached, FromCache: true);
-        }
-
-        Stream originalContent;
+        // Sección crítica: buscar en caché -> generar si falta -> guardar,
+        // serializada por (proyecto, imagen, parámetros) para que requests
+        // concurrentes con la misma combinación exacta no dupliquen trabajo
+        // (ver defecto de concurrencia corregido en esta ronda).
+        var lockKey = $"{projectId:N}/{imageId:N}/{parameters.ToCacheKey()}";
+        var gate = _generationLocks.GetOrAdd(lockKey, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken);
         try
         {
-            originalContent = await _fileStorage.OpenReadAsync(original.StorageKey, cancellationToken);
+            // Cache: mismos parámetros efectivos para esta imagen ya generaron
+            // un preview antes -> se reutilizan los bytes/archivo ya generados
+            // (no se vuelve a llamar a Python ni a guardar en storage), pero se
+            // registra igual como una versión NUEVA del historial, para que un
+            // reset a parámetros ya vistos avance la versión en vez de
+            // retroceder a la vieja (spec.md: "cachear/referenciar preview;
+            // mantener versionado de configuración").
+            var cached = _preprocessRegistry.FindByParams(projectId, imageId, parameters);
+            if (cached is not null)
+            {
+                var cachedVersion = _preprocessRegistry.NextVersion(projectId, imageId);
+                var cachedRecord = cached with
+                {
+                    Version = cachedVersion,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                };
+                _preprocessRegistry.Save(cachedRecord);
+
+                _logger.LogInformation(
+                    "Preview {PreviewId} (v{Version}) reutilizado desde caché para {ProjectId}/{ImageId}",
+                    cachedRecord.PreviewId, cachedVersion, projectId, imageId);
+
+                return new PreprocessResult.Ready(cachedRecord, FromCache: true);
+            }
+
+            Stream originalContent;
+            try
+            {
+                originalContent = await _fileStorage.OpenReadAsync(original.StorageKey, cancellationToken);
+            }
+            catch (FileNotFoundException ex)
+            {
+                _logger.LogError(ex, "El original de {ProjectId}/{ImageId} ya no está disponible en el storage", projectId, imageId);
+                return new PreprocessResult.UpstreamError(
+                    "storage_failure", "El original ya no está disponible en el storage.");
+            }
+
+            PythonPreprocessResult pythonResult;
+            await using (originalContent)
+            {
+                pythonResult = await _pythonClient.PreprocessAsync(
+                    originalContent, original.MimeType, original.FileName, parameters, cancellationToken);
+            }
+
+            if (pythonResult.State != PythonPreprocessState.Success)
+            {
+                return new PreprocessResult.UpstreamError(
+                    MapErrorCode(pythonResult.State),
+                    pythonResult.Message ?? "No se pudo generar el preview.");
+            }
+
+            var previewId = Guid.NewGuid();
+            var storageKey = $"{projectId:N}/{imageId:N}/previews/{previewId:N}.png";
+
+            try
+            {
+                await using var previewContent = new MemoryStream(pythonResult.ImageBytes!);
+                await _fileStorage.SaveAsync(storageKey, previewContent, pythonResult.ContentType!, cancellationToken);
+            }
+            catch (FileStorageException ex)
+            {
+                _logger.LogError(ex, "Fallo de storage al guardar el preview {ProjectId}/{ImageId}", projectId, imageId);
+                return new PreprocessResult.UpstreamError(
+                    "storage_failure", "No se pudo guardar el preview generado.");
+            }
+
+            var version = _preprocessRegistry.NextVersion(projectId, imageId);
+            var record = new PreprocessConfigRecord(
+                projectId,
+                imageId,
+                version,
+                previewId,
+                pythonResult.EffectiveParameters ?? parameters,
+                storageKey,
+                pythonResult.ContentType!,
+                pythonResult.Width!.Value,
+                pythonResult.Height!.Value,
+                pythonResult.OriginalWidth!.Value,
+                pythonResult.OriginalHeight!.Value,
+                pythonResult.Metrics!,
+                DateTimeOffset.UtcNow);
+
+            _preprocessRegistry.Save(record);
+
+            _logger.LogInformation(
+                "Preview {PreviewId} (v{Version}) generado para {ProjectId}/{ImageId}",
+                previewId, version, projectId, imageId);
+
+            return new PreprocessResult.Ready(record, FromCache: false);
         }
-        catch (FileNotFoundException ex)
+        finally
         {
-            _logger.LogError(ex, "El original de {ProjectId}/{ImageId} ya no está disponible en el storage", projectId, imageId);
-            return new PreprocessResult.UpstreamError(
-                "storage_failure", "El original ya no está disponible en el storage.");
+            gate.Release();
         }
-
-        PythonPreprocessResult pythonResult;
-        await using (originalContent)
-        {
-            pythonResult = await _pythonClient.PreprocessAsync(
-                originalContent, original.MimeType, original.FileName, parameters, cancellationToken);
-        }
-
-        if (pythonResult.State != PythonPreprocessState.Success)
-        {
-            return new PreprocessResult.UpstreamError(
-                MapErrorCode(pythonResult.State),
-                pythonResult.Message ?? "No se pudo generar el preview.");
-        }
-
-        var previewId = Guid.NewGuid();
-        var storageKey = $"{projectId:N}/{imageId:N}/previews/{previewId:N}.png";
-
-        try
-        {
-            await using var previewContent = new MemoryStream(pythonResult.ImageBytes!);
-            await _fileStorage.SaveAsync(storageKey, previewContent, pythonResult.ContentType!, cancellationToken);
-        }
-        catch (FileStorageException ex)
-        {
-            _logger.LogError(ex, "Fallo de storage al guardar el preview {ProjectId}/{ImageId}", projectId, imageId);
-            return new PreprocessResult.UpstreamError(
-                "storage_failure", "No se pudo guardar el preview generado.");
-        }
-
-        var version = _preprocessRegistry.NextVersion(projectId, imageId);
-        var record = new PreprocessConfigRecord(
-            projectId,
-            imageId,
-            version,
-            previewId,
-            pythonResult.EffectiveParameters ?? parameters,
-            storageKey,
-            pythonResult.ContentType!,
-            pythonResult.Width!.Value,
-            pythonResult.Height!.Value,
-            pythonResult.OriginalWidth!.Value,
-            pythonResult.OriginalHeight!.Value,
-            pythonResult.Metrics!,
-            DateTimeOffset.UtcNow);
-
-        _preprocessRegistry.Save(record);
-
-        _logger.LogInformation(
-            "Preview {PreviewId} (v{Version}) generado para {ProjectId}/{ImageId}",
-            previewId, version, projectId, imageId);
-
-        return new PreprocessResult.Ready(record, FromCache: false);
     }
 
     public PreprocessConfigRecord? FindPreview(Guid projectId, Guid imageId, Guid previewId) =>
