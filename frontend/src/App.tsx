@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { ServiceCard } from "./components/ServiceCard";
 import type { StatusTone } from "./components/StatusPill";
+import { PreprocessPanel } from "./components/preprocess/PreprocessPanel";
 import { UploadPanel } from "./components/upload/UploadPanel";
 import { useSystemHealth } from "./hooks/useSystemHealth";
 import type { PythonStatus } from "./types/system";
+import type { UploadImageResponse } from "./types/upload";
 import "./App.css";
 
 const PYTHON_STATUS_LABEL: Record<PythonStatus, string> = {
@@ -30,6 +33,7 @@ const BANNER_COPY: Record<"loading" | "online" | "degraded" | "error", string> =
 
 function App() {
   const { status, response, errorMessage, lastCheckedAt } = useSystemHealth();
+  const [activeProject, setActiveProject] = useState<UploadImageResponse | null>(null);
 
   const apiTone: StatusTone =
     status === "loading" ? "neutral" : status === "error" ? "error" : "ok";
@@ -60,11 +64,29 @@ function App() {
         <section aria-labelledby="upload-heading" className="upload-section">
           <h2 id="upload-heading">Nuevo proyecto</h2>
           <p className="upload-section__hint">
-            Arrastrá o seleccioná una imagen para crear un proyecto a partir de ella. Todavía
-            no se procesa: solo se guarda el original.
+            Arrastrá o seleccioná una imagen para crear un proyecto a partir de ella. El
+            original se guarda tal cual: el preprocesamiento trabaja sobre una copia.
           </p>
-          <UploadPanel />
+          <UploadPanel onProjectCreated={setActiveProject} />
         </section>
+
+        {activeProject && (
+          <section aria-labelledby="preprocess-heading" className="preprocess-section">
+            <h2 id="preprocess-heading">Preprocesamiento</h2>
+            <p className="upload-section__hint">
+              Ajustá escala de grises, contraste, brillo y reducción de ruido para preparar la
+              imagen antes de vectorizarla. El original nunca se modifica.
+            </p>
+            <PreprocessPanel
+              key={`${activeProject.projectId}-${activeProject.imageId}`}
+              projectId={activeProject.projectId}
+              imageId={activeProject.imageId}
+              fileName={activeProject.filename}
+              originalWidth={activeProject.width}
+              originalHeight={activeProject.height}
+            />
+          </section>
+        )}
 
         <section aria-labelledby="diagnostics-heading">
           <h2 id="diagnostics-heading">Diagnóstico del sistema</h2>
@@ -123,7 +145,7 @@ function App() {
       </main>
 
       <footer className="app-footer">
-        <p>Vectify · M1-S02 · Carga y almacenamiento de imágenes</p>
+        <p>Vectify · M1-S03 · Preprocesamiento de imagen</p>
       </footer>
     </>
   );

@@ -36,6 +36,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       ...init,
     });
   } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new ApiClientError("La solicitud fue cancelada.", { cause: error, isAborted: true });
+    }
+
     throw new ApiClientError(
       `No se pudo contactar a la Web API en ${API_BASE_URL}${path}`,
       { cause: error, isNetworkError: true },
@@ -55,6 +59,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const httpClient = {
   get: <T>(path: string, init?: RequestInit) => request<T>(path, { ...init, method: "GET" }),
+  /** POST con cuerpo JSON (Content-Type: application/json), para endpoints que no suben archivos. */
+  postJson: <T>(path: string, body: unknown, init?: RequestInit) =>
+    request<T>(path, {
+      ...init,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+      body: JSON.stringify(body),
+    }),
 };
 
 export interface UploadFileOptions {

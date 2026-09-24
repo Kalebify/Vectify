@@ -300,6 +300,11 @@ main {
   color: #fff;
 }
 
+.upload-actions__button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .project-created {
   display: flex;
   gap: 14px;
@@ -344,5 +349,132 @@ main {
 
   .project-created {
     flex-direction: column;
+  }
+}
+
+/* --- Preprocesamiento de imagen (M1-S03) --- */
+
+.preprocess-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.preprocess-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.preprocess-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.preprocess-controls__row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.preprocess-controls__row--checkbox {
+  flex-direction: row;
+  align-items: center;
+}
+
+.preprocess-controls__checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+.preprocess-controls__label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 13px;
+}
+
+.preprocess-controls__label-row label {
+  color: var(--text-h);
+  font-weight: 600;
+}
+
+.preprocess-controls__value {
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.preprocess-controls input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.preprocess-controls__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 32px;
+}
+
+.preprocess-controls__status {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.preprocess-comparison {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+@media (min-width: 640px) {
+  .preprocess-comparison {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.preprocess-comparison__item {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+}
+
+.preprocess-comparison__item img,
+.preprocess-comparison__placeholder {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--code-bg);
+  object-fit: contain;
+}
+
+.preprocess-comparison__item figcaption {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.preprocess-panel__metrics {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+@media (max-width: 400px) {
+  .preprocess-controls__footer {
+    flex-direction: column;
+    align-items: flex-start;
+    min-height: 0;
   }
 }
