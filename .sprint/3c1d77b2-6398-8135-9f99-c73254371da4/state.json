@@ -1,0 +1,19 @@
+{
+  "card_id": "3c1d77b2-6398-8135-9f99-c73254371da4",
+  "card_url": "https://app.notion.com/p/3c1d77b2639881359f99c73254371da4",
+  "title": "M1-S05 · Vectorización raster → SVG",
+  "stack": "React (acción Vectorizar + render SVG) · ASP.NET Core Web API (job/VectorVersion/idempotencia) · Python/FastAPI + VTracer detrás de interfaz — derivado del cuerpo de la tarjeta, motor confirmado con el usuario",
+  "branch": "sprint/3c1d77b2-vectorizacion-svg",
+  "column": "Doing",
+  "phase": "implement",
+  "fix_rounds": 0,
+  "preview_url": null,
+  "started_at": "2026-09-25T00:00:00Z",
+  "exceptions": [
+    "Board sin propiedad Tecnología/Stack: stack derivado del cuerpo de la tarjeta.",
+    "Tarjeta no es un sitio web: se saltan web-design-architect y web-qa-auditor, mismo acuerdo que las tarjetas anteriores. Verificación por build/tests locales.",
+    "Por decisión explícita del usuario, el orquestador mueve la tarjeta a Done al terminar; el usuario mueve Done→Test manualmente.",
+    "La tarjeta pedía un motor 'seleccionado tras spike (Potrace/VTracer)' que no existe en el board. Se consultó al usuario en el chat antes de implementar: eligió VTracer. No se adivinó.",
+    "Idempotencia de reintentos, límites de tamaño/tiempo y determinismo bit-a-bit de VTracer quedan a criterio del implementador, declarados como supuesto/excepción."
+  ]
+}

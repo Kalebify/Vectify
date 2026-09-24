@@ -25,6 +25,16 @@ class Settings(BaseSettings):
     max_image_height: int = 6000
     max_image_pixels: int = 25_000_000
 
+    # Límites de la etapa de vectorización (M1-S05). spec.md tampoco los
+    # cuantifica ("Ambigüedades detectadas" en spec.md); supuesto documentado
+    # en el reporte del sprint. vectorize_timeout_seconds es un presupuesto
+    # interno del proceso Python (ver app.services.vectorization_service),
+    # independiente y menor al timeout HTTP configurado del lado de
+    # Vectify.Api (Vectorize:TimeoutSeconds), para que el error tipado de
+    # Python llegue a tiempo en vez de que el cliente HTTP corte primero.
+    vectorize_timeout_seconds: int = 25
+    max_svg_output_bytes: int = 5_000_000
+
 
 @lru_cache
 def get_settings() -> Settings:

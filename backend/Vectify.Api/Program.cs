@@ -9,6 +9,7 @@ using Vectify.Api.Projects;
 using Vectify.Api.Storage;
 using Vectify.Api.Threshold;
 using Vectify.Api.Validation;
+using Vectify.Api.Vectorization;
 
 const string ApiVersion = "0.1.0";
 const string ApiServiceName = "vectify-api";
@@ -151,6 +152,30 @@ builder.Services.AddSingleton<IThresholdConfigRegistry, InMemoryThresholdConfigR
 builder.Services.AddSingleton<IThresholdParameterValidator, ThresholdParameterValidator>();
 builder.Services.AddScoped<IThresholdService, ThresholdService>();
 
+// Vectorización raster -> SVG (M1-S05): etapa siguiente del pipeline, opera
+// sobre la máscara B/N YA generada por threshold (nunca el preview
+// preprocesado ni el original). Sin parámetros ajustables en este sprint;
+// cliente Python dedicado con su propio timeout (Vectorize:TimeoutSeconds,
+// mayor al presupuesto interno de Python para que el timeout tipado de
+// Python llegue primero) y un historial de VectorVersion en memoria (mismo
+// criterio que preprocesamiento/threshold).
+builder.Services
+    .AddOptions<VectorizeOptions>()
+    .Bind(builder.Configuration.GetSection(VectorizeOptions.SectionName))
+    .Validate(o => o.TimeoutSeconds > 0, "Vectorize:TimeoutSeconds debe ser mayor a 0.");
+
+builder.Services.AddHttpClient<IPythonVectorizeClient, PythonVectorizeClient>((sp, client) =>
+{
+    var pythonOptions = sp.GetRequiredService<IOptions<PythonEngineOptions>>().Value;
+    var vectorizeOptions = sp.GetRequiredService<IOptions<VectorizeOptions>>().Value;
+    client.BaseAddress = new Uri(pythonOptions.BaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(vectorizeOptions.TimeoutSeconds);
+});
+
+builder.Services.AddSingleton<IVectorVersionRegistry, InMemoryVectorVersionRegistry>();
+builder.Services.AddSingleton<IVectorParameterValidator, VectorParameterValidator>();
+builder.Services.AddScoped<IVectorizationService, VectorizationService>();
+
 var app = builder.Build();
 
 var allowedOrigins = app.Services.GetRequiredService<IOptions<FrontendCorsOptions>>().Value.GetOrigins();
@@ -233,6 +258,7 @@ app.MapGet("/api/v1/system/health", async (
 app.MapProjectEndpoints();
 app.MapPreprocessEndpoints();
 app.MapThresholdEndpoints();
+app.MapVectorizationEndpoints();
 
 app.Run();
 
