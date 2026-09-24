@@ -31,4 +31,18 @@ def make_checkerboard_png_bytes(size: int = 8) -> bytes:
     return buffer.tobytes()
 
 
+def make_rgba_png_bytes(
+    width: int, height: int, color: tuple[int, int, int] = (40, 80, 120), alpha: int = 128
+) -> bytes:
+    """PNG con canal alfa (BGRA), para probar que el pipeline no falla con
+    imágenes con transparencia -- read_image_safely decodifica con
+    IMREAD_COLOR, que descarta el canal alfa (ver spec.md M1-S04, "Pruebas":
+    "transparencias").
+    """
+    image = np.full((height, width, 4), (*color, alpha), dtype=np.uint8)
+    success, buffer = cv2.imencode(".png", image)
+    assert success
+    return buffer.tobytes()
+
+
 NOT_AN_IMAGE = b"esto no es una imagen"

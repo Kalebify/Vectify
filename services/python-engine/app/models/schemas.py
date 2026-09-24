@@ -64,6 +64,43 @@ class PreprocessResponse(BaseModel):
     metrics: PreprocessMetrics
 
 
+class ThresholdParams(BaseModel):
+    """Parámetros ajustables de la etapa de threshold B/N (M1-S04): umbral
+    global y su inversión. Rangos alineados con Vectify.Api.Options.ThresholdOptions
+    (defensa en profundidad, mismo criterio que PreprocessParams). El modo
+    adaptativo (vs. global) se decidió no incluir en este sprint -- ver
+    reporte del sprint.
+    """
+
+    value: int = Field(128, ge=0, le=255, description="Umbral global (0 = todo negro, 255 = todo blanco)")
+    invert: bool = Field(False, description="Invierte blanco/negro del resultado")
+
+
+class ThresholdMetrics(BaseModel):
+    """Porcentaje crudo de píxeles foreground/background de la máscara
+    resultante. La clasificación de "casi vacía/casi llena" como advertencia
+    se calcula del lado de Vectify.Api (Threshold/ThresholdService.cs), no acá.
+    """
+
+    foreground_percent: float = Field(examples=[42.3], ge=0, le=100)
+    background_percent: float = Field(examples=[57.7], ge=0, le=100)
+
+
+class ThresholdResponse(BaseModel):
+    """Respuesta de POST /api/v1/threshold. Igual convención que
+    PreprocessResponse: consumida únicamente por Vectify.Api, la máscara viaja
+    embebida en base64 para mantener un único contrato JSON simple de testear
+    de forma determinista.
+    """
+
+    image_base64: str = Field(description="Máscara binaria codificada como PNG, en base64")
+    content_type: str = Field(default="image/png", examples=["image/png"])
+    width: int
+    height: int
+    effective_params: ThresholdParams
+    metrics: ThresholdMetrics
+
+
 class ErrorResponse(BaseModel):
     """Forma común de error controlado, igual convención que
     Vectify.Api.Contracts.ApiErrorResponse: `code` es estable, `message` es
