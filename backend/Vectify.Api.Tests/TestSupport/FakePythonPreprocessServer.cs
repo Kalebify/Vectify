@@ -10,26 +10,32 @@ using Microsoft.Extensions.Logging;
 namespace Vectify.Api.Tests.TestSupport;
 
 /// <summary>
-/// Servidor Kestrel con respuestas simuladas de POST /api/v1/preprocess; no
-/// ejecuta el motor Python real ni OpenCV. `respond` recibe el número de
-/// solicitud (1-based) y devuelve (statusCode, body JSON), lo que permite
-/// probar el cache de la Web API (la segunda solicitud con los mismos
-/// parámetros no debería llegar acá).
+/// Servidor Kestrel con respuestas simuladas de POST /api/v1/preprocess y
+/// POST /api/v1/threshold; no ejecuta el motor Python real ni OpenCV.
+/// `respond`/`respondThreshold` reciben el número de solicitud (1-based, por
+/// endpoint) y devuelven (statusCode, body JSON), lo que permite probar el
+/// cache de la Web API (una segunda solicitud con los mismos parámetros no
+/// debería llegar acá). `respondThreshold` es opcional (default: éxito
+/// genérico) para no romper los tests de M1-S03 que solo ejercitan preprocess.
 /// </summary>
 public sealed class FakePythonPreprocessServer : IAsyncDisposable
 {
     private readonly WebApplication _app;
     private int _requestCount;
+    private int _thresholdRequestCount;
 
     public string BaseUrl { get; private set; } = string.Empty;
     public int RequestCount => _requestCount;
+    public int ThresholdRequestCount => _thresholdRequestCount;
 
     private FakePythonPreprocessServer(WebApplication app)
     {
         _app = app;
     }
 
-    public static async Task<FakePythonPreprocessServer> StartAsync(Func<int, (int StatusCode, string Body)> respond)
+    public static async Task<FakePythonPreprocessServer> StartAsync(
+        Func<int, (int StatusCode, string Body)> respond,
+        Func<int, (int StatusCode, string Body)>? respondThreshold = null)
     {
         var builder = WebApplication.CreateBuilder();
         builder.Logging.ClearProviders();
@@ -42,6 +48,15 @@ public sealed class FakePythonPreprocessServer : IAsyncDisposable
         {
             var count = Interlocked.Increment(ref server._requestCount);
             var (statusCode, body) = respond(count);
+            context.Response.StatusCode = statusCode;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(body, context.RequestAborted);
+        });
+
+        app.MapPost("/api/v1/threshold", async context =>
+        {
+            var count = Interlocked.Increment(ref server._thresholdRequestCount);
+            var (statusCode, body) = (respondThreshold ?? (_ => (200, ThresholdPayloads.SuccessBody())))(count);
             context.Response.StatusCode = statusCode;
             context.Response.ContentType = "application/json";
             await context.Response.WriteAsync(body, context.RequestAborted);

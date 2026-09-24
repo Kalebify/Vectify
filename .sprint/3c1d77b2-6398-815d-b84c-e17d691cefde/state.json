@@ -1,0 +1,19 @@
+{
+  "card_id": "3c1d77b2-6398-815d-b84c-e17d691cefde",
+  "card_url": "https://app.notion.com/p/3c1d77b26398815db84ce17d691cefde",
+  "title": "M1-S04 · Threshold blanco y negro",
+  "stack": "React (controles de threshold/histograma/comparación) · ASP.NET Core Web API (validación/persistencia/orquestación) · Python/FastAPI + OpenCV (threshold determinista + métricas) — derivado del cuerpo de la tarjeta",
+  "branch": "sprint/3c1d77b2-threshold-bn",
+  "column": "Done",
+  "phase": "review",
+  "fix_rounds": 0,
+  "preview_url": null,
+  "started_at": "2026-09-25T00:00:00Z",
+  "exceptions": [
+    "Board sin propiedad Tecnología/Stack: stack derivado del cuerpo de la tarjeta.",
+    "Tarjeta no es un sitio web: se saltan web-design-architect y web-qa-auditor, mismo acuerdo que las tarjetas anteriores. Verificación por build/tests locales.",
+    "Por decisión explícita del usuario, el orquestador mueve la tarjeta a Done al terminar; el usuario mueve Done→Test manualmente.",
+    "Rama base fix/3c1d77b2-preprocess-corrections todavía no está mergeada a main (PR #3 abierto) — esta tarjeta depende del código corregido, no del último main mergeado.",
+    "Umbral de 'máscara casi vacía/llena' y si se incluye modo adaptativo quedan a criterio del implementador, declarados como supuesto/excepción."
+  ]
+}

@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from app.api.routes.health import router as health_router
 from app.api.routes.info import router as info_router
 from app.api.routes.preprocess import router as preprocess_router
+from app.api.routes.threshold import router as threshold_router
 from app.core.config import get_settings
 from app.core.errors import CorruptImageError, DimensionsExceededError, InvalidParametersError, PreprocessingError
 from app.core.logging import configure_logging
@@ -25,7 +26,8 @@ app = FastAPI(
     description=(
         "Microservicio de procesamiento/vectorización. Expone chequeos de salud, "
         "información del servicio y el pipeline determinista de preprocesamiento "
-        "de imágenes (grayscale, contraste/brillo, suavizado/denoise)."
+        "de imágenes (grayscale, contraste/brillo, suavizado/denoise) y de "
+        "threshold B/N (umbral global, inversión)."
     ),
     version=settings.service_version,
 )
@@ -33,6 +35,7 @@ app = FastAPI(
 app.include_router(health_router)
 app.include_router(info_router)
 app.include_router(preprocess_router)
+app.include_router(threshold_router)
 
 # Códigos HTTP por tipo de error controlado del pipeline de preprocesamiento
 # (ver "Errores y límites" de spec.md): imagen corrupta -> 400, dimensiones

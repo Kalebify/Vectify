@@ -7,6 +7,7 @@ using Vectify.Api.Options;
 using Vectify.Api.Preprocessing;
 using Vectify.Api.Projects;
 using Vectify.Api.Storage;
+using Vectify.Api.Threshold;
 using Vectify.Api.Validation;
 
 const string ApiVersion = "0.1.0";
@@ -124,6 +125,32 @@ builder.Services.AddSingleton<IPreprocessConfigRegistry, InMemoryPreprocessConfi
 builder.Services.AddSingleton<IPreprocessParameterValidator, PreprocessParameterValidator>();
 builder.Services.AddScoped<IPreprocessService, PreprocessService>();
 
+// Threshold B/N (M1-S04): etapa siguiente del pipeline, opera sobre el
+// preview YA preprocesado (nunca el original). Rango de umbral y umbrales de
+// advertencia "casi vacía/casi llena" configurables (Threshold:*), cliente
+// Python dedicado con su propio timeout y un historial de
+// configuraciones/máscara en memoria (mismo criterio que preprocesamiento).
+builder.Services
+    .AddOptions<ThresholdOptions>()
+    .Bind(builder.Configuration.GetSection(ThresholdOptions.SectionName))
+    .Validate(o => o.MinValue >= 0 && o.MinValue < o.MaxValue, "Threshold:MinValue/MaxValue inválidos.")
+    .Validate(
+        o => o.NearEmptyMaxForegroundPercent >= 0 && o.NearEmptyMaxForegroundPercent < o.NearFullMinForegroundPercent && o.NearFullMinForegroundPercent <= 100,
+        "Threshold:NearEmptyMaxForegroundPercent/NearFullMinForegroundPercent inválidos.")
+    .Validate(o => o.TimeoutSeconds > 0, "Threshold:TimeoutSeconds debe ser mayor a 0.");
+
+builder.Services.AddHttpClient<IPythonThresholdClient, PythonThresholdClient>((sp, client) =>
+{
+    var pythonOptions = sp.GetRequiredService<IOptions<PythonEngineOptions>>().Value;
+    var thresholdOptions = sp.GetRequiredService<IOptions<ThresholdOptions>>().Value;
+    client.BaseAddress = new Uri(pythonOptions.BaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(thresholdOptions.TimeoutSeconds);
+});
+
+builder.Services.AddSingleton<IThresholdConfigRegistry, InMemoryThresholdConfigRegistry>();
+builder.Services.AddSingleton<IThresholdParameterValidator, ThresholdParameterValidator>();
+builder.Services.AddScoped<IThresholdService, ThresholdService>();
+
 var app = builder.Build();
 
 var allowedOrigins = app.Services.GetRequiredService<IOptions<FrontendCorsOptions>>().Value.GetOrigins();
@@ -205,6 +232,7 @@ app.MapGet("/api/v1/system/health", async (
 
 app.MapProjectEndpoints();
 app.MapPreprocessEndpoints();
+app.MapThresholdEndpoints();
 
 app.Run();
 
