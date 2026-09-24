@@ -1,0 +1,18 @@
+{
+  "card_id": "3c1d77b2-6398-81a1-8df9-c2ecd0f5653f",
+  "card_url": "https://app.notion.com/p/3c1d77b2639881a18df9c2ecd0f5653f",
+  "title": "M1-S03 · Preprocesamiento de imagen",
+  "stack": "React (panel de sliders/debounce) · ASP.NET Core Web API (orquestación/versionado) · Python/FastAPI + OpenCV (pipeline determinista) — derivado del cuerpo de la tarjeta",
+  "branch": "sprint/3c1d77b2-preprocesamiento-imagen",
+  "column": "Done",
+  "phase": "review",
+  "fix_rounds": 0,
+  "preview_url": null,
+  "started_at": "2026-09-25T00:00:00Z",
+  "exceptions": [
+    "Board sin propiedad Tecnología/Stack: stack derivado del cuerpo de la tarjeta.",
+    "Tarjeta no es un sitio web: se saltan web-design-architect y web-qa-auditor, mismo acuerdo que M1-S01/M1-S02. Verificación por build/tests locales.",
+    "Por decisión explícita del usuario, el orquestador mueve la tarjeta a Done al terminar; el usuario mueve Done→Test manualmente.",
+    "Rangos de sliders, algoritmo de denoise, límite de dimensiones y timeout no cuantificados en la tarjeta — el implementador debe declarar los valores elegidos como supuesto."
+  ]
+}

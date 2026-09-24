@@ -10,6 +10,7 @@
     <!-- Microsoft.AspNetCore.OpenApi (nativo de .NET 9) es incompatible en runtime con
          Microsoft.OpenApi 2.x que trae Swashbuckle.AspNetCore >= 7, así que se usa
          únicamente Swashbuckle para generar el documento OpenAPI y servir Swagger UI. -->
+    <PackageReference Include="SixLabors.ImageSharp" Version="2.1.13" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.3" />
   </ItemGroup>
 

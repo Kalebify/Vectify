@@ -17,6 +17,7 @@ namespace Vectify.Api.Tests.EndToEnd;
 public sealed class ProjectEndpointsTests : IDisposable
 {
     private readonly string _storageRoot = Path.Combine(Path.GetTempPath(), "vectify-endpoint-tests-" + Guid.NewGuid().ToString("n"));
+    private readonly string _projectRegistryRoot = Path.Combine(Path.GetTempPath(), "vectify-endpoint-tests-registry-" + Guid.NewGuid().ToString("n"));
 
     [Fact]
     public async Task PostProjects_WhenImageIsValid_CreatesProjectAndOriginalIsRecoverable()
@@ -187,6 +188,7 @@ public sealed class ProjectEndpointsTests : IDisposable
                     ["PythonEngine:BaseUrl"] = "http://127.0.0.1:1",
                     ["Cors:AllowedOrigins"] = "http://localhost:5173",
                     ["Storage:RootPath"] = _storageRoot,
+                    ["ProjectRegistry:RootPath"] = _projectRegistryRoot,
                     ["Upload:MaxFileSizeBytes"] = maxFileSizeBytes.ToString(),
                 });
             });
@@ -198,6 +200,11 @@ public sealed class ProjectEndpointsTests : IDisposable
         if (Directory.Exists(_storageRoot))
         {
             Directory.Delete(_storageRoot, recursive: true);
+        }
+
+        if (Directory.Exists(_projectRegistryRoot))
+        {
+            Directory.Delete(_projectRegistryRoot, recursive: true);
         }
     }
 }

@@ -31,6 +31,10 @@ export class FakeXMLHttpRequest {
     this.headers[key] = value;
   }
 
+  getRequestHeader(key: string): string | undefined {
+    return this.headers[key];
+  }
+
   send(): void {
     // No-op: los tests avanzan el ciclo de vida a mano vía respond()/progress()/networkError().
   }

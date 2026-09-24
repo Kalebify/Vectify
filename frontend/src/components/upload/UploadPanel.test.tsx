@@ -87,6 +87,40 @@ describe("UploadPanel — confirmar carga", () => {
     expect(screen.getByRole("button", { name: "Cargar otra imagen" })).toBeInTheDocument();
   });
 
+  it("envía Idempotency-Key en la carga y la mantiene igual en un reintento del mismo archivo", async () => {
+    render(<UploadPanel />);
+    act(() => selectFile(pngFile()));
+    act(() => fireEvent.click(screen.getByRole("button", { name: "Confirmar carga" })));
+
+    const firstXhr = FakeXMLHttpRequest.latest();
+    const firstKey = firstXhr.getRequestHeader("Idempotency-Key");
+    expect(firstKey).toBeTruthy();
+
+    await act(async () => {
+      firstXhr.respond(400, { code: "corrupt_file", message: "El archivo parece estar corrupto." });
+    });
+
+    act(() => fireEvent.click(screen.getByRole("button", { name: "Reintentar" })));
+
+    const secondXhr = FakeXMLHttpRequest.latest();
+    expect(secondXhr.getRequestHeader("Idempotency-Key")).toBe(firstKey);
+  });
+
+  it("elegir un archivo nuevo renueva la Idempotency-Key", () => {
+    render(<UploadPanel />);
+    act(() => selectFile(pngFile("primero.png")));
+    act(() => fireEvent.click(screen.getByRole("button", { name: "Confirmar carga" })));
+    const firstKey = FakeXMLHttpRequest.latest().getRequestHeader("Idempotency-Key");
+
+    act(() => fireEvent.click(screen.getByRole("button", { name: "Cancelar" })));
+    act(() => selectFile(pngFile("segundo.png")));
+    act(() => fireEvent.click(screen.getByRole("button", { name: "Confirmar carga" })));
+    const secondKey = FakeXMLHttpRequest.latest().getRequestHeader("Idempotency-Key");
+
+    expect(secondKey).toBeTruthy();
+    expect(secondKey).not.toBe(firstKey);
+  });
+
   it("cancelar durante la carga aborta la solicitud y vuelve al Dropzone", () => {
     render(<UploadPanel />);
     act(() => selectFile(pngFile()));

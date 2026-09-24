@@ -17,6 +17,14 @@ class Settings(BaseSettings):
     port: int = 8000
     log_level: str = "info"
 
+    # Límites del pipeline de preprocesamiento (M1-S03). spec.md no cuantifica
+    # "dimensiones excesivas"; estos valores son un supuesto documentado (ver
+    # reporte del sprint): suficientes para imágenes de trabajo típicas de
+    # tracing/vectorización sin arriesgar agotar memoria en un solo proceso.
+    max_image_width: int = 6000
+    max_image_height: int = 6000
+    max_image_pixels: int = 25_000_000
+
 
 @lru_cache
 def get_settings() -> Settings:

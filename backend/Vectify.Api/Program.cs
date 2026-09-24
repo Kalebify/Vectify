@@ -4,6 +4,7 @@ using Vectify.Api.Contracts;
 using Vectify.Api.Endpoints;
 using Vectify.Api.Middleware;
 using Vectify.Api.Options;
+using Vectify.Api.Preprocessing;
 using Vectify.Api.Projects;
 using Vectify.Api.Storage;
 using Vectify.Api.Validation;
@@ -85,10 +86,43 @@ builder.Services
     .AddOptions<LocalStorageOptions>()
     .Bind(builder.Configuration.GetSection(LocalStorageOptions.SectionName));
 
+// El registro de proyectos persiste un sidecar JSON por proyecto junto al
+// almacenamiento local (Defecto 4 de QA sobre M1-S02: antes era puramente en
+// memoria y se perdía todo al reiniciar el proceso). Sigue sin haber una base de
+// datos de negocio real -- eso sigue fuera de alcance de este sprint.
+builder.Services
+    .AddOptions<ProjectRegistryOptions>()
+    .Bind(builder.Configuration.GetSection(ProjectRegistryOptions.SectionName));
+
 builder.Services.AddSingleton<IImageUploadValidator, ImageUploadValidator>();
 builder.Services.AddSingleton<IFileStorage, LocalFileStorage>();
-builder.Services.AddSingleton<IProjectRegistry, InMemoryProjectRegistry>();
+builder.Services.AddSingleton<IProjectRegistry, PersistentProjectRegistry>();
 builder.Services.AddScoped<IProjectUploadService, ProjectUploadService>();
+
+// Preprocesamiento de imagen (M1-S03): rangos de sliders configurables
+// (Preprocess:*), un cliente Python dedicado con su propio timeout (más alto
+// que el del chequeo de salud, porque OpenCV puede tardar más que un GET
+// /health) y un historial de configuraciones/preview en memoria (mismo
+// criterio que InMemoryProjectRegistry: sin base de datos de negocio todavía).
+builder.Services
+    .AddOptions<PreprocessOptions>()
+    .Bind(builder.Configuration.GetSection(PreprocessOptions.SectionName))
+    .Validate(o => o.MinContrast > 0 && o.MinContrast < o.MaxContrast, "Preprocess:MinContrast/MaxContrast inválidos.")
+    .Validate(o => o.MinBrightness < o.MaxBrightness, "Preprocess:MinBrightness/MaxBrightness inválidos.")
+    .Validate(o => o.MinDenoise >= 0 && o.MinDenoise < o.MaxDenoise, "Preprocess:MinDenoise/MaxDenoise inválidos.")
+    .Validate(o => o.TimeoutSeconds > 0, "Preprocess:TimeoutSeconds debe ser mayor a 0.");
+
+builder.Services.AddHttpClient<IPythonPreprocessClient, PythonPreprocessClient>((sp, client) =>
+{
+    var pythonOptions = sp.GetRequiredService<IOptions<PythonEngineOptions>>().Value;
+    var preprocessOptions = sp.GetRequiredService<IOptions<PreprocessOptions>>().Value;
+    client.BaseAddress = new Uri(pythonOptions.BaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(preprocessOptions.TimeoutSeconds);
+});
+
+builder.Services.AddSingleton<IPreprocessConfigRegistry, InMemoryPreprocessConfigRegistry>();
+builder.Services.AddSingleton<IPreprocessParameterValidator, PreprocessParameterValidator>();
+builder.Services.AddScoped<IPreprocessService, PreprocessService>();
 
 var app = builder.Build();
 
@@ -170,6 +204,7 @@ app.MapGet("/api/v1/system/health", async (
 .WithTags("Health");
 
 app.MapProjectEndpoints();
+app.MapPreprocessEndpoints();
 
 app.Run();
 
