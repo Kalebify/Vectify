@@ -16,6 +16,12 @@ de vectorización. Estado actual:
   generada por threshold. Ver más abajo.
 - **M1-S06**: visualizador del SVG resultante (`VectorCanvas`) con zoom/pan y
   comparación contra el raster de origen. Ver más abajo.
+- **M1-S07**: simplificación de nodos (Douglas-Peucker) sobre el SVG ya
+  vectorizado, con presets Bajo/Medio/Alto, preview reversible y aplicar que
+  crea una nueva versión. Ver más abajo.
+- **M1-S08**: Laser Checker de paths abiertos y duplicados/casi-duplicados,
+  análisis de solo lectura con panel de issues y resaltado en el canvas. Ver
+  más abajo.
 
 ## Arquitectura
 
@@ -47,11 +53,15 @@ la Web API aplica una política CORS con los orígenes configurados en
 - **Motor de procesamiento** (`services/python-engine/`): Python + FastAPI.
   Expone `/health`, `/api/v1/info`, `/api/v1/preprocess` (M1-S03: pipeline
   determinista con OpenCV — escala de grises, contraste, brillo, denoise),
-  `/api/v1/threshold` (M1-S04: umbral B/N global con inversión opcional) y
+  `/api/v1/threshold` (M1-S04: umbral B/N global con inversión opcional),
   `/api/v1/vectorize` (M1-S05: trazado raster → SVG con VTracer, encapsulado
   detrás de `app.core.vector_engine`, con el SVG resultante sanitizado por
   `app.core.svg_processing` antes de devolverlo — ver "Vectorización" más
-  abajo). Estructura por `api/`, `services/`, `models/` y `core/`.
+  abajo), `/api/v1/simplify` (M1-S07: reducción de nodos con Douglas-Peucker
+  sobre un SVG ya vectorizado, ver "Simplificación de nodos" más abajo) y
+  `/api/v1/check` (M1-S08: Laser Checker de solo lectura, paths abiertos y
+  duplicados, ver "Laser Checker" más abajo). Estructura por `api/`,
+  `services/`, `models/` y `core/`.
 
 ## Requisitos
 
@@ -76,8 +86,11 @@ Con la configuración por defecto:
 `docker-compose.yml` monta un volumen nombrado (`vectify_backend_data`) en
 `/app/App_Data` del contenedor `backend`, así que los originales
 (`LocalFileStorage`) y los sidecars de metadata de proyecto/threshold/
-vectorización (`PersistentProjectRegistry`, `PersistentThresholdConfigRegistry`,
-`PersistentVectorVersionRegistry`) sobreviven a `docker compose down`/restart.
+vectorización/simplificación (`PersistentProjectRegistry`,
+`PersistentThresholdConfigRegistry`, `PersistentVectorVersionRegistry`,
+`PersistentSimplificationVersionRegistry`) sobreviven a `docker compose
+down`/restart. El Laser Checker (M1-S08) no tiene registro propio: es de
+solo lectura y no persiste ningún resultado.
 
 Abrir http://localhost:5173 debería mostrar "API Online" y "Python Online".
 Para probar la recuperación ante fallos:
@@ -119,9 +132,10 @@ npm run dev
 ```bash
 # Backend (xUnit): cliente Python, integración HTTP con motor simulado,
 # validación/almacenamiento/dimensiones, el endpoint de carga de imágenes,
-# los registros persistentes de proyecto/threshold/vectorización y los
-# endpoints de preprocesamiento (M1-S03), threshold (M1-S04) y
-# vectorización (M1-S05)
+# los registros persistentes de proyecto/threshold/vectorización/
+# simplificación y los endpoints de preprocesamiento (M1-S03),
+# threshold (M1-S04), vectorización (M1-S05), simplificación de nodos
+# (M1-S07) y el Laser Checker de paths (M1-S08)
 cd backend
 dotnet test
 
@@ -174,6 +188,14 @@ secretos reales.
 | `ThresholdRegistry__RootPath` | `backend` (appsettings o env) | `App_Data/thresholds` | Carpeta donde `PersistentThresholdConfigRegistry` guarda un sidecar JSON por configuración de threshold (nunca se versiona) |
 | `Vectorize__MaxSvgResponseBytes` | `backend` (appsettings o env) | `10485760` (10 MB) | Segunda barrera de tamaño, del lado de `PythonVectorizeClient`, sobre el SVG que devuelve el motor Python (defensa en profundidad además del límite que ya aplica Python) |
 | `VectorRegistry__RootPath` | `backend` (appsettings o env) | `App_Data/vectors` | Carpeta donde `PersistentVectorVersionRegistry` guarda un sidecar JSON por versión de vectorización (nunca se versiona) |
+| `Simplification__TimeoutSeconds` | `backend` (appsettings o env) | `20` | Timeout del cliente HTTP hacia Python al simplificar |
+| `Simplification__MaxSvgResponseBytes` | `backend` (appsettings o env) | `10485760` (10 MB) | Segunda barrera de tamaño sobre el SVG simplificado que devuelve Python, mismo criterio que `Vectorize__MaxSvgResponseBytes` |
+| `Simplification__LowEpsilonRatio` / `MediumEpsilonRatio` / `HighEpsilonRatio` | `backend` (appsettings o env) | `0.0015` / `0.004` / `0.012` | Presets Bajo/Medio/Alto que ve el usuario, como epsilon de Douglas-Peucker relativo a la diagonal del SVG (supuesto: spec.md no los cuantifica) |
+| `Simplification__MinCustomTolerance` / `MaxCustomTolerance` | `backend` (appsettings o env) | `0.0` / `0.5` | Rango permitido si el cliente envía una tolerancia numérica custom en vez de un preset |
+| `SimplificationRegistry__RootPath` | `backend` (appsettings o env) | `App_Data/simplifications` | Carpeta donde `PersistentSimplificationVersionRegistry` guarda un sidecar JSON por versión de simplificación (nunca se versiona) |
+| `Check__TimeoutSeconds` | `backend` (appsettings o env) | `20` | Timeout del cliente HTTP hacia Python al analizar paths |
+| `Check__DefaultCloseGapRatio` | `backend` (appsettings o env) | `0.005` | Tolerancia por defecto (fracción de la diagonal del SVG) para detectar un path "que debería estar cerrado" (supuesto: spec.md no la cuantifica) |
+| `Check__DefaultDuplicatePointRatio` | `backend` (appsettings o env) | `0.002` | Tolerancia por defecto para detectar paths/segmentos casi-duplicados |
 | `CORS_ALLOWED_ORIGINS` | `.env` (raíz) | `http://localhost:5173,http://127.0.0.1:5173` | Valor que docker-compose pasa a `Cors__AllowedOrigins`; si cambias `FRONTEND_PORT`, actualízalo |
 | `SERVICE_NAME` / `SERVICE_VERSION` | `services/python-engine/.env` | `vectify-python-engine` / `0.1.0` | Identidad reportada en `/health` y `/api/v1/info` |
 | `HOST` / `PORT` | `services/python-engine/.env` | `0.0.0.0` / `8000` | Bind del servidor uvicorn |
@@ -396,6 +418,84 @@ ASP.NET Core ni de Python — `VectorComparison`/`VectorCanvas` consumen los
 mismos endpoints ya expuestos (`GET .../original` y `GET .../vectors/{id}`),
 sin lógica visual del lado del servidor.
 
+## Simplificación de nodos (M1-S07)
+
+`POST /api/v1/projects/{projectId}/images/{imageId}/simplify/preview` recibe
+un JSON con `{ "vectorId": "…", "preset": "low" | "medium" | "high" }` (o
+`{ "vectorId": "…", "tolerance": 0.01 }` para una tolerancia numérica custom
+en el mismo rango que los presets — nunca ambos campos a la vez) y devuelve
+el SVG simplificado más `nodeCount` antes/después y `%` de reducción, **sin
+persistir nada** (`200 OK`, reversible por diseño: cancelar del lado de
+React no requiere ninguna llamada de red). `POST .../simplify/apply` con el
+mismo cuerpo sí persiste: crea una nueva versión (`SimplificationVersion`,
+`201 Created`, o `200 OK` si ya existía una versión con esos mismos
+parámetros exactos, en cuyo caso igual se registra como una versión nueva
+del historial en vez de devolver la vieja). El algoritmo (Douglas-Peucker,
+`services/python-engine/app/core/simplification_pipeline.py`) opera
+exclusivamente sobre paths `M/L/Z` absolutos en mayúscula — cualquier otro
+comando (curvas, arcos, minúsculas relativas) se deja intacto sin
+analizarlo, ver el docstring del módulo. No hay verificación geométrica de
+que la simplificación no introduzca auto-intersecciones en formas no
+convexas (limitación conocida del algoritmo, no implementada en este
+sprint).
+
+```json
+{
+  "vectorId": "…", "simplificationId": "…",
+  "svgUrl": "/api/v1/projects/{projectId}/images/{imageId}/simplifications/{simplificationId}",
+  "version": 1, "preset": "medium",
+  "metrics": { "nodeCountBefore": 340, "nodeCountAfter": 118, "reductionPercent": 65.3 },
+  "cached": false
+}
+```
+
+Errores controlados con el mismo cuerpo `{ "code": "...", "message": "..." }`:
+`not_found`, `invalid_parameters`, `dimensions_exceeded` (413, SVG de
+entrada/salida demasiado grande), `corrupt_file` (400), `timeout` (504),
+`engine_unavailable` (503), `invalid_response` (502). Ver Swagger
+(`/swagger`) para el contrato completo.
+
+## Laser Checker: paths abiertos y duplicados (M1-S08)
+
+`POST /api/v1/projects/{projectId}/images/{imageId}/check` recibe
+`{ "sourceKind": "vector" | "simplification", "sourceId": "…" }` (acepta
+como origen un `VectorVersion` de M1-S05 o una `SimplificationVersion` de
+M1-S07 ya aplicada) y devuelve, siempre `200 OK` sin persistir nada, la
+lista de problemas geométricos detectados:
+
+```json
+{
+  "sourceKind": "vector", "sourceId": "…",
+  "summary": { "openPathCount": 1, "duplicateGroupCount": 1, "skippedPathCount": 0 },
+  "issues": [
+    { "type": "open_path", "severity": "error", "pathIndex": 2, "subpathIndex": 0,
+      "startPoint": { "x": 10, "y": 10 }, "endPoint": { "x": 10.4, "y": 10.1 }, "gapDistance": 0.41 },
+    { "type": "duplicate_path", "severity": "error", "exact": true, "maxPointDistance": 0,
+      "members": [ { "pathIndex": 3, "subpathIndex": 0 }, { "pathIndex": 5, "subpathIndex": 0 } ] }
+  ]
+}
+```
+
+El análisis es de **solo lectura**: nunca modifica el SVG de origen ni
+corrige nada automáticamente. Un path "debería estar cerrado" cuando no
+tiene `Z` explícito y sus extremos están a una distancia ≤ `close_gap_ratio`
+(0.5% de la diagonal del SVG por defecto) de distancia entre sí. Dos
+subpaths son "casi-duplicados" cuando tienen la misma cantidad de puntos y
+el mismo estado de cierre, y todos sus puntos (comparados en el mismo
+sentido de recorrido o en el inverso) están a una distancia ≤
+`duplicate_point_ratio` (0.2% de la diagonal por defecto); los que
+matchean, directa o transitivamente, se agrupan en un único issue.
+`skippedPathCount` cuenta los `<path>` con comandos no soportados (mismo
+criterio que la simplificación) que quedaron fuera del análisis. En React,
+`CheckPanel` corre el análisis a pedido y permite resaltar cada issue sobre
+`VectorCanvas` (M1-S06) haciendo click.
+
+Errores controlados con el mismo cuerpo `{ "code": "...", "message": "..." }`:
+`not_found`, `invalid_parameters`, `too_many_subpaths` (413, salvaguarda de
+rendimiento sobre la detección O(n²) de duplicados), `corrupt_file` (400),
+`timeout` (504), `engine_unavailable` (503), `invalid_response` (502). Ver
+Swagger (`/swagger`) para el contrato completo.
+
 ## Fuera de alcance de este sprint
 
 Quitar fondo automático, threshold adaptativo (solo umbral global en este
@@ -404,5 +504,9 @@ completo (edición de nodos/paths), IA, detección de colores, DXF,
 integración LightBurn y almacenamiento cloud productivo (la abstracción
 `IFileStorage` está preparada para S3-compatible, pero solo tiene
 implementación local en este sprint; lo mismo los registros de
-proyecto/threshold/vectorización, que persisten en sidecars JSON en disco —
-no en una base de datos real).
+proyecto/threshold/vectorización/simplificación, que persisten en sidecars
+JSON en disco — no en una base de datos real). Edición manual de nodos y
+optimización específica de color (M1-S07); autocorrección de los issues que
+detecta el Laser Checker, bridges, kerf y validación completa de
+fabricación (M1-S08) — el checker de M1-S08 es puramente de diagnóstico,
+nunca modifica el SVG.
