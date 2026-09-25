@@ -1,0 +1,18 @@
+{
+  "card_id": "3c1d77b2-6398-81af-8467-ec3700465e9c",
+  "card_url": "https://app.notion.com/p/3c1d77b2639881af8467ec3700465e9c",
+  "title": "M1-S08 · Paths abiertos y líneas duplicadas",
+  "stack": "ASP.NET Core/Vector (servicio de validación geométrica, resultados tipados con coordenadas/IDs) · React (panel de issues, severidad, filtros, highlight en VectorCanvas) — derivado del cuerpo de la tarjeta y del campo Área",
+  "branch": "sprint/3c1d77b2-laser-checker-paths",
+  "column": "Doing",
+  "phase": "implementation",
+  "fix_rounds": 0,
+  "preview_url": null,
+  "started_at": "2026-09-25T00:00:00Z",
+  "exceptions": [
+    "Board sin propiedad Tecnología/Stack: stack derivado del cuerpo de la tarjeta y del campo Área.",
+    "Tarjeta no es un sitio web de marketing: se saltan web-design-architect y web-qa-auditor, mismo acuerdo que las tarjetas anteriores. Verificación por build/tests locales.",
+    "Por decisión explícita del usuario, el orquestador mueve la tarjeta a Doing y luego a Done al terminar; el usuario mueve Done→Test manualmente.",
+    "Criterio geométrico de 'path que debería estar cerrado', niveles de severidad y valores de tolerancia no cuantificados por el spec — decisión del implementador, documentada como supuesto."
+  ]
+}

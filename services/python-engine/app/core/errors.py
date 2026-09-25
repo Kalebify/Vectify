@@ -113,3 +113,26 @@ class SimplificationTimeoutError(PreprocessingError):
     SimplificationService._simplify_with_timeout)."""
 
     code = "simplification_timeout"
+
+
+class CheckTimeoutError(PreprocessingError):
+    """El Laser Checker de paths abiertos/duplicados (M1-S08, ver
+    app.services.path_checker_service.PathCheckerService) tardó más que
+    Check:TimeoutSeconds/check_timeout_seconds y se abortó. Mismo criterio que
+    SimplificationTimeoutError: la detección de duplicados es O(n^2) sobre la
+    cantidad de subpaths analizables (puro Python), se acota con un hilo
+    separado (best effort, ver PathCheckerService._check_with_timeout)."""
+
+    code = "check_timeout"
+
+
+class TooManySubpathsError(PreprocessingError):
+    """El SVG de entrada del Laser Checker de paths (M1-S08) tiene más
+    subpaths analizables que Check:MaxSubpaths/max_check_subpaths. Salvaguarda
+    de rendimiento explícita (además del timeout): la detección de
+    duplicados (ver app.core.path_checker._detect_duplicates) compara todos
+    los pares de subpaths (O(n^2)), así que un diseño con una cantidad
+    excesiva de subpaths se rechaza de forma controlada en vez de arriesgar
+    agotar CPU/memoria antes siquiera de llegar al timeout."""
+
+    code = "too_many_subpaths"

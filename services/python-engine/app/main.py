@@ -9,6 +9,7 @@ import logging
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from app.api.routes.check import router as check_router
 from app.api.routes.health import router as health_router
 from app.api.routes.info import router as info_router
 from app.api.routes.preprocess import router as preprocess_router
@@ -17,6 +18,7 @@ from app.api.routes.threshold import router as threshold_router
 from app.api.routes.vectorize import router as vectorize_router
 from app.core.config import get_settings
 from app.core.errors import (
+    CheckTimeoutError,
     CorruptImageError,
     DimensionsExceededError,
     EmptyMaskError,
@@ -27,6 +29,7 @@ from app.core.errors import (
     SimplificationTimeoutError,
     SvgInputTooLargeError,
     SvgOutputTooLargeError,
+    TooManySubpathsError,
     VectorizationEngineError,
     VectorizationTimeoutError,
 )
@@ -43,9 +46,10 @@ app = FastAPI(
         "información del servicio, el pipeline determinista de preprocesamiento "
         "de imágenes (grayscale, contraste/brillo, suavizado/denoise), de "
         "threshold B/N (umbral global, inversión), de vectorización raster -> SVG "
-        "(motor VTracer, encapsulado detrás de app.core.vector_engine.VectorEngine) y de "
+        "(motor VTracer, encapsulado detrás de app.core.vector_engine.VectorEngine), de "
         "simplificación de nodos de un SVG ya vectorizado (Douglas-Peucker, ver "
-        "app.core.simplification_pipeline)."
+        "app.core.simplification_pipeline) y del Laser Checker de paths abiertos/duplicados "
+        "(análisis de solo lectura, ver app.core.path_checker)."
     ),
     version=settings.service_version,
 )
@@ -56,6 +60,7 @@ app.include_router(preprocess_router)
 app.include_router(threshold_router)
 app.include_router(vectorize_router)
 app.include_router(simplify_router)
+app.include_router(check_router)
 
 # Códigos HTTP por tipo de error controlado del pipeline (ver "Errores y
 # límites" de spec.md): imagen corrupta -> 400, dimensiones excesivas -> 413,
@@ -64,8 +69,11 @@ app.include_router(simplify_router)
 # 504, fallo inesperado del motor de trazado o SVG crudo inválido -> 500.
 # M1-S07 (simplificación de nodos): SVG de entrada inválido/no decodificable
 # -> 400 (problema del caller, no interno), SVG de entrada demasiado grande ->
-# 413, timeout de la simplificación -> 504. Cualquier otro PreprocessingError
-# (memoria, fallo inesperado de OpenCV) cae a 500.
+# 413, timeout de la simplificación -> 504. M1-S08 (Laser Checker de paths
+# abiertos/duplicados): mismos códigos que M1-S07 para SVG de entrada
+# inválido/demasiado grande/timeout, más 413 si el SVG tiene demasiados
+# subpaths analizables (TooManySubpathsError). Cualquier otro
+# PreprocessingError (memoria, fallo inesperado de OpenCV) cae a 500.
 _STATUS_BY_ERROR: dict[type[PreprocessingError], int] = {
     CorruptImageError: 400,
     DimensionsExceededError: 413,
@@ -77,6 +85,8 @@ _STATUS_BY_ERROR: dict[type[PreprocessingError], int] = {
     InvalidSvgError: 500,
     InvalidInputSvgError: 400,
     SvgInputTooLargeError: 413,
+    CheckTimeoutError: 504,
+    TooManySubpathsError: 413,
     SimplificationTimeoutError: 504,
 }
 

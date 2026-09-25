@@ -29,91 +29,24 @@ agresivamente cada caso posible.
 Funciones puras y deterministas: mismo SVG + mismo epsilon_ratio -> mismo
 resultado, sin tocar disco ni red (mismo criterio que app.core.svg_processing
 y app.core.pipeline).
+
+Nota M1-S08: la tokenización de comandos de path (`_tokenize`,
+`_extract_subpaths`, el criterio de "comando soportado") se movió a
+app.core.svg_path_parsing, un módulo compartido con el nuevo Laser Checker
+de paths (app.core.path_checker) -- una sola fuente de verdad para ese
+parseo, en vez de dos copias que podrían divergir (ver los dos bugs de
+tokenización corregidos en este módulo durante M1-S07, documentados en el
+reporte de ese sprint). El comportamiento de este archivo es idéntico al de
+antes de la extracción.
 """
 
 import math
-import re
 import xml.etree.ElementTree as ET
 
+from app.core.svg_path_parsing import Point, extract_subpaths, is_supported_path, local_name, tokenize_path_d
 from app.core.svg_processing import compute_svg_stats
 
-Point = tuple[float, float]
-
-# Reconoce TODAS las letras de comando de path SVG (mayúsculas y minúsculas:
-# M,L,C,Z,H,V,S,Q,T,A) como límites de token, no solo las soportadas -- si el
-# regex no reconociera una letra de comando como límite, sus argumentos
-# quedarían "invisibles" (mezclados como texto suelto dentro del comando
-# anterior) y corromperían el parseo en vez de ser detectados como no
-# soportados por `_is_simplifiable`.
-_COMMAND_SPLIT_RE = re.compile(r"([MLHVCSQTAZmlhvcsqtaz])")
-_COORD_RE = re.compile(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?")
-
-# Comandos que esta simplificación sabe interpretar y reescribir con
-# seguridad: EXCLUSIVAMENTE M/L/Z absolutos en mayúscula. Cualquier otro
-# comando presente en un <path> -- curvas ("C","S","Q","T"), arcos ("A"),
-# líneas horizontales/verticales ("H","V"), o CUALQUIER variante relativa en
-# minúscula (incluyendo "m","l","z") -- hace que ese <path> completo se deje
-# intacto. Las minúsculas se excluyen deliberadamente: este pipeline no
-# implementa acumulación de offsets relativos, así que tratarlas como
-# soportadas produciría coordenadas erróneas en vez de una simplificación
-# correcta -- ver limitación documentada arriba.
-_SUPPORTED_COMMANDS = {"M", "L", "Z"}
-
-
-def _local_name(tag: str) -> str:
-    # Duplicado deliberado de app.core.svg_processing._local_name (privado):
-    # mismo criterio de independencia entre módulos que
-    # ThresholdingService/PreprocessingService (ver comentario en
-    # threshold_service.py, "_reject_if_header_dimensions_exceed_limits").
-    return tag.rsplit("}", 1)[-1].lower()
-
-
-def _tokenize(d: str) -> list[tuple[str, list[float]]]:
-    tokens = _COMMAND_SPLIT_RE.split(d)
-    commands: list[tuple[str, list[float]]] = []
-    index = 1
-    while index < len(tokens):
-        command = tokens[index]
-        args_text = tokens[index + 1] if index + 1 < len(tokens) else ""
-        numbers = [float(n) for n in _COORD_RE.findall(args_text)]
-        commands.append((command, numbers))
-        index += 2
-    return commands
-
-
-def _is_simplifiable(commands: list[tuple[str, list[float]]]) -> bool:
-    # Comparación estricta (sin `.upper()`): los comandos relativos en
-    # minúscula ("m","l","z") NO son soportados -- ver comentario de
-    # _SUPPORTED_COMMANDS.
-    return len(commands) > 0 and all(command in _SUPPORTED_COMMANDS for command, _ in commands)
-
-
-def _extract_subpaths(commands: list[tuple[str, list[float]]]) -> list[dict]:
-    """Agrupa los comandos ya tokenizados en subpaths (cada `M` empieza uno
-    nuevo); soporta el caso de un único `<path d="...">` con múltiples
-    subpaths (agujeros/hierarchical="stacked" de VTracer, o "texto trazado"
-    con varios glifos/subpaths pequeños dentro del mismo `d`)."""
-    subpaths: list[dict] = []
-    current_points: list[Point] = []
-    current_closed = False
-
-    def _flush() -> None:
-        if current_points:
-            subpaths.append({"points": current_points, "closed": current_closed})
-
-    for command, numbers in commands:
-        upper = command.upper()
-        if upper == "M":
-            _flush()
-            current_points = [(numbers[i], numbers[i + 1]) for i in range(0, len(numbers) - 1, 2)]
-            current_closed = False
-        elif upper == "L":
-            current_points = current_points + [(numbers[i], numbers[i + 1]) for i in range(0, len(numbers) - 1, 2)]
-        elif upper == "Z":
-            current_closed = True
-
-    _flush()
-    return subpaths
+__all__ = ["simplify_svg_paths"]
 
 
 def _format_subpath(points: list[Point], closed: bool) -> str:
@@ -239,18 +172,18 @@ def simplify_svg_paths(sanitized_svg: str, epsilon_ratio: float) -> str:
 
     root = ET.fromstring(sanitized_svg)
     for element in root.iter():
-        if _local_name(element.tag) != "path":
+        if local_name(element.tag) != "path":
             continue
 
         d = element.attrib.get("d", "")
-        commands = _tokenize(d)
-        if not _is_simplifiable(commands):
+        commands = tokenize_path_d(d)
+        if not is_supported_path(commands):
             # Comandos no soportados (ej. curvas "C", "H"/"V", o cualquier
             # variante en minúscula): se deja el path intacto -- ver
             # limitación documentada en el docstring del módulo.
             continue
 
-        subpaths = _extract_subpaths(commands)
+        subpaths = extract_subpaths(commands)
         rebuilt = "".join(
             _format_subpath(_simplify_subpath(subpath["points"], subpath["closed"], epsilon), subpath["closed"])
             for subpath in subpaths

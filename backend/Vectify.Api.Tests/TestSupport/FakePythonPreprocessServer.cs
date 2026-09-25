@@ -12,12 +12,12 @@ namespace Vectify.Api.Tests.TestSupport;
 /// <summary>
 /// Servidor Kestrel con respuestas simuladas de POST /api/v1/preprocess y
 /// POST /api/v1/threshold; no ejecuta el motor Python real ni OpenCV.
-/// `respond`/`respondThreshold`/`respondVectorize`/`respondSimplify` reciben el número de
+/// `respond`/`respondThreshold`/`respondVectorize`/`respondSimplify`/`respondCheck` reciben el número de
 /// solicitud (1-based, por endpoint) y devuelven (statusCode, body JSON), lo
 /// que permite probar el cache de la Web API (una segunda solicitud con los
 /// mismos parámetros no debería llegar acá). `respondThreshold`/
-/// `respondVectorize`/`respondSimplify` son opcionales (default: éxito genérico) para no romper
-/// los tests de sprints anteriores que solo ejercitan preprocess/threshold/vectorize.
+/// `respondVectorize`/`respondSimplify`/`respondCheck` son opcionales (default: éxito genérico) para no romper
+/// los tests de sprints anteriores que solo ejercitan preprocess/threshold/vectorize/simplify.
 /// </summary>
 public sealed class FakePythonPreprocessServer : IAsyncDisposable
 {
@@ -26,12 +26,14 @@ public sealed class FakePythonPreprocessServer : IAsyncDisposable
     private int _thresholdRequestCount;
     private int _vectorizeRequestCount;
     private int _simplifyRequestCount;
+    private int _checkRequestCount;
 
     public string BaseUrl { get; private set; } = string.Empty;
     public int RequestCount => _requestCount;
     public int ThresholdRequestCount => _thresholdRequestCount;
     public int VectorizeRequestCount => _vectorizeRequestCount;
     public int SimplifyRequestCount => _simplifyRequestCount;
+    public int CheckRequestCount => _checkRequestCount;
 
     private FakePythonPreprocessServer(WebApplication app)
     {
@@ -42,7 +44,8 @@ public sealed class FakePythonPreprocessServer : IAsyncDisposable
         Func<int, (int StatusCode, string Body)> respond,
         Func<int, (int StatusCode, string Body)>? respondThreshold = null,
         Func<int, (int StatusCode, string Body)>? respondVectorize = null,
-        Func<int, (int StatusCode, string Body)>? respondSimplify = null)
+        Func<int, (int StatusCode, string Body)>? respondSimplify = null,
+        Func<int, (int StatusCode, string Body)>? respondCheck = null)
     {
         var builder = WebApplication.CreateBuilder();
         builder.Logging.ClearProviders();
@@ -82,6 +85,15 @@ public sealed class FakePythonPreprocessServer : IAsyncDisposable
         {
             var count = Interlocked.Increment(ref server._simplifyRequestCount);
             var (statusCode, body) = (respondSimplify ?? (_ => (200, SimplifyPayloads.SuccessBody())))(count);
+            context.Response.StatusCode = statusCode;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(body, context.RequestAborted);
+        });
+
+        app.MapPost("/api/v1/check", async context =>
+        {
+            var count = Interlocked.Increment(ref server._checkRequestCount);
+            var (statusCode, body) = (respondCheck ?? (_ => (200, CheckPayloads.SuccessBody())))(count);
             context.Response.StatusCode = statusCode;
             context.Response.ContentType = "application/json";
             await context.Response.WriteAsync(body, context.RequestAborted);
