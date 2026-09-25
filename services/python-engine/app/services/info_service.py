@@ -32,5 +32,6 @@ class InfoService:
                 "vectorize",
                 "simplify",
                 "check",
+                "color-palette",
             ],
         )

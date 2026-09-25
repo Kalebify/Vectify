@@ -309,6 +309,66 @@ class CheckResponse(BaseModel):
     )
 
 
+class ColorPaletteParams(BaseModel):
+    """Parámetros de detección/reducción de paleta de colores (M2-S01):
+    tolerancia de fusión automática (distancia euclídea en espacio Lab, ver
+    app.core.color_palette_pipeline) y número objetivo (límite superior
+    opcional) de colores. Rangos alineados con
+    Vectify.Api.Options.ColorPaletteOptions (defensa en profundidad, mismo
+    criterio que el resto de los *Params)."""
+
+    tolerance: float = Field(
+        12.0,
+        ge=0,
+        le=100,
+        description="Distancia Lab máxima para fusionar automáticamente dos colores parecidos (0 = solo colores idénticos).",
+    )
+    max_colors: int | None = Field(
+        None,
+        ge=1,
+        le=64,
+        description="Límite superior opcional de colores en la paleta resultante (null = sin límite explícito).",
+    )
+
+
+class ColorGroupPayload(BaseModel):
+    """Un color/grupo detectado -- ver app.core.color_palette_pipeline.ColorGroup.
+    `id` es el índice 0-based determinista (orden de presentación: área
+    descendente) dentro de ESTA detección; Vectify.Api lo usa para asignarle
+    un GroupId (GUID) propio y estable en su modelo versionado."""
+
+    id: int = Field(ge=0, examples=[0])
+    color_hex: str = Field(examples=["#3a6ea5"], description="Color representativo (RGB), formato #RRGGBB.")
+    pixel_count: int = Field(ge=0)
+    area_percent: float = Field(ge=0, le=100, description="Porcentaje del ÁREA TOTAL de la imagen (incluye píxeles transparentes en el denominador).")
+    has_partial_alpha: bool = Field(
+        description="True si parte de los píxeles de este grupo tenían alpha parcial (0 < alpha < 255)."
+    )
+    mask_base64: str = Field(description="Máscara binaria (0/255) de este grupo, codificada como PNG en base64.")
+
+
+class ColorPaletteMetrics(BaseModel):
+    color_count: int = Field(ge=0, examples=[4])
+    transparent_percent: float = Field(ge=0, le=100, examples=[0.0])
+
+
+class ColorPaletteResponse(BaseModel):
+    """Respuesta de POST /api/v1/color-palette. Misma convención que el
+    resto de las respuestas de este motor: consumida únicamente por
+    Vectify.Api, imágenes embebidas en base64 para un contrato JSON simple y
+    determinista."""
+
+    width: int
+    height: int
+    content_type: str = Field(default="image/png", examples=["image/png"])
+    effective_params: ColorPaletteParams
+    metrics: ColorPaletteMetrics
+    groups: list[ColorGroupPayload]
+    quantized_preview_base64: str = Field(
+        description="Preview RGBA (PNG en base64): cada píxel pintado con el color de su grupo, transparente donde no hay grupo asignado."
+    )
+
+
 class ErrorResponse(BaseModel):
     """Forma común de error controlado, igual convención que
     Vectify.Api.Contracts.ApiErrorResponse: `code` es estable, `message` es

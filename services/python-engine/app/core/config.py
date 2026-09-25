@@ -59,6 +59,39 @@ class Settings(BaseSettings):
     check_timeout_seconds: int = 15
     max_check_subpaths: int = 20_000
 
+    # Detección/reducción de paleta de colores (M2-S01). spec.md tampoco
+    # cuantifica tolerancia/número objetivo de colores ("Ambigüedades
+    # detectadas": "el implementador decide y documenta"); supuestos
+    # documentados en el reporte del sprint. color_palette_timeout_seconds es
+    # un presupuesto interno del proceso Python (mismo criterio que
+    # simplify_timeout_seconds/check_timeout_seconds): el clustering es CPU-
+    # bound puro Python/NumPy, se acota con un hilo separado.
+    color_palette_timeout_seconds: int = 20
+
+    # Tolerancia por defecto (distancia euclídea en espacio Lab -- ver
+    # app.core.color_palette_pipeline) para fusionar automáticamente dos
+    # colores "casi iguales" durante el clustering determinista. El rango
+    # [0, 100] cubre holgadamente el espacio Lab de OpenCV (L,a,b en [0,255]
+    # tras su escalado a 8 bits): una tolerancia de 100 ya fusiona casi
+    # cualquier par de colores.
+    color_palette_default_tolerance: float = 12.0
+    color_palette_min_tolerance: float = 0.0
+    color_palette_max_tolerance: float = 100.0
+
+    # Límite superior opcional de colores en la paleta resultante (fusiona
+    # los clusters más parecidos entre sí hasta entrar en el presupuesto).
+    color_palette_min_colors: int = 1
+    color_palette_max_colors_upper_bound: int = 64
+
+    # Salvaguarda de rendimiento: si la imagen tiene más colores únicos que
+    # esto (fotografías/degradés de tono continuo, no el caso de uso
+    # principal de esta herramienta -- logos/diseños gráficos para corte
+    # láser), se re-cuantiza el color a menos niveles por canal antes de
+    # clusterizar, para acotar el costo O(k) del armado de clusters y el
+    # O(k^2) de la fusión hacia `max_colors` -- ver
+    # app.core.color_palette_pipeline.extract_unique_colors.
+    max_palette_unique_colors: int = 512
+
 
 @lru_cache
 def get_settings() -> Settings:
