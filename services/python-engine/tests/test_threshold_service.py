@@ -4,14 +4,23 @@ extremo a extremo, respeto de los límites de dimensiones y que la entrada
 test_preprocessing_service.py.
 """
 
+import base64
+
+import cv2
+import numpy as np
 import pytest
 
-from app.core import pipeline
+from app.core import threshold_pipeline
 from app.core.config import Settings
 from app.core.errors import CorruptImageError, DimensionsExceededError
 from app.models.schemas import ThresholdParams
 from app.services.threshold_service import ThresholdingService
-from tests.support import NOT_AN_IMAGE, make_png_bytes, make_rgba_png_bytes
+from tests.support import (
+    NOT_AN_IMAGE,
+    make_half_transparent_rgba_png_bytes,
+    make_png_bytes,
+    make_rgba_png_bytes,
+)
 
 
 @pytest.fixture()
@@ -60,6 +69,24 @@ def test_process_with_transparent_image_does_not_fail(service):
 
     assert result.width == 6
     assert result.height == 6
+
+
+def test_process_treats_fully_transparent_pixels_as_background_regardless_of_underlying_color(service):
+    # Ambas mitades comparten el mismo color RGB claro (200,200,200), que sin
+    # transparencia cae del lado foreground con el umbral por defecto -- solo
+    # la mitad transparente (alpha=0) debe quedar como background en la
+    # máscara resultante, sin importar el color "debajo" del alpha.
+    data = make_half_transparent_rgba_png_bytes(8, 8, color=(200, 200, 200))
+    params = ThresholdParams(value=128, invert=False)
+
+    result = service.process(data, params)
+
+    decoded = cv2.imdecode(
+        np.frombuffer(base64.b64decode(result.image_base64), dtype=np.uint8), cv2.IMREAD_GRAYSCALE
+    )
+
+    assert (decoded[:, :4] == 255).all()  # mitad opaca -> foreground
+    assert (decoded[:, 4:] == 0).all()  # mitad transparente -> background, pese al mismo color RGB
 
 
 def test_process_invert_flips_which_side_is_foreground(service):
@@ -122,11 +149,11 @@ def test_process_rejects_oversized_image_by_header_without_full_decode(monkeypat
 
     def fail_if_called(*args, **kwargs):
         raise AssertionError(
-            "read_image_safely no debería llamarse: el chequeo por cabecera "
+            "read_image_with_alpha no debería llamarse: el chequeo por cabecera "
             "tiene que rechazar la imagen antes de decodificarla por completo."
         )
 
-    monkeypatch.setattr(pipeline, "read_image_safely", fail_if_called)
+    monkeypatch.setattr(threshold_pipeline, "read_image_with_alpha", fail_if_called)
 
     with pytest.raises(DimensionsExceededError):
         tiny_limits_service.process(data, ThresholdParams())

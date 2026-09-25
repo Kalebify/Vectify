@@ -45,6 +45,26 @@ def make_rgba_png_bytes(
     return buffer.tobytes()
 
 
+def make_half_transparent_rgba_png_bytes(
+    width: int, height: int, color: tuple[int, int, int] = (200, 200, 200)
+) -> bytes:
+    """PNG BGRA determinista con dos mitades del MISMO color RGB claro (un
+    color que, sin transparencia, cae del lado foreground con cualquier
+    umbral B/N razonable): la mitad izquierda totalmente opaca (alpha=255) y
+    la mitad derecha totalmente transparente (alpha=0). Usado para probar la
+    semántica real de la transparencia en threshold (ver spec.md M1-S04,
+    "transparencias"): la mitad transparente debe quedar como background en
+    la máscara resultante pese a tener el mismo color "debajo" que la mitad
+    opaca -- no alcanza con "no crashea", como hacían los tests anteriores.
+    """
+    image = np.full((height, width, 4), (*color, 255), dtype=np.uint8)
+    half = width // 2
+    image[:, half:, 3] = 0
+    success, buffer = cv2.imencode(".png", image)
+    assert success
+    return buffer.tobytes()
+
+
 def make_mask_png_bytes(width: int, height: int, invert: bool = False) -> bytes:
     """Máscara B/N determinista (formato de salida de Threshold, M1-S04): todo
     negro (background, valor 0) por defecto -- útil como base de "máscara

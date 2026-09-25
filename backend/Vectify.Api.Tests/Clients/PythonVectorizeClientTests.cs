@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using Microsoft.Extensions.Logging.Abstractions;
 using Vectify.Api.Clients;
+using Vectify.Api.Options;
 using Vectify.Api.Tests.TestSupport;
 
 namespace Vectify.Api.Tests.Clients;
@@ -10,15 +11,20 @@ namespace Vectify.Api.Tests.Clients;
 /// Pruebas unitarias de PythonVectorizeClient contra un HttpMessageHandler
 /// stub (sin red real): cubren los estados exigidos por el contrato --
 /// éxito, máscara corrupta, dimensiones excedidas, máscara vacía, timeout,
-/// no disponible, respuesta inválida y error HTTP -- sin excepciones sin
+/// no disponible, respuesta inválida, error HTTP y la validación defensiva
+/// adicional sobre respuestas 200 con contenido sospechoso (SVG malformado,
+/// dimensiones/métricas inválidas, bounds no finitos/incoherentes,
+/// Content-Type inesperado, SVG demasiado grande) -- sin excepciones sin
 /// controlar escapando del cliente. Mismo criterio que
-/// PythonThresholdClientTests.
+/// PythonThresholdClientTests. Ver Defecto 3 de la ronda de QA sobre
+/// M1-S05/M1-S06.
 /// </summary>
 public sealed class PythonVectorizeClientTests
 {
     private static PythonVectorizeClient CreateClient(
         Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> handlerFunc,
-        TimeSpan? timeout = null)
+        TimeSpan? timeout = null,
+        VectorizeOptions? options = null)
     {
         var httpClient = new HttpClient(new StubHttpMessageHandler(handlerFunc))
         {
@@ -26,7 +32,10 @@ public sealed class PythonVectorizeClientTests
             Timeout = timeout ?? TimeSpan.FromSeconds(5),
         };
 
-        return new PythonVectorizeClient(httpClient, NullLogger<PythonVectorizeClient>.Instance);
+        return new PythonVectorizeClient(
+            httpClient,
+            Microsoft.Extensions.Options.Options.Create(options ?? new VectorizeOptions()),
+            NullLogger<PythonVectorizeClient>.Instance);
     }
 
     private static Task<PythonVectorizeResult> InvokeAsync(PythonVectorizeClient client) =>
@@ -148,6 +157,102 @@ public sealed class PythonVectorizeClientTests
         var result = await InvokeAsync(client);
 
         Assert.Equal(PythonVectorizeState.HttpError, result.State);
+    }
+
+    [Fact]
+    public async Task VectorizeAsync_WhenSvgIsNotWellFormedXml_ReturnsInvalidSvg()
+    {
+        var body = VectorizePayloads.SuccessBody(svg: "<svg><path d='M0,0'></svg-not-closed>");
+        var client = CreateClient((_, _) => Task.FromResult(JsonResponse(HttpStatusCode.OK, body)));
+
+        var result = await InvokeAsync(client);
+
+        Assert.Equal(PythonVectorizeState.InvalidSvg, result.State);
+    }
+
+    [Fact]
+    public async Task VectorizeAsync_WhenSvgRootElementIsNotSvg_ReturnsInvalidSvg()
+    {
+        var body = VectorizePayloads.SuccessBody(svg: "<html xmlns=\"http://www.w3.org/2000/svg\"></html>");
+        var client = CreateClient((_, _) => Task.FromResult(JsonResponse(HttpStatusCode.OK, body)));
+
+        var result = await InvokeAsync(client);
+
+        Assert.Equal(PythonVectorizeState.InvalidSvg, result.State);
+    }
+
+    [Theory]
+    [InlineData(0, 10)]
+    [InlineData(10, 0)]
+    [InlineData(-1, 10)]
+    public async Task VectorizeAsync_WhenDimensionsAreNotPositive_ReturnsInvalidSvg(int width, int height)
+    {
+        var body = VectorizePayloads.SuccessBody(width: width, height: height);
+        var client = CreateClient((_, _) => Task.FromResult(JsonResponse(HttpStatusCode.OK, body)));
+
+        var result = await InvokeAsync(client);
+
+        Assert.Equal(PythonVectorizeState.InvalidSvg, result.State);
+    }
+
+    [Fact]
+    public async Task VectorizeAsync_WhenMetricsAreNegative_ReturnsInvalidSvg()
+    {
+        var body = VectorizePayloads.SuccessBody(pathCount: -1);
+        var client = CreateClient((_, _) => Task.FromResult(JsonResponse(HttpStatusCode.OK, body)));
+
+        var result = await InvokeAsync(client);
+
+        Assert.Equal(PythonVectorizeState.InvalidSvg, result.State);
+    }
+
+    [Fact]
+    public async Task VectorizeAsync_WhenBoundsAreIncoherent_MaxLessThanMin_ReturnsInvalidSvg()
+    {
+        var body = VectorizePayloads.SuccessBody(minX: 8, maxX: 2);
+        var client = CreateClient((_, _) => Task.FromResult(JsonResponse(HttpStatusCode.OK, body)));
+
+        var result = await InvokeAsync(client);
+
+        Assert.Equal(PythonVectorizeState.InvalidSvg, result.State);
+    }
+
+    [Fact]
+    public async Task VectorizeAsync_WhenBoundsWidthDoesNotMatchMaxMinusMin_ReturnsInvalidSvg()
+    {
+        var body = VectorizePayloads.SuccessBody(minX: 2, maxX: 8, boundsWidth: 100);
+        var client = CreateClient((_, _) => Task.FromResult(JsonResponse(HttpStatusCode.OK, body)));
+
+        var result = await InvokeAsync(client);
+
+        Assert.Equal(PythonVectorizeState.InvalidSvg, result.State);
+    }
+
+    [Fact]
+    public async Task VectorizeAsync_WhenContentTypeIsUnexpected_ReturnsInvalidSvg()
+    {
+        var body = VectorizePayloads.SuccessBody(contentType: "text/plain");
+        var client = CreateClient((_, _) => Task.FromResult(JsonResponse(HttpStatusCode.OK, body)));
+
+        var result = await InvokeAsync(client);
+
+        Assert.Equal(PythonVectorizeState.InvalidSvg, result.State);
+    }
+
+    [Fact]
+    public async Task VectorizeAsync_WhenSvgExceedsConfiguredMaxSize_ReturnsInvalidSvg()
+    {
+        var oversizedSvg = "<svg xmlns=\"http://www.w3.org/2000/svg\">"
+            + new string('a', 200)
+            + "<path d=\"M0,0 L1,1\"/></svg>";
+        var body = VectorizePayloads.SuccessBody(svg: oversizedSvg);
+        var client = CreateClient(
+            (_, _) => Task.FromResult(JsonResponse(HttpStatusCode.OK, body)),
+            options: new VectorizeOptions { MaxSvgResponseBytes = 50 });
+
+        var result = await InvokeAsync(client);
+
+        Assert.Equal(PythonVectorizeState.InvalidSvg, result.State);
     }
 
     private static HttpResponseMessage JsonResponse(HttpStatusCode statusCode, string body) => new(statusCode)

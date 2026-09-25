@@ -23,8 +23,12 @@ services:
       - "${BACKEND_PORT:-5080}:8080"
     volumes:
       # Los originales subidos (LocalFileStorage) y los sidecars de metadata de
-      # proyecto (PersistentProjectRegistry) viven bajo App_Data dentro del
-      # contenedor; sin este volumen se pierden en cada `docker compose down`/restart.
+      # proyecto/threshold/vectorización (PersistentProjectRegistry,
+      # PersistentThresholdConfigRegistry, PersistentVectorVersionRegistry) viven
+      # todos bajo subcarpetas de App_Data dentro del contenedor; al montar la raíz
+      # App_Data entera, este único volumen ya cubre las tres sin necesidad de
+      # declarar un volumen por subcarpeta. Sin este volumen se pierden en cada
+      # `docker compose down`/restart.
       - vectify_backend_data:/app/App_Data
     environment:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}

@@ -13,7 +13,12 @@ import pytest
 
 from app.core.config import Settings, get_settings
 from app.main import app
-from tests.support import NOT_AN_IMAGE, make_png_bytes, make_rgba_png_bytes
+from tests.support import (
+    NOT_AN_IMAGE,
+    make_half_transparent_rgba_png_bytes,
+    make_png_bytes,
+    make_rgba_png_bytes,
+)
 
 THRESHOLD_URL = "/api/v1/threshold"
 
@@ -90,6 +95,24 @@ def test_threshold_with_transparent_image_succeeds(client):
     body = response.json()
     assert body["width"] == 8
     assert body["height"] == 8
+
+
+def test_threshold_treats_fully_transparent_region_as_background(client):
+    # Mismo color RGB claro (200,200,200) en ambas mitades -- sin
+    # transparencia, ambas caerían del lado foreground con el umbral por
+    # defecto. Solo la mitad transparente (alpha=0) debe quedar como
+    # background en la máscara resultante.
+    image_bytes = make_half_transparent_rgba_png_bytes(8, 8, color=(200, 200, 200))
+
+    response = _post_threshold(client, image_bytes, {"value": 128, "invert": False})
+
+    assert response.status_code == 200
+    decoded = cv2.imdecode(
+        np.frombuffer(base64.b64decode(response.json()["image_base64"]), dtype=np.uint8),
+        cv2.IMREAD_GRAYSCALE,
+    )
+    assert (decoded[:, :4] == 255).all()
+    assert (decoded[:, 4:] == 0).all()
 
 
 def test_threshold_produces_empty_mask_when_value_is_maximum(client):

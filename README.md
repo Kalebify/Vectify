@@ -1,7 +1,7 @@
 # Vectify
 
 Base ejecutable, testeable y reproducible sobre la que se construyen los MVP
-de vectorización. Todavía **no** implementa vectorización real:
+de vectorización. Estado actual:
 
 - **M1-S01**: el "esqueleto" y la comunicación entre los tres servicios.
 - **M1-S02**: primer flujo funcional de entrada — cargar una imagen
@@ -9,6 +9,13 @@ de vectorización. Todavía **no** implementa vectorización real:
 - **M1-S03**: preprocesamiento de imagen (escala de grises, contraste,
   brillo, reducción de ruido) con OpenCV en el motor Python, orquestado por
   la Web API, con preview cacheado por parámetros. Ver más abajo.
+- **M1-S04**: threshold B/N (umbral global, con inversión opcional) sobre el
+  preview ya preprocesado, con métricas de porcentaje foreground/background
+  y advertencia de máscara "casi vacía/casi llena".
+- **M1-S05**: vectorización raster → SVG con VTracer, sobre la máscara B/N ya
+  generada por threshold. Ver más abajo.
+- **M1-S06**: visualizador del SVG resultante (`VectorCanvas`) con zoom/pan y
+  comparación contra el raster de origen. Ver más abajo.
 
 ## Arquitectura
 
@@ -38,10 +45,13 @@ la Web API aplica una política CORS con los orígenes configurados en
   Nunca deja de responder aunque Python esté caído: si Python falla, el estado
   global pasa a `degraded` en vez de que la API se rompa.
 - **Motor de procesamiento** (`services/python-engine/`): Python + FastAPI.
-  Expone `/health`, `/api/v1/info` y `/api/v1/preprocess` (M1-S03: pipeline
-  determinista con OpenCV — escala de grises, contraste, brillo, denoise).
-  Estructura por `api/`, `services/`, `models/` y `core/`. Sin
-  VTracer/Potrace todavía — eso es de sprints futuros.
+  Expone `/health`, `/api/v1/info`, `/api/v1/preprocess` (M1-S03: pipeline
+  determinista con OpenCV — escala de grises, contraste, brillo, denoise),
+  `/api/v1/threshold` (M1-S04: umbral B/N global con inversión opcional) y
+  `/api/v1/vectorize` (M1-S05: trazado raster → SVG con VTracer, encapsulado
+  detrás de `app.core.vector_engine`, con el SVG resultante sanitizado por
+  `app.core.svg_processing` antes de devolverlo — ver "Vectorización" más
+  abajo). Estructura por `api/`, `services/`, `models/` y `core/`.
 
 ## Requisitos
 
@@ -65,8 +75,9 @@ Con la configuración por defecto:
 
 `docker-compose.yml` monta un volumen nombrado (`vectify_backend_data`) en
 `/app/App_Data` del contenedor `backend`, así que los originales
-(`LocalFileStorage`) y los sidecars de metadata de proyecto
-(`PersistentProjectRegistry`) sobreviven a `docker compose down`/restart.
+(`LocalFileStorage`) y los sidecars de metadata de proyecto/threshold/
+vectorización (`PersistentProjectRegistry`, `PersistentThresholdConfigRegistry`,
+`PersistentVectorVersionRegistry`) sobreviven a `docker compose down`/restart.
 
 Abrir http://localhost:5173 debería mostrar "API Online" y "Python Online".
 Para probar la recuperación ante fallos:
@@ -108,7 +119,9 @@ npm run dev
 ```bash
 # Backend (xUnit): cliente Python, integración HTTP con motor simulado,
 # validación/almacenamiento/dimensiones, el endpoint de carga de imágenes,
-# el registro de proyectos persistente y el endpoint de preprocesamiento (M1-S03)
+# los registros persistentes de proyecto/threshold/vectorización y los
+# endpoints de preprocesamiento (M1-S03), threshold (M1-S04) y
+# vectorización (M1-S05)
 cd backend
 dotnet test
 
@@ -158,6 +171,9 @@ secretos reales.
 | `Preprocess__MinBrightness` / `Preprocess__MaxBrightness` | `backend` (appsettings o env) | `-100` / `100` | Rango válido de `brightness` en `POST .../preview` |
 | `Preprocess__MinDenoise` / `Preprocess__MaxDenoise` | `backend` (appsettings o env) | `0` / `10` | Rango válido de `denoise` en `POST .../preview` |
 | `Preprocess__TimeoutSeconds` | `backend` (appsettings o env) | `20` | Timeout del cliente HTTP hacia Python al generar un preview |
+| `ThresholdRegistry__RootPath` | `backend` (appsettings o env) | `App_Data/thresholds` | Carpeta donde `PersistentThresholdConfigRegistry` guarda un sidecar JSON por configuración de threshold (nunca se versiona) |
+| `Vectorize__MaxSvgResponseBytes` | `backend` (appsettings o env) | `10485760` (10 MB) | Segunda barrera de tamaño, del lado de `PythonVectorizeClient`, sobre el SVG que devuelve el motor Python (defensa en profundidad además del límite que ya aplica Python) |
+| `VectorRegistry__RootPath` | `backend` (appsettings o env) | `App_Data/vectors` | Carpeta donde `PersistentVectorVersionRegistry` guarda un sidecar JSON por versión de vectorización (nunca se versiona) |
 | `CORS_ALLOWED_ORIGINS` | `.env` (raíz) | `http://localhost:5173,http://127.0.0.1:5173` | Valor que docker-compose pasa a `Cors__AllowedOrigins`; si cambias `FRONTEND_PORT`, actualízalo |
 | `SERVICE_NAME` / `SERVICE_VERSION` | `services/python-engine/.env` | `vectify-python-engine` / `0.1.0` | Identidad reportada en `/health` y `/api/v1/info` |
 | `HOST` / `PORT` | `services/python-engine/.env` | `0.0.0.0` / `8000` | Bind del servidor uvicorn |
@@ -289,12 +305,104 @@ Errores controlados con el mismo cuerpo `{ "code": "...", "message": "..." }`:
 
 Ver Swagger (`/swagger`) para el contrato completo.
 
+## Vectorización raster → SVG (M1-S05)
+
+`POST /api/v1/projects/{projectId}/images/{imageId}/vectorize` recibe un JSON
+con `{ "maskId": "…" }`, referenciando una máscara B/N YA generada por
+threshold (M1-S04) — la vectorización es la etapa siguiente del mismo
+pipeline, nunca opera sobre el preview preprocesado ni el original. Sin
+parámetros ajustables en este sprint (el motor, VTracer, corre con una
+configuración fija y determinista). Si ya existe un SVG generado para esa
+máscara exacta, lo devuelve (`200 OK`, cacheado) en vez de volver a llamar a
+Python; si no, reenvía la máscara al motor Python (`POST /api/v1/vectorize`,
+que traza con VTracer, encapsulado detrás de `app.core.vector_engine`),
+guarda el resultado bajo una nueva versión y responde `201 Created` con:
+
+```json
+{
+  "projectId": "…", "imageId": "…", "vectorId": "…",
+  "svgUrl": "/api/v1/projects/{projectId}/images/{imageId}/vectors/{vectorId}",
+  "sourceMaskId": "…", "version": 1, "width": 800, "height": 600,
+  "metrics": {
+    "pathCount": 12, "approxNodeCount": 340,
+    "bounds": { "minX": 4, "minY": 4, "maxX": 796, "maxY": 596, "width": 792, "height": 592 }
+  },
+  "cached": false
+}
+```
+
+El SVG resultante se recupera, en bytes, en
+`GET /api/v1/projects/{projectId}/images/{imageId}/vectors/{vectorId}`.
+
+**Sanitización del SVG** (`app.core.svg_processing`, del lado Python, ANTES
+de persistirlo o devolverlo): elimina `<script>`, `<foreignObject>`,
+`<iframe>`, `<embed>`, `<object>`, `<audio>`, `<video>` y `<style>` (puede
+traer `@import url(...)` a hojas de estilo externas — VTracer es trazado
+geométrico puro y nunca necesita generar CSS), manejadores de eventos
+inline (`onclick`, `onload`, ...), y cualquier `href`/`xlink:href` que no
+sea una referencia interna (`#fragmento`). También elimina cualquier
+atributo de presentación (`style`, `fill`, `stroke`, `clip-path`, `mask`,
+`filter`) que contenga un `url(...)` que no apunte a una referencia interna
+(`url(#gradiente-interno)` sí se conserva — legítimo para
+gradientes/patterns dentro del mismo documento), rechaza DOCTYPE/ENTITY
+antes de parsear (defensa contra XXE) y valida que el resultado sea XML
+parseable con `<svg>` como raíz. `Vectify.Api` (`PythonVectorizeClient`)
+aplica una segunda capa de validación defensiva sobre la respuesta de
+Python antes de aceptarla: SVG bien formado con `<svg>` como raíz,
+dimensiones/métricas positivas, bounds finitos y coherentes, Content-Type
+esperado (`image/svg+xml`) y un límite de tamaño configurable
+(`Vectorize:MaxSvgResponseBytes`, 10 MB por defecto) — nunca confía
+ciegamente en que Python ya validó todo del otro lado.
+
+Errores controlados con el mismo cuerpo `{ "code": "...", "message": "..." }`:
+
+| Code | HTTP | Motivo |
+|---|---|---|
+| `not_found` | 404 | `projectId`/`imageId`/`maskId` no existen (o el vector, en el GET) |
+| `dimensions_exceeded` | 413 | La máscara supera el límite de dimensiones, o el SVG resultante supera el límite de tamaño de salida |
+| `empty_mask` | 422 | La máscara no tiene ningún píxel de foreground (nada que vectorizar) |
+| `corrupt_file` | 400 | Python no pudo decodificar la máscara |
+| `timeout` | 504 | El motor Python no respondió dentro de `Vectorize:TimeoutSeconds` |
+| `engine_unavailable` | 503 | No se pudo contactar al motor Python |
+| `invalid_response` | 502 | El motor Python respondió algo que la Web API no pudo interpretar, o que no pasó la validación defensiva adicional del cliente |
+
+El historial de versiones de vectorización (`VectorVersion`) se guarda en
+memoria (lecturas O(1)) y además se persiste como un sidecar JSON en disco
+(`App_Data/vectors/{projectId}/{imageId}/{vectorId}.json` por defecto, ver
+`VectorRegistry:*` arriba); al reiniciar el proceso, la Web API rehidrata el
+registro en memoria escaneando esos sidecars — mismo patrón que
+`PersistentProjectRegistry` (M1-S02) y `PersistentThresholdConfigRegistry`
+(M1-S04). Ver Swagger (`/swagger`) para el contrato completo.
+
+## Visualizador SVG y comparación (M1-S06)
+
+Una vez generado un SVG, `VectorizePanel` monta `VectorComparison`: dos
+paneles `VectorCanvas` lado a lado (el original subido, M1-S02, y el SVG
+vectorizado) que comparten una única transformación de zoom/pan
+(`useCanvasTransform`), para garantizar que ambos siempre se ven a la misma
+escala de referencia. Cada `VectorCanvas` soporta zoom con rueda/trackpad
+(zoom al cursor), pan por arrastre (Pointer Events, con captura de puntero y
+fallback defensivo si el navegador no la soporta), controles de teclado
+(flechas para pan, `+`/`-` para zoom) y una barra de herramientas
+(Alejar/Acercar/Restablecer a 1:1/Ajustar a pantalla), con los botones
+deshabilitados en los límites de escala (`minScale=0.1`, `maxScale=8`, o `4`
+si el diseño es "grande": `pathCount > 500` OR `approxNodeCount > 5000` OR
+área > 4.000.000 px², con una nota visible en ese caso). El SVG se muestra
+con `<img>` + transform CSS (no inline): el navegador nunca ejecuta script
+embebido, defensa en profundidad adicional aunque el SVG ya esté sanitizado
+del lado del backend. El componente se remonta (`key={vectorId}`) en cada
+vectorización nueva, para resetear el zoom/pan. Sin cambios del lado de
+ASP.NET Core ni de Python — `VectorComparison`/`VectorCanvas` consumen los
+mismos endpoints ya expuestos (`GET .../original` y `GET .../vectors/{id}`),
+sin lógica visual del lado del servidor.
+
 ## Fuera de alcance de este sprint
 
-Quitar fondo, threshold avanzado, VTracer/Potrace, generación de SVG, base
-de datos de negocio real, autenticación, editor vectorial, IA, detección de
-colores, DXF, integración LightBurn y almacenamiento cloud productivo (la
-abstracción `IFileStorage` está preparada para S3-compatible, pero solo
-tiene implementación local en este sprint; lo mismo el registro de
-proyectos, que persiste en sidecars JSON en disco — no en una base de datos
-real).
+Quitar fondo automático, threshold adaptativo (solo umbral global en este
+sprint), base de datos de negocio real, autenticación, editor vectorial
+completo (edición de nodos/paths), IA, detección de colores, DXF,
+integración LightBurn y almacenamiento cloud productivo (la abstracción
+`IFileStorage` está preparada para S3-compatible, pero solo tiene
+implementación local en este sprint; lo mismo los registros de
+proyecto/threshold/vectorización, que persisten en sidecars JSON en disco —
+no en una base de datos real).

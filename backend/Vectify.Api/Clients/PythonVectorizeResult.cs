@@ -32,6 +32,17 @@ public enum PythonVectorizeState
     /// <summary>Python respondió pero el cuerpo no es JSON válido o le faltan campos esperados.</summary>
     InvalidResponse,
 
+    /// <summary>
+    /// Python respondió 200 con JSON bien formado y los campos esperados presentes, pero
+    /// el contenido no pasa la validación defensiva adicional del cliente (SVG no es XML
+    /// bien formado con &lt;svg&gt; como raíz, dimensiones/métricas no positivas, bounds no
+    /// finitos o incoherentes, Content-Type inesperado, o el SVG excede
+    /// Vectorize:MaxSvgResponseBytes) -- nunca debería ocurrir con VTracer/svg_processing.py
+    /// del lado Python (ya sanitiza y valida), pero Vectify.Api nunca confía ciegamente en
+    /// su caller (defensa en profundidad, ver Defecto 3 de la ronda de QA sobre M1-S05/M1-S06).
+    /// </summary>
+    InvalidSvg,
+
     /// <summary>Python respondió con un código de error HTTP no contemplado arriba.</summary>
     HttpError,
 }

@@ -130,7 +130,8 @@ builder.Services.AddScoped<IPreprocessService, PreprocessService>();
 // preview YA preprocesado (nunca el original). Rango de umbral y umbrales de
 // advertencia "casi vacía/casi llena" configurables (Threshold:*), cliente
 // Python dedicado con su propio timeout y un historial de
-// configuraciones/máscara en memoria (mismo criterio que preprocesamiento).
+// configuraciones/máscara persistido en disco (Defecto 2 de QA sobre
+// M1-S05/M1-S06: antes era puramente en memoria y se perdía al reiniciar).
 builder.Services
     .AddOptions<ThresholdOptions>()
     .Bind(builder.Configuration.GetSection(ThresholdOptions.SectionName))
@@ -148,7 +149,11 @@ builder.Services.AddHttpClient<IPythonThresholdClient, PythonThresholdClient>((s
     client.Timeout = TimeSpan.FromSeconds(thresholdOptions.TimeoutSeconds);
 });
 
-builder.Services.AddSingleton<IThresholdConfigRegistry, InMemoryThresholdConfigRegistry>();
+builder.Services
+    .AddOptions<ThresholdRegistryOptions>()
+    .Bind(builder.Configuration.GetSection(ThresholdRegistryOptions.SectionName));
+
+builder.Services.AddSingleton<IThresholdConfigRegistry, PersistentThresholdConfigRegistry>();
 builder.Services.AddSingleton<IThresholdParameterValidator, ThresholdParameterValidator>();
 builder.Services.AddScoped<IThresholdService, ThresholdService>();
 
@@ -157,8 +162,8 @@ builder.Services.AddScoped<IThresholdService, ThresholdService>();
 // preprocesado ni el original). Sin parámetros ajustables en este sprint;
 // cliente Python dedicado con su propio timeout (Vectorize:TimeoutSeconds,
 // mayor al presupuesto interno de Python para que el timeout tipado de
-// Python llegue primero) y un historial de VectorVersion en memoria (mismo
-// criterio que preprocesamiento/threshold).
+// Python llegue primero) y un historial de VectorVersion persistido en disco
+// (mismo criterio que threshold, Defecto 2 de QA sobre M1-S05/M1-S06).
 builder.Services
     .AddOptions<VectorizeOptions>()
     .Bind(builder.Configuration.GetSection(VectorizeOptions.SectionName))
@@ -172,7 +177,11 @@ builder.Services.AddHttpClient<IPythonVectorizeClient, PythonVectorizeClient>((s
     client.Timeout = TimeSpan.FromSeconds(vectorizeOptions.TimeoutSeconds);
 });
 
-builder.Services.AddSingleton<IVectorVersionRegistry, InMemoryVectorVersionRegistry>();
+builder.Services
+    .AddOptions<VectorRegistryOptions>()
+    .Bind(builder.Configuration.GetSection(VectorRegistryOptions.SectionName));
+
+builder.Services.AddSingleton<IVectorVersionRegistry, PersistentVectorVersionRegistry>();
 builder.Services.AddSingleton<IVectorParameterValidator, VectorParameterValidator>();
 builder.Services.AddScoped<IVectorizationService, VectorizationService>();
 
