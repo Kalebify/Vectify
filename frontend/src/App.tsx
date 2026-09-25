@@ -7,12 +7,14 @@ import { ServiceCard } from "./components/ServiceCard";
 import type { StatusTone } from "./components/StatusPill";
 import { CheckPanel, type CheckSourceOption } from "./components/check/CheckPanel";
 import { DimensionPanel, type DimensionSourceOption } from "./components/dimensions/DimensionPanel";
+import { ExportPanel, type ExportSourceOption } from "./components/export/ExportPanel";
 import { PreprocessPanel } from "./components/preprocess/PreprocessPanel";
 import { SimplifyPanel } from "./components/simplify/SimplifyPanel";
 import { ThresholdPanel } from "./components/threshold/ThresholdPanel";
 import { UploadPanel } from "./components/upload/UploadPanel";
 import { VectorizePanel } from "./components/vectorize/VectorizePanel";
 import { useSystemHealth } from "./hooks/useSystemHealth";
+import type { DimensionResponse } from "./types/dimension";
 import type { PreprocessResponse } from "./types/preprocess";
 import type { SimplifyResponse } from "./types/simplify";
 import type { PythonStatus } from "./types/system";
@@ -110,6 +112,66 @@ function buildDimensionSources(
   return sources;
 }
 
+/**
+ * M1-S10 cierra el pipeline dejando elegir CUALQUIERA de los tres artefactos
+ * SVG ya persistidos: el vector original, la última simplificación (si se
+ * aplicó) y la última versión con dimensiones físicas en mm (si se aplicó) --
+ * extiende a un tercer valor el mismo patrón dual de buildCheckSources/
+ * buildDimensionSources. checkSourceKind/checkSourceId de la fuente
+ * "dimension" apuntan al vector/simplificación de origen (nunca al propio
+ * dimensionId): el Laser Checker (M1-S08) no tiene un sourceKind "dimension"
+ * porque Dimensioning nunca toca los `d` de los paths -- la geometría es
+ * idéntica a la de su fuente.
+ */
+function buildExportSources(
+  vector: VectorizeResponse,
+  simplification: SimplifyResponse | null,
+  dimension: DimensionResponse | null,
+): ExportSourceOption[] {
+  const sources: ExportSourceOption[] = [
+    {
+      kind: "vector",
+      id: vector.vectorId,
+      label: "Vector actual",
+      version: vector.version,
+      widthPx: vector.width,
+      heightPx: vector.height,
+      checkSourceKind: "vector",
+      checkSourceId: vector.vectorId,
+    },
+  ];
+
+  if (simplification) {
+    sources.push({
+      kind: "simplification",
+      id: simplification.simplificationId,
+      label: "Última simplificación",
+      version: simplification.version,
+      widthPx: simplification.width,
+      heightPx: simplification.height,
+      checkSourceKind: "simplification",
+      checkSourceId: simplification.simplificationId,
+    });
+  }
+
+  if (dimension) {
+    sources.push({
+      kind: "dimension",
+      id: dimension.dimensionId,
+      label: "Última versión con dimensiones físicas",
+      version: dimension.version,
+      widthPx: dimension.sourceWidthPx,
+      heightPx: dimension.sourceHeightPx,
+      widthMm: dimension.widthMm,
+      heightMm: dimension.heightMm,
+      checkSourceKind: dimension.sourceKind,
+      checkSourceId: dimension.sourceId,
+    });
+  }
+
+  return sources;
+}
+
 function App() {
   const { status, response, errorMessage, lastCheckedAt } = useSystemHealth();
   const [activeProject, setActiveProject] = useState<UploadImageResponse | null>(null);
@@ -117,12 +179,14 @@ function App() {
   const [readyMask, setReadyMask] = useState<ThresholdResponse | null>(null);
   const [readyVector, setReadyVector] = useState<VectorizeResponse | null>(null);
   const [readySimplification, setReadySimplification] = useState<SimplifyResponse | null>(null);
+  const [readyDimension, setReadyDimension] = useState<DimensionResponse | null>(null);
 
   const handleProjectCreated = (project: UploadImageResponse | null) => {
     setReadyPreview(null);
     setReadyMask(null);
     setReadyVector(null);
     setReadySimplification(null);
+    setReadyDimension(null);
     setActiveProject(project);
   };
 
@@ -130,18 +194,31 @@ function App() {
     setReadyMask(null);
     setReadyVector(null);
     setReadySimplification(null);
+    setReadyDimension(null);
     setReadyPreview(preview);
   };
 
   const handleMaskReady = (mask: ThresholdResponse) => {
     setReadyVector(null);
     setReadySimplification(null);
+    setReadyDimension(null);
     setReadyMask(mask);
   };
 
   const handleVectorReady = (vector: VectorizeResponse) => {
     setReadySimplification(null);
+    setReadyDimension(null);
     setReadyVector(vector);
+  };
+
+  // Una simplificación nueva invalida cualquier DimensionVersion vigente que
+  // se haya derivado de la simplificación ANTERIOR (aunque el SVG dimensionado
+  // en sí siga existiendo intacto en el storage, ya no sería "la última
+  // versión" con la que tiene sentido seguir trabajando en el resto del
+  // pipeline) -- mismo criterio de invalidación en cascada que handleVectorReady.
+  const handleSimplificationApplied = (simplification: SimplifyResponse) => {
+    setReadyDimension(null);
+    setReadySimplification(simplification);
   };
 
   const apiTone: StatusTone =
@@ -258,7 +335,7 @@ function App() {
               currentVectorUrl={getVectorSvgUrl(activeProject.projectId, activeProject.imageId, readyVector.vectorId)}
               currentVectorWidth={readyVector.width}
               currentVectorHeight={readyVector.height}
-              onSimplificationApplied={setReadySimplification}
+              onSimplificationApplied={handleSimplificationApplied}
             />
           </section>
         )}
@@ -296,6 +373,25 @@ function App() {
               projectId={activeProject.projectId}
               imageId={activeProject.imageId}
               sources={buildDimensionSources(readyVector, readySimplification)}
+              onDimensionApplied={setReadyDimension}
+            />
+          </section>
+        )}
+
+        {activeProject && readyVector && (
+          <section aria-labelledby="export-heading" className="export-section">
+            <h2 id="export-heading">Exportar SVG</h2>
+            <p className="upload-section__hint">
+              Elegí qué versión descargar (vector, simplificación o dimensión física), revisá su
+              tamaño y los issues del Laser Checker, y descargá el archivo. El Laser Checker es
+              solo informativo: nunca impide la descarga, y el archivo exportado es exactamente el
+              mismo SVG ya generado por esa etapa, sin modificar su geometría.
+            </p>
+            <ExportPanel
+              key={`${activeProject.projectId}-${activeProject.imageId}-${readyVector.vectorId}-${readySimplification?.simplificationId ?? "none"}-${readyDimension?.dimensionId ?? "none"}`}
+              projectId={activeProject.projectId}
+              imageId={activeProject.imageId}
+              sources={buildExportSources(readyVector, readySimplification, readyDimension)}
             />
           </section>
         )}
@@ -357,7 +453,7 @@ function App() {
       </main>
 
       <footer className="app-footer">
-        <p>Vectify · M1-S09 · Dimensiones reales en milímetros</p>
+        <p>Vectify · M1-S10 · Exportación SVG</p>
       </footer>
     </>
   );
