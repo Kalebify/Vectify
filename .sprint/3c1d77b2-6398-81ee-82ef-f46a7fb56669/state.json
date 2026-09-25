@@ -4,15 +4,17 @@
   "title": "M1-S07 · Simplificación de nodos",
   "stack": "Python/Vector (algoritmo de simplificación de curvas, encapsulado tras interfaz) · ASP.NET Core (nueva VectorVersion al aplicar, validación de tolerancia) · React (control de tolerancia/preset, preview antes/después) — derivado del cuerpo de la tarjeta",
   "branch": "sprint/3c1d77b2-simplificacion-nodos",
-  "column": "Doing",
-  "phase": "implementation",
-  "fix_rounds": 0,
+  "column": "Done",
+  "phase": "review",
+  "fix_rounds": 1,
   "preview_url": null,
+  "pr_url": "https://github.com/Kalebify/Vectify/pull/8",
   "started_at": "2026-09-25T00:00:00Z",
   "exceptions": [
     "Board sin propiedad Tecnología/Stack: stack derivado del cuerpo de la tarjeta y del campo Área.",
     "Tarjeta no es un sitio web de marketing: se saltan web-design-architect y web-qa-auditor, mismo acuerdo que las tarjetas anteriores. Verificación por build/tests locales.",
     "Por decisión explícita del usuario, el orquestador mueve la tarjeta a Doing y luego a Done al terminar; el usuario mueve Done→Test manualmente.",
-    "Valores de tolerancia de los presets Bajo/Medio/Alto y algoritmo de simplificación no cuantificados por el spec — decisión del implementador, documentada como supuesto."
+    "Valores de tolerancia de los presets Bajo/Medio/Alto y algoritmo de simplificación no cuantificados por el spec — decisión del implementador, documentada como supuesto.",
+    "1 ronda de corrección antes de commitear: bugs de detección de comandos SVG no soportados (H/V/S/Q/T/A y minúsculas relativas) encontrados en revisión propia, no por QA externo. Ver IMPL.md y comentario en Notion."
   ]
 }
