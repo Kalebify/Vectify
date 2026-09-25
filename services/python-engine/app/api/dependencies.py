@@ -3,6 +3,7 @@ from fastapi import Depends
 from app.core.config import Settings, get_settings
 from app.services.info_service import InfoService
 from app.services.preprocessing_service import PreprocessingService
+from app.services.simplification_service import SimplificationService
 from app.services.threshold_service import ThresholdingService
 from app.services.vectorization_service import VectorizationService
 
@@ -21,3 +22,7 @@ def get_threshold_service(settings: Settings = Depends(get_settings)) -> Thresho
 
 def get_vectorization_service(settings: Settings = Depends(get_settings)) -> VectorizationService:
     return VectorizationService(settings)
+
+
+def get_simplification_service(settings: Settings = Depends(get_settings)) -> SimplificationService:
+    return SimplificationService(settings)

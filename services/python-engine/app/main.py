@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from app.api.routes.health import router as health_router
 from app.api.routes.info import router as info_router
 from app.api.routes.preprocess import router as preprocess_router
+from app.api.routes.simplify import router as simplify_router
 from app.api.routes.threshold import router as threshold_router
 from app.api.routes.vectorize import router as vectorize_router
 from app.core.config import get_settings
@@ -19,9 +20,12 @@ from app.core.errors import (
     CorruptImageError,
     DimensionsExceededError,
     EmptyMaskError,
+    InvalidInputSvgError,
     InvalidParametersError,
     InvalidSvgError,
     PreprocessingError,
+    SimplificationTimeoutError,
+    SvgInputTooLargeError,
     SvgOutputTooLargeError,
     VectorizationEngineError,
     VectorizationTimeoutError,
@@ -38,8 +42,10 @@ app = FastAPI(
         "Microservicio de procesamiento/vectorización. Expone chequeos de salud, "
         "información del servicio, el pipeline determinista de preprocesamiento "
         "de imágenes (grayscale, contraste/brillo, suavizado/denoise), de "
-        "threshold B/N (umbral global, inversión) y de vectorización raster -> SVG "
-        "(motor VTracer, encapsulado detrás de app.core.vector_engine.VectorEngine)."
+        "threshold B/N (umbral global, inversión), de vectorización raster -> SVG "
+        "(motor VTracer, encapsulado detrás de app.core.vector_engine.VectorEngine) y de "
+        "simplificación de nodos de un SVG ya vectorizado (Douglas-Peucker, ver "
+        "app.core.simplification_pipeline)."
     ),
     version=settings.service_version,
 )
@@ -49,14 +55,17 @@ app.include_router(info_router)
 app.include_router(preprocess_router)
 app.include_router(threshold_router)
 app.include_router(vectorize_router)
+app.include_router(simplify_router)
 
 # Códigos HTTP por tipo de error controlado del pipeline (ver "Errores y
 # límites" de spec.md): imagen corrupta -> 400, dimensiones excesivas -> 413,
 # parámetros inválidos -> 422, máscara vacía -> 422 (M1-S05: nada para
 # vectorizar), SVG de salida demasiado grande -> 413, timeout de trazado ->
 # 504, fallo inesperado del motor de trazado o SVG crudo inválido -> 500.
-# Cualquier otro PreprocessingError (memoria, fallo inesperado de OpenCV)
-# cae a 500.
+# M1-S07 (simplificación de nodos): SVG de entrada inválido/no decodificable
+# -> 400 (problema del caller, no interno), SVG de entrada demasiado grande ->
+# 413, timeout de la simplificación -> 504. Cualquier otro PreprocessingError
+# (memoria, fallo inesperado de OpenCV) cae a 500.
 _STATUS_BY_ERROR: dict[type[PreprocessingError], int] = {
     CorruptImageError: 400,
     DimensionsExceededError: 413,
@@ -66,6 +75,9 @@ _STATUS_BY_ERROR: dict[type[PreprocessingError], int] = {
     VectorizationTimeoutError: 504,
     VectorizationEngineError: 500,
     InvalidSvgError: 500,
+    InvalidInputSvgError: 400,
+    SvgInputTooLargeError: 413,
+    SimplificationTimeoutError: 504,
 }
 
 

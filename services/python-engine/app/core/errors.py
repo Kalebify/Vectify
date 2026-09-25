@@ -81,3 +81,35 @@ class SvgOutputTooLargeError(PreprocessingError):
     "límites de ejecución/tamaño"."""
 
     code = "svg_output_too_large"
+
+
+class InvalidInputSvgError(PreprocessingError):
+    """El SVG recibido como ENTRADA de la etapa de simplificación (M1-S07) --
+    un SVG ya generado por una vectorización o simplificación previa -- no es
+    UTF-8 válido, no es XML bien formado, o no tiene un elemento <svg> como
+    raíz. A diferencia de InvalidSvgError (que cubre el SVG CRUDO recién
+    generado por el motor de trazado -- un fallo interno del propio proceso,
+    500), esto es un problema del INPUT recibido del caller y se trata como
+    error de cliente (400), igual criterio que CorruptImageError."""
+
+    code = "invalid_input_svg"
+
+
+class SvgInputTooLargeError(PreprocessingError):
+    """El SVG de entrada de la etapa de simplificación (M1-S07) supera
+    Vectorize:MaxSvgOutputBytes (mismo límite que el tamaño de salida de
+    vectorización: un SVG de entrada nunca debería ser más grande que el
+    límite que ya se le aplicó cuando se generó)."""
+
+    code = "svg_input_too_large"
+
+
+class SimplificationTimeoutError(PreprocessingError):
+    """La simplificación de nodos (ver
+    app.services.simplification_service.SimplificationService) tardó más que
+    Simplify:TimeoutSeconds/simplify_timeout_seconds y se abortó. Mismo
+    criterio que VectorizationTimeoutError: Douglas-Peucker es puro Python, se
+    acota con un hilo separado (best effort, ver
+    SimplificationService._simplify_with_timeout)."""
+
+    code = "simplification_timeout"

@@ -142,6 +142,51 @@ class VectorizeResponse(BaseModel):
     metrics: VectorMetrics
 
 
+class SimplifyParams(BaseModel):
+    """Parámetros de la etapa de simplificación de nodos (M1-S07): tolerancia
+    relativa de Douglas-Peucker (ver app.core.simplification_pipeline), como
+    fracción de la diagonal del bounding box del SVG de ENTRADA -- así escala
+    con el tamaño del diseño en vez de ser un valor absoluto en píxeles (ver
+    "Ambigüedades detectadas" de spec.md: "el implementador elige y
+    documenta"). Los presets Bajo/Medio/Alto que ve el usuario en React no
+    existen acá: se resuelven a este valor numérico del lado de
+    Vectify.Api.Simplification.SimplificationOptions antes de llamar a este
+    servicio -- Python solo conoce el epsilon ya resuelto, nunca el nombre del
+    preset (mismo criterio de encapsulamiento que app.core.vector_engine).
+    """
+
+    epsilon_ratio: float = Field(
+        ...,
+        gt=0,
+        le=0.5,
+        description="Tolerancia de Douglas-Peucker, relativa a la diagonal del bounding box del SVG (0, 0.5]",
+    )
+
+
+class SimplifyMetrics(BaseModel):
+    """Nodos antes/después y % de reducción -- spec.md M1-S07, criterios de
+    aceptación: "Reducción de nodos es medible y reportada (nodeCount antes,
+    nodeCount después, % reducción) tanto en la respuesta del motor Python
+    como en lo que ve el usuario en React". Reutiliza VectorMetrics (mismo
+    par path_count/approx_node_count/bounds que devuelve la vectorización) en
+    vez de duplicar su forma."""
+
+    before: VectorMetrics
+    after: VectorMetrics
+    reduction_percent: float = Field(examples=[42.0], ge=0, le=100)
+
+
+class SimplifyResponse(BaseModel):
+    """Respuesta de POST /api/v1/simplify. Misma convención que
+    VectorizeResponse: el SVG viaja como texto plano en `svg` (XML/texto
+    válido, no bytes binarios)."""
+
+    svg: str = Field(description="Marcado SVG simplificado, YA sanitizado (ver app.core.svg_processing.sanitize_svg)")
+    content_type: str = Field(default="image/svg+xml", examples=["image/svg+xml"])
+    effective_params: SimplifyParams
+    metrics: SimplifyMetrics
+
+
 class ErrorResponse(BaseModel):
     """Forma común de error controlado, igual convención que
     Vectify.Api.Contracts.ApiErrorResponse: `code` es estable, `message` es

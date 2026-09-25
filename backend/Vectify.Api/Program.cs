@@ -6,6 +6,7 @@ using Vectify.Api.Middleware;
 using Vectify.Api.Options;
 using Vectify.Api.Preprocessing;
 using Vectify.Api.Projects;
+using Vectify.Api.Simplification;
 using Vectify.Api.Storage;
 using Vectify.Api.Threshold;
 using Vectify.Api.Validation;
@@ -185,6 +186,40 @@ builder.Services.AddSingleton<IVectorVersionRegistry, PersistentVectorVersionReg
 builder.Services.AddSingleton<IVectorParameterValidator, VectorParameterValidator>();
 builder.Services.AddScoped<IVectorizationService, VectorizationService>();
 
+// Simplificación de nodos (M1-S07): etapa POSTERIOR del pipeline, opera sobre
+// un SVG YA vectorizado (nunca la máscara B/N ni el original). Presets
+// Bajo/Medio/Alto (y una tolerancia numérica custom) configurables
+// (Simplification:*), cliente Python dedicado con su propio timeout y un
+// historial de SimplificationVersion persistido en disco -- mismo criterio
+// que Vectorize/VectorRegistry, pero en un módulo propio y paralelo (no se
+// mezcla con Vectorization, ver Vectify.Api.Simplification).
+builder.Services
+    .AddOptions<SimplificationOptions>()
+    .Bind(builder.Configuration.GetSection(SimplificationOptions.SectionName))
+    .Validate(o => o.TimeoutSeconds > 0, "Simplification:TimeoutSeconds debe ser mayor a 0.")
+    .Validate(
+        o => o.MinCustomTolerance >= 0 && o.MinCustomTolerance < o.MaxCustomTolerance,
+        "Simplification:MinCustomTolerance/MaxCustomTolerance inválidos.")
+    .Validate(
+        o => o.LowEpsilonRatio > 0 && o.LowEpsilonRatio < o.MediumEpsilonRatio && o.MediumEpsilonRatio < o.HighEpsilonRatio,
+        "Simplification:LowEpsilonRatio/MediumEpsilonRatio/HighEpsilonRatio deben ser crecientes y positivos.");
+
+builder.Services.AddHttpClient<IPythonSimplifyClient, PythonSimplifyClient>((sp, client) =>
+{
+    var pythonOptions = sp.GetRequiredService<IOptions<PythonEngineOptions>>().Value;
+    var simplificationOptions = sp.GetRequiredService<IOptions<SimplificationOptions>>().Value;
+    client.BaseAddress = new Uri(pythonOptions.BaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(simplificationOptions.TimeoutSeconds);
+});
+
+builder.Services
+    .AddOptions<SimplificationRegistryOptions>()
+    .Bind(builder.Configuration.GetSection(SimplificationRegistryOptions.SectionName));
+
+builder.Services.AddSingleton<ISimplificationVersionRegistry, PersistentSimplificationVersionRegistry>();
+builder.Services.AddSingleton<ISimplificationParameterValidator, SimplificationParameterValidator>();
+builder.Services.AddScoped<ISimplificationService, SimplificationService>();
+
 var app = builder.Build();
 
 var allowedOrigins = app.Services.GetRequiredService<IOptions<FrontendCorsOptions>>().Value.GetOrigins();
@@ -268,6 +303,7 @@ app.MapProjectEndpoints();
 app.MapPreprocessEndpoints();
 app.MapThresholdEndpoints();
 app.MapVectorizationEndpoints();
+app.MapSimplificationEndpoints();
 
 app.Run();
 
