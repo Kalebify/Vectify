@@ -2,6 +2,7 @@ using Microsoft.Extensions.Options;
 using Vectify.Api.Checking;
 using Vectify.Api.Clients;
 using Vectify.Api.Contracts;
+using Vectify.Api.Dimensioning;
 using Vectify.Api.Endpoints;
 using Vectify.Api.Middleware;
 using Vectify.Api.Options;
@@ -256,6 +257,29 @@ builder.Services.AddHttpClient<IPythonCheckClient, PythonCheckClient>((sp, clien
 builder.Services.AddSingleton<ICheckParameterValidator, CheckParameterValidator>();
 builder.Services.AddScoped<ICheckService, CheckService>();
 
+// Dimensiones físicas en mm (M1-S09): etapa que opera sobre un SVG YA
+// generado -- una VectorVersion (M1-S05) o una SimplificationVersion
+// (M1-S07), según lo que indique el request. A diferencia de Simplification/
+// Check, NO hay cliente Python: reescribir width/height/viewBox del
+// elemento raíz <svg> es pura metadata/aritmética de escala, sin ningún
+// cálculo de imagen/geometría complejo que justifique un round-trip a
+// FastAPI (ver Vectify.Api.Dimensioning.SvgDimensionWriter). Rango de mm
+// permitido y registro de DimensionVersion persistido en disco (Dimensions:*/
+// DimensionsRegistry:*), mismo criterio de caché+lock+versionado que
+// Simplification/Vectorization.
+builder.Services
+    .AddOptions<DimensionOptions>()
+    .Bind(builder.Configuration.GetSection(DimensionOptions.SectionName))
+    .Validate(o => o.MinMm > 0 && o.MinMm < o.MaxMm, "Dimensions:MinMm/MaxMm inválidos.");
+
+builder.Services
+    .AddOptions<DimensionRegistryOptions>()
+    .Bind(builder.Configuration.GetSection(DimensionRegistryOptions.SectionName));
+
+builder.Services.AddSingleton<IDimensionVersionRegistry, PersistentDimensionVersionRegistry>();
+builder.Services.AddSingleton<IDimensionParameterValidator, DimensionParameterValidator>();
+builder.Services.AddScoped<IDimensionService, DimensionService>();
+
 var app = builder.Build();
 
 var allowedOrigins = app.Services.GetRequiredService<IOptions<FrontendCorsOptions>>().Value.GetOrigins();
@@ -341,6 +365,7 @@ app.MapThresholdEndpoints();
 app.MapVectorizationEndpoints();
 app.MapSimplificationEndpoints();
 app.MapCheckEndpoints();
+app.MapDimensionEndpoints();
 
 app.Run();
 

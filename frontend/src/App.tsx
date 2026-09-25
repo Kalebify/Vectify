@@ -6,6 +6,7 @@ import { getVectorSvgUrl } from "./api/vectorizeApi";
 import { ServiceCard } from "./components/ServiceCard";
 import type { StatusTone } from "./components/StatusPill";
 import { CheckPanel, type CheckSourceOption } from "./components/check/CheckPanel";
+import { DimensionPanel, type DimensionSourceOption } from "./components/dimensions/DimensionPanel";
 import { PreprocessPanel } from "./components/preprocess/PreprocessPanel";
 import { SimplifyPanel } from "./components/simplify/SimplifyPanel";
 import { ThresholdPanel } from "./components/threshold/ThresholdPanel";
@@ -75,6 +76,34 @@ function buildCheckSources(
       svgUrl: getSimplificationSvgUrl(project.projectId, project.imageId, simplification.simplificationId),
       width: simplification.width,
       height: simplification.height,
+    });
+  }
+
+  return sources;
+}
+
+/**
+ * M1-S09 opera sobre el mismo par de fuentes que el Laser Checker (M1-S08):
+ * el vector original o -- si ya existe -- la última simplificación aplicada
+ * (ver spec.md, "no está definido si opera sobre VectorVersion o
+ * SimplificationVersion" -- se aceptan ambas, mismo criterio que
+ * buildCheckSources).
+ */
+function buildDimensionSources(
+  vector: VectorizeResponse,
+  simplification: SimplifyResponse | null,
+): DimensionSourceOption[] {
+  const sources: DimensionSourceOption[] = [
+    { kind: "vector", id: vector.vectorId, label: "Vector actual", widthPx: vector.width, heightPx: vector.height },
+  ];
+
+  if (simplification) {
+    sources.push({
+      kind: "simplification",
+      id: simplification.simplificationId,
+      label: "Última simplificación",
+      widthPx: simplification.width,
+      heightPx: simplification.height,
     });
   }
 
@@ -253,6 +282,24 @@ function App() {
           </section>
         )}
 
+        {activeProject && readyVector && (
+          <section aria-labelledby="dimension-heading" className="dimension-section">
+            <h2 id="dimension-heading">Dimensiones físicas</h2>
+            <p className="upload-section__hint">
+              Definí el ancho o el alto en milímetros para fabricación con láser. Con la proporción
+              bloqueada (default) el otro valor se calcula automáticamente; desbloqueada, podés
+              definir ambos de forma independiente (esto deforma el diseño). El SVG resultante
+              conserva su tamaño físico al reabrirlo en cualquier visor.
+            </p>
+            <DimensionPanel
+              key={`${activeProject.projectId}-${activeProject.imageId}-${readyVector.vectorId}-${readySimplification?.simplificationId ?? "none"}`}
+              projectId={activeProject.projectId}
+              imageId={activeProject.imageId}
+              sources={buildDimensionSources(readyVector, readySimplification)}
+            />
+          </section>
+        )}
+
         <section aria-labelledby="diagnostics-heading">
           <h2 id="diagnostics-heading">Diagnóstico del sistema</h2>
 
@@ -310,7 +357,7 @@ function App() {
       </main>
 
       <footer className="app-footer">
-        <p>Vectify · M1-S08 · Paths abiertos y líneas duplicadas</p>
+        <p>Vectify · M1-S09 · Dimensiones reales en milímetros</p>
       </footer>
     </>
   );

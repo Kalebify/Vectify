@@ -1041,3 +1041,151 @@ main {
     gap: 6px;
   }
 }
+
+/* --- Dimensiones físicas en mm (M1-S09) --- */
+
+.dimension-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.dimension-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dimension-panel__source {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.dimension-panel__source-legend {
+  padding: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.dimension-panel__source-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dimension-panel__source-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.dimension-panel__source-option:has(input:checked) {
+  border-color: var(--accent);
+}
+
+.dimension-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.dimension-controls__legend {
+  padding: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.dimension-controls__row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+@media (min-width: 480px) {
+  .dimension-controls__row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.dimension-controls__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dimension-controls__field label {
+  font-size: 13px;
+  color: var(--text-h);
+}
+
+.dimension-controls__field input {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--text-h);
+}
+
+.dimension-controls__lock-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+.dimension-controls__lock-hint {
+  font-size: 12px;
+  color: var(--text);
+  margin: 0;
+}
+
+.dimension-panel__preview {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.dimension-panel__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.dimension-panel__status {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.dimension-panel__hint {
+  font-size: 13px;
+  color: var(--text);
+}
+
+@media (max-width: 400px) {
+  .dimension-panel__actions {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "card_id": "3c1d77b2-6398-8167-8c87-c628217bb14e",
+  "card_url": "https://app.notion.com/p/3c1d77b2639881678c87c628217bb14e",
+  "title": "M1-S09 · Dimensiones reales en milímetros",
+  "stack": "ASP.NET Core/Vector (persiste dimensiones físicas, valida, actualiza metadata SVG width/height/viewBox) · React (inputs con unidades, lock aspect ratio, preview) — probablemente sin tocar Python (operación de metadata/escala, no de geometría/imagen) — derivado del cuerpo de la tarjeta y del campo Área",
+  "branch": "sprint/3c1d77b2-dimensiones-mm",
+  "column": "Backlog",
+  "phase": "spec-frozen",
+  "fix_rounds": 0,
+  "preview_url": null,
+  "started_at": "2026-09-25T00:00:00Z",
+  "exceptions": [
+    "Board sin propiedad Tecnología/Stack: stack derivado del cuerpo de la tarjeta y del campo Área.",
+    "Tarjeta no es un sitio web de marketing: se saltan web-design-architect y web-qa-auditor, mismo acuerdo que las tarjetas anteriores. Verificación por build/tests locales.",
+    "Por decisión explícita del usuario, el orquestador mueve la tarjeta a Doing y luego a Done al terminar; el usuario mueve Done→Test manualmente.",
+    "Rango válido de mm, si involucra a Python, y si requiere un tipo de versión persistida propio no están cuantificados/definidos por el spec — decisión del implementador, documentada como supuesto."
+  ]
+}
