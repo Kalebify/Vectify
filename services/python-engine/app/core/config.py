@@ -35,6 +35,18 @@ class Settings(BaseSettings):
     vectorize_timeout_seconds: int = 25
     max_svg_output_bytes: int = 5_000_000
 
+    # Límites de la etapa de simplificación de nodos (M1-S07). spec.md
+    # tampoco los cuantifica ("Valores numéricos concretos de los presets
+    # Bajo/Medio/Alto ... no bloqueante, el implementador elige y documenta");
+    # supuesto documentado en el reporte del sprint. simplify_timeout_seconds
+    # es un presupuesto interno del proceso Python (ver
+    # app.services.simplification_service), independiente y menor al timeout
+    # HTTP configurado del lado de Vectify.Api (Simplify:TimeoutSeconds), mismo
+    # criterio que vectorize_timeout_seconds. El SVG de entrada reutiliza
+    # max_svg_output_bytes como límite de tamaño (nunca debería ser más grande
+    # que el límite que ya se le aplicó al generarlo).
+    simplify_timeout_seconds: int = 15
+
 
 @lru_cache
 def get_settings() -> Settings:

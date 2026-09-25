@@ -1,5 +1,7 @@
+import { useEffect } from "react";
 import { getVectorSvgUrl } from "../../api/vectorizeApi";
 import { useVectorize } from "../../hooks/useVectorize";
+import type { VectorizeResponse } from "../../types/vectorize";
 import { VectorComparison } from "./VectorComparison";
 
 interface VectorizePanelProps {
@@ -11,6 +13,13 @@ interface VectorizePanelProps {
   originalUrl: string;
   originalWidth: number | null;
   originalHeight: number | null;
+  /**
+   * Notifica al padre cada vez que hay un vector nuevo listo (M1-S07: la
+   * simplificación de nodos es la etapa siguiente del mismo pipeline y opera
+   * sobre este SVG, nunca sobre la máscara B/N). Opcional, mismo criterio que
+   * ThresholdPanel.onMaskReady.
+   */
+  onVectorReady?: (vector: VectorizeResponse) => void;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -70,8 +79,15 @@ export function VectorizePanel({
   originalUrl,
   originalWidth,
   originalHeight,
+  onVectorReady,
 }: VectorizePanelProps) {
   const { status, vector, errorMessage, vectorize } = useVectorize(projectId, imageId, sourceMaskId);
+
+  useEffect(() => {
+    if (status === "success" && vector) {
+      onVectorReady?.(vector);
+    }
+  }, [status, vector, onVectorReady]);
 
   const svgUrl = vector ? getVectorSvgUrl(projectId, imageId, vector.vectorId) : null;
   const isProcessing = status === "processing";

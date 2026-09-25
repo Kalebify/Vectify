@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { getOriginalImageUrl } from "./api/projectsApi";
 import { getPreviewImageUrl } from "./api/preprocessApi";
+import { getVectorSvgUrl } from "./api/vectorizeApi";
 import { ServiceCard } from "./components/ServiceCard";
 import type { StatusTone } from "./components/StatusPill";
 import { PreprocessPanel } from "./components/preprocess/PreprocessPanel";
+import { SimplifyPanel } from "./components/simplify/SimplifyPanel";
 import { ThresholdPanel } from "./components/threshold/ThresholdPanel";
 import { UploadPanel } from "./components/upload/UploadPanel";
 import { VectorizePanel } from "./components/vectorize/VectorizePanel";
@@ -12,6 +14,7 @@ import type { PreprocessResponse } from "./types/preprocess";
 import type { PythonStatus } from "./types/system";
 import type { ThresholdResponse } from "./types/threshold";
 import type { UploadImageResponse } from "./types/upload";
+import type { VectorizeResponse } from "./types/vectorize";
 import "./App.css";
 
 const PYTHON_STATUS_LABEL: Record<PythonStatus, string> = {
@@ -42,16 +45,24 @@ function App() {
   const [activeProject, setActiveProject] = useState<UploadImageResponse | null>(null);
   const [readyPreview, setReadyPreview] = useState<PreprocessResponse | null>(null);
   const [readyMask, setReadyMask] = useState<ThresholdResponse | null>(null);
+  const [readyVector, setReadyVector] = useState<VectorizeResponse | null>(null);
 
   const handleProjectCreated = (project: UploadImageResponse | null) => {
     setReadyPreview(null);
     setReadyMask(null);
+    setReadyVector(null);
     setActiveProject(project);
   };
 
   const handlePreviewReady = (preview: PreprocessResponse) => {
     setReadyMask(null);
+    setReadyVector(null);
     setReadyPreview(preview);
+  };
+
+  const handleMaskReady = (mask: ThresholdResponse) => {
+    setReadyVector(null);
+    setReadyMask(mask);
   };
 
   const apiTone: StatusTone =
@@ -124,7 +135,7 @@ function App() {
               sourcePreviewUrl={getPreviewImageUrl(activeProject.projectId, activeProject.imageId, readyPreview.previewId)}
               sourceWidth={readyPreview.width}
               sourceHeight={readyPreview.height}
-              onMaskReady={setReadyMask}
+              onMaskReady={handleMaskReady}
             />
           </section>
         )}
@@ -146,6 +157,28 @@ function App() {
               originalUrl={getOriginalImageUrl(activeProject.projectId, activeProject.imageId)}
               originalWidth={activeProject.width}
               originalHeight={activeProject.height}
+              onVectorReady={setReadyVector}
+            />
+          </section>
+        )}
+
+        {activeProject && readyVector && (
+          <section aria-labelledby="simplify-heading" className="simplify-section">
+            <h2 id="simplify-heading">Simplificación de nodos</h2>
+            <p className="upload-section__hint">
+              El trazado puede generar miles de nodos. Elegí una tolerancia, revisá el preview
+              (nodos antes/después y % de reducción) y aplicá solo si el resultado te convence.
+              Cancelar no persiste nada: el SVG ya vectorizado nunca se sobrescribe.
+            </p>
+            <SimplifyPanel
+              key={`${activeProject.projectId}-${activeProject.imageId}-${readyVector.vectorId}`}
+              projectId={activeProject.projectId}
+              imageId={activeProject.imageId}
+              fileName={activeProject.filename}
+              sourceVectorId={readyVector.vectorId}
+              currentVectorUrl={getVectorSvgUrl(activeProject.projectId, activeProject.imageId, readyVector.vectorId)}
+              currentVectorWidth={readyVector.width}
+              currentVectorHeight={readyVector.height}
             />
           </section>
         )}
@@ -207,7 +240,7 @@ function App() {
       </main>
 
       <footer className="app-footer">
-        <p>Vectify · M1-S06 · Visualizador SVG y comparación</p>
+        <p>Vectify · M1-S07 · Simplificación de nodos</p>
       </footer>
     </>
   );
