@@ -35,6 +35,27 @@ completo del análisis -- ni se reporta un falso positivo/negativo sobre
 datos que no se pueden interpretar con seguridad, ni se rompe nada (esto es
 100% de solo lectura, nunca reescribe el `d` de ningún `<path>`).
 
+Resolución de `transform` (fix post-M1-S08, ver reporte de M1-S11): el `d`
+de un `<path>` está en coordenadas LOCALES a ese `<path>` -- VtracerEngine
+(`mode="polygon"`) emite formas congruentes en posiciones reales distintas
+del lienzo como el MISMO `d` local repetido, cada una con su propio
+`transform="translate(tx,ty)"`. Antes de comparar puntos entre subpaths (de
+un mismo `<path>` o de distintos) para detectar duplicados -- y antes de
+calcular sus `bounds` -- se resuelve y aplica ese offset, así "duplicado" se
+evalúa en coordenadas ABSOLUTAS del lienzo, que es lo que realmente importa
+para el usuario (dos agujeros del mismo diámetro en posiciones distintas NO
+son un duplicado; el mismo agujero repetido en la MISMA posición sí lo es).
+Solo se resuelve con seguridad la forma EXACTA `translate(tx,ty)` o
+`translate(tx)` (equivalente a ty=0, válido en SVG) -- el único patrón que
+emite VtracerEngine (ver app.core.vector_engine). Cualquier otro `transform`
+(rotate, scale, matrix, skew, transforms encadenados, o un `translate` que
+no parsee limpio) se trata con el MISMO criterio que un comando de path no
+soportado: el `<path>` completo se excluye del análisis (cuenta en
+`skipped_path_count`) en vez de ignorar el transform en silencio y arriesgar
+un falso positivo/negativo sobre coordenadas que no se pueden resolver con
+seguridad. Un `<path>` sin atributo `transform` se analiza igual que antes
+(equivalente a `translate(0,0)`).
+
 Funciones puras y deterministas: mismo SVG + mismas tolerancias -> mismos
 issues, en el mismo orden (recorrido en orden de documento: cada `<path>`
 en el orden en que aparece, cada subpath en el orden en que aparece dentro
@@ -43,11 +64,24 @@ reproducibles".
 """
 
 import math
+import re
 import xml.etree.ElementTree as ET
 
 from app.core.errors import TooManySubpathsError
 from app.core.svg_path_parsing import Point, extract_subpaths, is_supported_path, local_name, tokenize_path_d
 from app.core.svg_processing import compute_svg_stats
+
+# Reconoce EXACTAMENTE `translate(tx,ty)` o `translate(tx)` (equivalente a
+# ty=0, forma válida en SVG) y NADA MÁS -- ni transforms encadenados
+# (`translate(1,2) rotate(3)`), ni otras funciones (rotate/scale/matrix/
+# skew), ni separadores/espacios fuera de lo esperado. `fullmatch` sobre el
+# valor ya recortado de espacios: cualquier cosa que no calce por completo se
+# trata como "no soportado" (ver docstring del módulo) en vez de intentar
+# interpretarla parcialmente.
+_TRANSLATE_ONLY_RE = re.compile(
+    r"translate\(\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)"
+    r"(?:[\s,]+([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?))?\s*\)"
+)
 
 # Un subpath abierto de menos de 3 puntos (una línea de 2 puntos, o un único
 # punto degenerado) no define una forma con área -- "cerrarlo" no tendría
@@ -120,14 +154,41 @@ def _bounds_of(points: list[Point]) -> dict:
     return {"min_x": min(xs), "min_y": min(ys), "max_x": max(xs), "max_y": max(ys)}
 
 
+def _parse_translate_transform(transform: str) -> tuple[float, float] | None:
+    """Resuelve el atributo `transform` de un `<path>` a un offset `(tx, ty)`
+    a aplicar sobre sus puntos LOCALES para obtener coordenadas ABSOLUTAS del
+    lienzo -- ver docstring del módulo. Devuelve `(0.0, 0.0)` si el atributo
+    está ausente o vacío (ningún transform -- equivalente a no desplazar).
+    Devuelve `None` si el valor NO es exactamente `translate(tx,ty)` o
+    `translate(tx)` (ver `_TRANSLATE_ONLY_RE`) -- el caller debe tratar eso
+    como "no soportado" y excluir el `<path>` completo, con el mismo
+    criterio que un comando de path no soportado (nunca se ignora un
+    transform en silencio)."""
+    stripped = transform.strip()
+    if not stripped:
+        return 0.0, 0.0
+
+    match = _TRANSLATE_ONLY_RE.fullmatch(stripped)
+    if not match:
+        return None
+
+    tx = float(match.group(1))
+    ty = float(match.group(2)) if match.group(2) is not None else 0.0
+    return tx, ty
+
+
 def _collect_subpaths(root: ET.Element) -> tuple[list[dict], int]:
     """Recorre el documento en orden y devuelve la lista de subpaths
-    analizables (de `<path>` con comandos soportados, ver docstring del
-    módulo) junto con la cantidad de `<path>` excluidos. Cada subpath lleva
-    `path_index` (índice del `<path>` en el documento, 0-based, CONTANDO
-    también los excluidos -- así el índice que ve React coincide con el
-    orden real de `<path>` del SVG que va a renderizar) y `subpath_index`
-    (índice del subpath dentro de ese `<path>`, 0-based)."""
+    analizables (de `<path>` con comandos soportados Y `transform` resoluble
+    -- ver docstring del módulo y `_parse_translate_transform`) junto con la
+    cantidad de `<path>` excluidos. Cada subpath lleva `path_index` (índice
+    del `<path>` en el documento, 0-based, CONTANDO también los excluidos --
+    así el índice que ve React coincide con el orden real de `<path>` del
+    SVG que va a renderizar) y `subpath_index` (índice del subpath dentro de
+    ese `<path>`, 0-based). Los puntos (y por lo tanto `bounds`) ya vienen en
+    coordenadas ABSOLUTAS del lienzo -- con el offset de `transform`
+    aplicado -- para que la comparación de duplicados y lo que se le muestra
+    a React sean consistentes con la posición real del diseño."""
     subpaths: list[dict] = []
     skipped_path_count = 0
     path_index = 0
@@ -138,10 +199,14 @@ def _collect_subpaths(root: ET.Element) -> tuple[list[dict], int]:
 
         d = element.attrib.get("d", "")
         commands = tokenize_path_d(d)
-        if not is_supported_path(commands):
+        offset = _parse_translate_transform(element.attrib.get("transform", ""))
+
+        if not is_supported_path(commands) or offset is None:
             skipped_path_count += 1
             path_index += 1
             continue
+
+        tx, ty = offset
 
         for subpath_index, subpath in enumerate(extract_subpaths(commands)):
             points = subpath["points"]
@@ -149,13 +214,14 @@ def _collect_subpaths(root: ET.Element) -> tuple[list[dict], int]:
                 # Subpath sin ningún segmento (un único `M` sin `L`
                 # posteriores): no hay geometría que analizar.
                 continue
+            absolute_points = [(x + tx, y + ty) for x, y in points]
             subpaths.append(
                 {
                     "path_index": path_index,
                     "subpath_index": subpath_index,
-                    "points": points,
+                    "points": absolute_points,
                     "closed": subpath["closed"],
-                    "bounds": _bounds_of(points),
+                    "bounds": _bounds_of(absolute_points),
                 }
             )
 

@@ -88,6 +88,33 @@ Las 3 pruebas del validador impiden que API online oculte Python offline.
 El wrapper Bash `smoke-test.sh` requiere Python 3 (`PYTHON_EXECUTABLE` permite
 seleccionar el intérprete); ya no depende de búsquedas de texto con curl.
 
+## E2E del pipeline completo (M1-S11)
+
+Desde la raíz, con la pila YA corriendo (local o Docker; este script NO la
+levanta, a diferencia de `real_stack_test.py`/`upload_e2e_test.mjs`):
+
+```bash
+BACKEND_URL=http://localhost:5080 node tests/e2e/full_pipeline_e2e_test.mjs
+```
+
+Sube cada una de las 6 imágenes PNG de `tests/e2e/fixtures/` (generadas
+programáticamente con OpenCV/NumPy — ver
+`tests/e2e/fixtures/generate_fixtures.py` para el detalle de cada una: logo,
+silueta, texto trazado, diseño con agujeros, ruido y un caso problemático
+diseñado para disparar el Laser Checker) y encadena TODO el pipeline vía
+HTTP real contra la Web API real: upload → preview (preprocesamiento) →
+threshold → vectorize → simplify (preview + apply) → check → dimensions/apply
+→ export. En cada paso valida que la salida de una etapa es estructuralmente
+válida como entrada de la siguiente (mismo `vectorId`/`sourceId` encadenado
+de punta a punta), que el SVG final exportado es XML bien formado con
+dimensiones no degeneradas, y que `problematic.png` YA NO dispara ningún
+issue en el Laser Checker (regresión del fix de `transform` de M1-S11, ver
+IMPL.md). Para `noise.png` compara además los
+resultados CON y SIN denoise, para demostrar que ese pipeline realmente
+limpia la imagen. Mide el tiempo de cada paso y de la corrida completa, y
+lo imprime en un reporte al final. Ver README.md, sección "Flujo E2E
+completo", y el IMPL.md de M1-S11 para el resultado de una corrida real.
+
 ## Docker
 
 Con Docker Compose disponible, desde la raíz:

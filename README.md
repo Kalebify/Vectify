@@ -22,6 +22,15 @@ de vectorización. Estado actual:
 - **M1-S08**: Laser Checker de paths abiertos y duplicados/casi-duplicados,
   análisis de solo lectura con panel de issues y resaltado en el canvas. Ver
   más abajo.
+- **M1-S09**: dimensiones físicas en mm sobre un SVG ya vectorizado o
+  simplificado, con proporción bloqueada/desbloqueada. Ver más abajo.
+- **M1-S10**: exportación (descarga) del SVG de cualquier etapa ya generada
+  del pipeline, sin modificar su geometría. Ver más abajo.
+- **M1-S11**: gate de calidad/integración del MVP 1 — dataset de imágenes
+  reales y automatización E2E que ejercita el pipeline completo (upload →
+  preprocesamiento → threshold → vectorización → simplificación → Laser
+  Checker → dimensiones → export) vía HTTP contra la pila real, sin agregar
+  features nuevas. Ver "Flujo E2E completo" más abajo.
 
 ## Arquitectura
 
@@ -152,6 +161,13 @@ BACKEND_URL=http://localhost:5080 PYTHON_URL=http://localhost:8001 \
 # participa en este sprint) y ejercita HTTP real de carga válida e inválida.
 dotnet build backend/Vectify.sln
 node tests/e2e/upload_e2e_test.mjs
+
+# E2E del pipeline completo (M1-S11): requiere la pila YA arriba (backend
+# :5080, motor Python :8001, ver "Arranque en local" arriba o Docker) --
+# a diferencia del E2E de arriba, este NO levanta los servicios. Sube 6
+# fixtures reales (tests/e2e/fixtures/) y ejercita upload -> preview ->
+# threshold -> vectorize -> simplify -> check -> dimensions -> export.
+BACKEND_URL=http://localhost:5080 node tests/e2e/full_pipeline_e2e_test.mjs
 ```
 
 Desde `frontend/`, ejecutar `npm ci`, `npm test`, `npm run build` y `npm run lint`.
@@ -486,15 +502,155 @@ sentido de recorrido o en el inverso) están a una distancia ≤
 `duplicate_point_ratio` (0.2% de la diagonal por defecto); los que
 matchean, directa o transitivamente, se agrupan en un único issue.
 `skippedPathCount` cuenta los `<path>` con comandos no soportados (mismo
-criterio que la simplificación) que quedaron fuera del análisis. En React,
+criterio que la simplificación) **o con un `transform` no resoluble**
+(cualquier cosa que no sea exactamente `translate(tx,ty)`/`translate(tx)` —
+ver fix de M1-S11 más abajo) que quedaron fuera del análisis. En React,
 `CheckPanel` corre el análisis a pedido y permite resaltar cada issue sobre
 `VectorCanvas` (M1-S06) haciendo click.
+
+**Fix M1-S11**: antes de comparar puntos entre subpaths (para
+`duplicate_path`) o calcular sus `bounds`, el checker resuelve y aplica el
+`transform="translate(tx,ty)"` de cada `<path>` — VTracer emite formas
+congruentes en posiciones reales distintas del lienzo con el MISMO `d` local
+y solo el `transform` distinto; antes de este fix eso se reportaba como un
+falso positivo de `duplicate_path`. Ver
+`services/python-engine/app/core/path_checker.py` y el fixture de regresión
+`problematic.png` en el dataset E2E.
 
 Errores controlados con el mismo cuerpo `{ "code": "...", "message": "..." }`:
 `not_found`, `invalid_parameters`, `too_many_subpaths` (413, salvaguarda de
 rendimiento sobre la detección O(n²) de duplicados), `corrupt_file` (400),
 `timeout` (504), `engine_unavailable` (503), `invalid_response` (502). Ver
 Swagger (`/swagger`) para el contrato completo.
+
+## Dimensiones físicas en mm (M1-S09)
+
+`POST /api/v1/projects/{projectId}/images/{imageId}/dimensions/apply` recibe
+`{ "sourceKind": "vector" | "simplification", "sourceId": "…", "widthMm": 100,
+"heightMm": null, "lockAspectRatio": true }` (proporción bloqueada por
+defecto: exige exactamente uno de `widthMm`/`heightMm`, el otro se calcula;
+desbloqueada exige ambos y permite deformar el diseño explícitamente) y
+reescribe **solo** `width`/`height`/`viewBox`/`preserveAspectRatio` del
+`<svg>` raíz del SVG de origen — nunca los `d` de los `<path>`. Persiste el
+resultado como una nueva `DimensionVersion` (`201 Created`, o `200 OK` si ya
+existía una versión con exactamente esos parámetros, que igual avanza el
+historial). El SVG resultante se recupera, en bytes, en
+`GET /api/v1/projects/{projectId}/images/{imageId}/dimensions/{dimensionId}`.
+No hay endpoint de preview: el preview del tamaño final se calcula 100% en
+el cliente (React). Ver Swagger (`/swagger`) para el contrato completo.
+
+## Exportación SVG (M1-S10)
+
+`GET /api/v1/projects/{projectId}/images/{imageId}/export?sourceKind=vector|simplification|dimension&sourceId=…`
+sirve, tal cual, los mismos bytes ya persistidos por la etapa de origen
+elegida (`VectorVersion` de M1-S05, `SimplificationVersion` de M1-S07 o
+`DimensionVersion` de M1-S09), con `Content-Disposition: attachment` y un
+nombre de archivo sanitizado derivado del nombre original subido por el
+usuario. Es un `GET` puro de solo lectura: nunca modifica geometría ni
+genera un artefacto nuevo, y exportar la misma versión dos veces sirve
+exactamente los mismos bytes. Ver Swagger (`/swagger`) para el contrato
+completo.
+
+## Flujo E2E completo (M1-S11)
+
+Gate de calidad del MVP 1: no agrega features, demuestra que el pipeline
+completo (upload → preprocesamiento → threshold → vectorización →
+comparación → simplificación → Laser Checker → dimensiones mm → export SVG)
+funciona de punta a punta con imágenes reales, sin pasos manuales internos.
+
+### Dataset (`tests/e2e/fixtures/`)
+
+Seis imágenes PNG generadas programáticamente con OpenCV + NumPy (mismas
+dependencias ya usadas por el motor Python, sin agregar ninguna librería
+nueva — ver `tests/e2e/fixtures/generate_fixtures.py` para el detalle
+completo de cómo se generó cada una y por qué):
+
+| Fixture | Qué ejercita |
+|---|---|
+| `logo.png` | Formas geométricas simples, alto contraste (anillo + estrella) |
+| `silhouette.png` | Contorno cerrado orgánico simple (un solo path) |
+| `text.png` | Texto trazado ("VECTIFY"): múltiples subpaths pequeños |
+| `holes.png` | Topología con agujero real (dona): path con subpaths anidados de sentido opuesto |
+| `noise.png` | Ruido gaussiano fuerte: ejercita de verdad el denoise de M1-S03 (612 nodos sin denoise vs. ~31 con denoise en la corrida real, ver IMPL.md) |
+| `problematic.png` | Dos círculos congruentes en posiciones REALES distintas: fixture de regresión del fix de `transform` de M1-S11 (ver IMPL.md) — antes del fix disparaba un `duplicate_path` falso positivo (el checker comparaba coordenadas locales del `d` ignorando el `transform` que VTracer aplica por `<path>`); desde M1-S11 el Laser Checker resuelve el `transform` antes de comparar, así que este fixture correctamente NO reporta ningún issue |
+
+Para regenerar el dataset (determinista, produce los mismos bytes salvo que
+se cambie el código del generador):
+
+```bash
+services/python-engine/.venv/Scripts/python.exe tests/e2e/fixtures/generate_fixtures.py
+```
+
+### Automatización E2E (`tests/e2e/full_pipeline_e2e_test.mjs`)
+
+Para cada fixture del dataset, encadena TODO el pipeline vía HTTP real
+contra la Web API real (sin mocks, mismo criterio que
+`tests/e2e/upload_e2e_test.mjs`/`tests/e2e/real_stack_test.py`): upload →
+preview → threshold → vectorize → simplify (preview + apply) → check →
+dimensions/apply → export, verificando en cada paso que la salida de una
+etapa es estructuralmente válida como entrada de la siguiente (el
+`vectorId` que devuelve vectorize es el que se usa para simplificar; el
+`sourceId`/`sourceKind` correctos llegan a check/dimensions/export), que el
+SVG final exportado es XML bien formado con `<svg>` como raíz y dimensiones
+no degeneradas, y que `problematic.png` YA NO dispara ningún issue en el
+Laser Checker (regresión del fix de `transform` de M1-S11 — ver IMPL.md).
+Mide el tiempo total del pipeline por fixture y de la corrida completa, y lo
+imprime en un reporte al final.
+
+**Requiere la pila arriba** (backend en `:5080`, motor Python en `:8001`) —
+igual que `real_stack_test.py`/`smoke_test.py`, este script NO la levanta:
+
+```bash
+# Con la pila corriendo (local, ver "Arranque en local" arriba, o Docker):
+BACKEND_URL=http://localhost:5080 node tests/e2e/full_pipeline_e2e_test.mjs
+```
+
+Sale con código 0 solo si los 6 fixtures completaron el pipeline entero sin
+errores; si algo falla, imprime qué fixture y qué paso falló antes de salir
+con código 1. Ver IMPL.md de M1-S11 (`.sprint/`) para el resultado de una
+corrida real contra la pila real, con tiempos medidos.
+
+### Checklist manual
+
+El spec pide, "cuando corresponda", inspección visual en un navegador real y
+prueba de importación del SVG exportado en software de fabricación externo
+(ej. LightBurn). A diferencia de las tarjetas M1-S01 a M1-S10 (donde esto
+quedaba como excepción heredada sin verificar), en M1-S11 se ejecutaron de
+verdad las dos primeras:
+
+- [x] `docker compose up --build` real: los 3 servicios (`backend`,
+      `frontend`, `python-engine`) construyen y arrancan correctamente sin
+      necesitar un `.env` (los defaults de `docker-compose.yml` alcanzan).
+      Verificado: `/health`, `/api/v1/system/health` en `online`,
+      degradación a `degraded` tras `docker compose stop python-engine` y
+      recuperación a `online` tras `docker compose start python-engine` —
+      la Web API nunca deja de responder. El fix de `transform` de esta
+      misma tarjeta se verificó reconstruyendo la imagen de `python-engine`
+      (`docker compose up --build python-engine`) y volviendo a correr el
+      E2E completo contra el contenedor reconstruido: 6/6 fixtures.
+- [x] Navegador real: la UI en http://localhost:5173 carga y muestra
+      "Todos los servicios están en línea". Se corrió el pipeline completo
+      (upload → preprocess → threshold → vectorize → simplify → check →
+      dimensions → export) vía HTTP real contra el stack de Docker con el
+      fixture `logo.png`, y el SVG final se abrió y renderizó correctamente
+      en una pestaña real del navegador. **Limitación de la herramienta**:
+      el navegador automatizado disponible en este entorno no puede
+      completar un `<input type="file">` real (los navegadores bloquean
+      setear ese valor por script, por seguridad) — así que el click real
+      de "arrastrar/elegir imagen" de la UI no se ejercitó de forma
+      automatizada. Queda como el único paso genuinamente manual de este
+      checklist:
+- [ ] Abrir http://localhost:5173, subir cada fixture de
+      `tests/e2e/fixtures/` HACIENDO CLICK en la UI (no vía HTTP directo) y
+      completar el flujo completo desde los paneles, confirmando que cada
+      uno (preprocesamiento, threshold, comparación vectorizada,
+      simplificación, Laser Checker, dimensiones) se ve y responde
+      correctamente.
+- [ ] Exportar el SVG resultante de al menos un fixture y abrirlo en un
+      editor SVG/CAD real (ej. Inkscape, o software de fabricación como
+      LightBurn si está disponible) para confirmar que importa sin errores y
+      las dimensiones en mm son correctas — no ejecutable en este entorno
+      (sin ese software instalado).
 
 ## Fuera de alcance de este sprint
 

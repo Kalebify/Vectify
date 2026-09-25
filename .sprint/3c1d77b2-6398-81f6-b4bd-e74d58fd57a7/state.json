@@ -1,0 +1,19 @@
+{
+  "card_id": "3c1d77b2-6398-81f6-b4bd-e74d58fd57a7",
+  "card_url": "https://app.notion.com/p/3c1d77b2639881f6b4bde74d58fd57a7",
+  "title": "M1-S11 · Integración y pruebas E2E",
+  "stack": "Los tres (React, ASP.NET Core, Python) -- sprint de integración/QA sobre todo lo ya construido, no una feature nueva",
+  "branch": "sprint/3c1d77b2-integracion-e2e",
+  "column": "Done",
+  "phase": "review",
+  "fix_rounds": 1,
+  "preview_url": null,
+  "pr_url": "https://github.com/Kalebify/Vectify/pull/13",
+  "started_at": "2026-09-25T00:00:00Z",
+  "exceptions": [
+    "Tarjeta cualitativamente distinta a M1-S01..M1-S10: gate de calidad/integración, no una feature nueva. Explícitamente 'no añadir features'.",
+    "Por decisión explícita del usuario, el orquestador mueve la tarjeta a Doing y luego a Done al terminar; el usuario mueve Done→Test manualmente.",
+    "Prueba de importación en software de fabricación real (LightBurn/CAD) no ejecutable en este entorno -- queda como checklist manual documentado, consistente con 'cuando corresponda' del spec.",
+    "A diferencia de todas las tarjetas anteriores, esta SÍ requiere verificar docker compose up --build y una pasada real por el navegador -- son criterios de salida explícitos, no excepciones aceptadas."
+  ]
+}
