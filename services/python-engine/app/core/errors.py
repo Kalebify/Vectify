@@ -126,6 +126,17 @@ class CheckTimeoutError(PreprocessingError):
     code = "check_timeout"
 
 
+class ColorPaletteTimeoutError(PreprocessingError):
+    """La detección/reducción de paleta de colores (M2-S01, ver
+    app.services.color_palette_service.ColorPaletteService) tardó más que
+    ColorPalette:TimeoutSeconds/color_palette_timeout_seconds y se abortó.
+    Mismo criterio que SimplificationTimeoutError/CheckTimeoutError: el
+    clustering es puro Python/NumPy, se acota con un hilo separado (best
+    effort, ver ColorPaletteService._detect_with_timeout)."""
+
+    code = "color_palette_timeout"
+
+
 class TooManySubpathsError(PreprocessingError):
     """El SVG de entrada del Laser Checker de paths (M1-S08) tiene más
     subpaths analizables que Check:MaxSubpaths/max_check_subpaths. Salvaguarda

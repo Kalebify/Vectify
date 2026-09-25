@@ -6,6 +6,7 @@ import { getVectorSvgUrl } from "./api/vectorizeApi";
 import { ServiceCard } from "./components/ServiceCard";
 import type { StatusTone } from "./components/StatusPill";
 import { CheckPanel, type CheckSourceOption } from "./components/check/CheckPanel";
+import { ColorPalettePanel } from "./components/colorPalette/ColorPalettePanel";
 import { DimensionPanel, type DimensionSourceOption } from "./components/dimensions/DimensionPanel";
 import { ExportPanel, type ExportSourceOption } from "./components/export/ExportPanel";
 import { PreprocessPanel } from "./components/preprocess/PreprocessPanel";
@@ -257,6 +258,26 @@ function App() {
         </section>
 
         {activeProject && (
+          <section aria-labelledby="color-palette-heading" className="color-palette-section">
+            <h2 id="color-palette-heading">Paleta de colores</h2>
+            <p className="upload-section__hint">
+              Arranca el flujo multicapa: detectá los colores dominantes de la imagen original, fusioná los que sean
+              parecidos, renombralos y confirmá la paleta. Cada color confirmado será una operación de láser distinta
+              más adelante. El original nunca se modifica.
+            </p>
+            <ColorPalettePanel
+              key={`${activeProject.projectId}-${activeProject.imageId}`}
+              projectId={activeProject.projectId}
+              imageId={activeProject.imageId}
+              fileName={activeProject.filename}
+              originalUrl={getOriginalImageUrl(activeProject.projectId, activeProject.imageId)}
+              originalWidth={activeProject.width ?? 0}
+              originalHeight={activeProject.height ?? 0}
+            />
+          </section>
+        )}
+
+        {activeProject && (
           <section aria-labelledby="preprocess-heading" className="preprocess-section">
             <h2 id="preprocess-heading">Preprocesamiento</h2>
             <p className="upload-section__hint">
@@ -453,7 +474,7 @@ function App() {
       </main>
 
       <footer className="app-footer">
-        <p>Vectify · M1-S10 · Exportación SVG</p>
+        <p>Vectify · M2-S01 · Paleta de colores</p>
       </footer>
     </>
   );

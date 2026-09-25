@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using Vectify.Api.Checking;
 using Vectify.Api.Clients;
+using Vectify.Api.ColorPalette;
 using Vectify.Api.Contracts;
 using Vectify.Api.Dimensioning;
 using Vectify.Api.Endpoints;
@@ -281,6 +282,47 @@ builder.Services.AddSingleton<IDimensionVersionRegistry, PersistentDimensionVers
 builder.Services.AddSingleton<IDimensionParameterValidator, DimensionParameterValidator>();
 builder.Services.AddScoped<IDimensionService, DimensionService>();
 
+// Detección/reducción de paleta de colores (M2-S01): PRIMERA tarjeta de
+// MVP2, arranca el flujo multicapa -- opera directamente sobre la imagen
+// original YA subida (M1-S02, vía IProjectRegistry), no sobre ninguna
+// versión previa de otra etapa del pipeline de MVP1 (sin discriminador
+// `sourceKind`, a diferencia de Dimensioning/Check). Tolerancia/número
+// objetivo de colores configurables (ColorPalette:*), cliente Python
+// dedicado con su propio timeout y un historial de ColorPaletteVersion
+// persistido en disco -- mismo criterio de caché+lock+versionado que
+// Simplification/Threshold, aplicado únicamente a la detección (la única
+// llamada a Python); merge/unmerge/rename/confirm son ediciones de metadata
+// puras sobre la última versión de una sesión (ver ColorPaletteService).
+builder.Services
+    .AddOptions<ColorPaletteOptions>()
+    .Bind(builder.Configuration.GetSection(ColorPaletteOptions.SectionName))
+    .Validate(o => o.TimeoutSeconds > 0, "ColorPalette:TimeoutSeconds debe ser mayor a 0.")
+    .Validate(
+        o => o.MinTolerance >= 0 && o.MinTolerance < o.MaxTolerance,
+        "ColorPalette:MinTolerance/MaxTolerance inválidos.")
+    .Validate(
+        o => o.DefaultTolerance >= o.MinTolerance && o.DefaultTolerance <= o.MaxTolerance,
+        "ColorPalette:DefaultTolerance fuera del rango Min/MaxTolerance.")
+    .Validate(
+        o => o.MinColors >= 1 && o.MinColors < o.MaxColorsUpperBound,
+        "ColorPalette:MinColors/MaxColorsUpperBound inválidos.");
+
+builder.Services.AddHttpClient<IPythonColorPaletteClient, PythonColorPaletteClient>((sp, client) =>
+{
+    var pythonOptions = sp.GetRequiredService<IOptions<PythonEngineOptions>>().Value;
+    var colorPaletteOptions = sp.GetRequiredService<IOptions<ColorPaletteOptions>>().Value;
+    client.BaseAddress = new Uri(pythonOptions.BaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(colorPaletteOptions.TimeoutSeconds);
+});
+
+builder.Services
+    .AddOptions<ColorPaletteRegistryOptions>()
+    .Bind(builder.Configuration.GetSection(ColorPaletteRegistryOptions.SectionName));
+
+builder.Services.AddSingleton<IColorPaletteVersionRegistry, PersistentColorPaletteVersionRegistry>();
+builder.Services.AddSingleton<IColorPaletteParameterValidator, ColorPaletteParameterValidator>();
+builder.Services.AddScoped<IColorPaletteService, ColorPaletteService>();
+
 // Exportación SVG (M1-S10): cierra el primer flujo productivo. Sirve, sin
 // modificar, los mismos bytes ya persistidos por Vectorization/
 // Simplification/Dimensioning -- SIN cliente Python, SIN caché/lock/registro
@@ -375,6 +417,7 @@ app.MapSimplificationEndpoints();
 app.MapCheckEndpoints();
 app.MapDimensionEndpoints();
 app.MapExportEndpoints();
+app.MapColorPaletteEndpoints();
 
 app.Run();
 
