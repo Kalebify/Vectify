@@ -1,0 +1,19 @@
+{
+  "card_id": "3c1d77b2-6398-81a4-96ef-ca4f102bd4e2",
+  "card_url": "https://app.notion.com/p/3c1d77b2639881a496efca4f102bd4e2",
+  "title": "M1-S06 · Visualizador SVG y comparación",
+  "stack": "React (VectorCanvas, zoom/pan/reset, comparador) · ASP.NET Core (solo entrega de archivos, sin lógica visual) · Python sin cambios — derivado del cuerpo de la tarjeta",
+  "branch": "sprint/3c1d77b2-visualizador-svg",
+  "column": "Done",
+  "phase": "review",
+  "fix_rounds": 0,
+  "preview_url": null,
+  "started_at": "2026-09-25T00:00:00Z",
+  "exceptions": [
+    "Board sin propiedad Tecnología/Stack: stack derivado del cuerpo de la tarjeta.",
+    "Tarjeta no es un sitio web de marketing: se saltan web-design-architect y web-qa-auditor, mismo acuerdo que las tarjetas anteriores. Verificación por build/tests locales.",
+    "Por decisión explícita del usuario, el orquestador mueve la tarjeta a Done al terminar; el usuario mueve Done→Test manualmente.",
+    "Primera tarjeta puramente de interfaz visual — se le pide al implementador atención razonable a accesibilidad de controles sin auditoría formal Lighthouse/axe.",
+    "Criterio de 'diseños grandes' y modo de comparación (lado a lado vs slider) quedan a decisión del implementador, documentados como supuesto."
+  ]
+}

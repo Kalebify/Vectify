@@ -1,6 +1,6 @@
 import { useState } from "react";
+import { getOriginalImageUrl } from "./api/projectsApi";
 import { getPreviewImageUrl } from "./api/preprocessApi";
-import { getThresholdMaskImageUrl } from "./api/thresholdApi";
 import { ServiceCard } from "./components/ServiceCard";
 import type { StatusTone } from "./components/StatusPill";
 import { PreprocessPanel } from "./components/preprocess/PreprocessPanel";
@@ -134,7 +134,8 @@ function App() {
             <h2 id="vectorize-heading">Vectorización</h2>
             <p className="upload-section__hint">
               Pulsá "Vectorizar" para convertir la máscara binaria en un SVG. El motor de
-              trazado corre del lado del servidor; la máscara nunca se modifica.
+              trazado corre del lado del servidor; la máscara nunca se modifica. Una vez listo,
+              podés compararlo contra el original con zoom, pan y ajuste a pantalla.
             </p>
             <VectorizePanel
               key={`${activeProject.projectId}-${activeProject.imageId}-${readyMask.maskId}`}
@@ -142,9 +143,9 @@ function App() {
               imageId={activeProject.imageId}
               fileName={activeProject.filename}
               sourceMaskId={readyMask.maskId}
-              sourceMaskUrl={getThresholdMaskImageUrl(activeProject.projectId, activeProject.imageId, readyMask.maskId)}
-              sourceWidth={readyMask.width}
-              sourceHeight={readyMask.height}
+              originalUrl={getOriginalImageUrl(activeProject.projectId, activeProject.imageId)}
+              originalWidth={activeProject.width}
+              originalHeight={activeProject.height}
             />
           </section>
         )}
@@ -206,7 +207,7 @@ function App() {
       </main>
 
       <footer className="app-footer">
-        <p>Vectify · M1-S05 · Vectorización raster → SVG</p>
+        <p>Vectify · M1-S06 · Visualizador SVG y comparación</p>
       </footer>
     </>
   );
