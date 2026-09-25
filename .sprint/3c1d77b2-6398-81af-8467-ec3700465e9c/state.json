@@ -4,10 +4,11 @@
   "title": "M1-S08 · Paths abiertos y líneas duplicadas",
   "stack": "ASP.NET Core/Vector (servicio de validación geométrica, resultados tipados con coordenadas/IDs) · React (panel de issues, severidad, filtros, highlight en VectorCanvas) — derivado del cuerpo de la tarjeta y del campo Área",
   "branch": "sprint/3c1d77b2-laser-checker-paths",
-  "column": "Doing",
-  "phase": "implementation",
+  "column": "Done",
+  "phase": "review",
   "fix_rounds": 0,
   "preview_url": null,
+  "pr_url": "https://github.com/Kalebify/Vectify/pull/9",
   "started_at": "2026-09-25T00:00:00Z",
   "exceptions": [
     "Board sin propiedad Tecnología/Stack: stack derivado del cuerpo de la tarjeta y del campo Área.",
