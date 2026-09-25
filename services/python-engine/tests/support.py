@@ -105,4 +105,93 @@ def make_ring_mask_png_bytes(size: int = 80, outer_radius: int = 30, inner_radiu
     return buffer.tobytes()
 
 
+def make_gradient_png_bytes(width: int = 32, height: int = 32) -> bytes:
+    """PNG BGR determinista con un degradé diagonal de muchísimos colores
+    únicos (uno distinto por cada combinación de fila/columna, dentro del
+    rango 0-255) -- usado para el caso de prueba "muchos colores" de la
+    paleta de colores (M2-S01, ver spec.md, "Pruebas")."""
+    xs = np.linspace(0, 255, width, dtype=np.uint8)
+    ys = np.linspace(0, 255, height, dtype=np.uint8)
+    blue = np.tile(xs, (height, 1))
+    green = np.tile(ys.reshape(-1, 1), (1, width))
+    red = (blue.astype(np.int32) + green.astype(np.int32)) % 256
+    image = np.stack([blue, green, red.astype(np.uint8)], axis=-1)
+    success, buffer = cv2.imencode(".png", image)
+    assert success
+    return buffer.tobytes()
+
+
+def make_antialiased_edge_png_bytes(width: int = 20, height: int = 10) -> bytes:
+    """PNG BGR determinista con dos bloques de color sólido separados por
+    una franja de columnas con un gradiente de mezcla lineal entre ambos
+    colores (antialiasing sintético) -- ver spec.md M2-S01, "Pruebas":
+    "anti-aliasing (bordes con gradiente de color)"."""
+    left_color = np.array([30, 30, 200], dtype=np.float64)  # BGR
+    right_color = np.array([200, 30, 30], dtype=np.float64)
+    image = np.zeros((height, width, 3), dtype=np.uint8)
+    edge_width = max(2, width // 4)
+    edge_start = (width - edge_width) // 2
+
+    for x in range(width):
+        if x < edge_start:
+            color = left_color
+        elif x >= edge_start + edge_width:
+            color = right_color
+        else:
+            t = (x - edge_start) / (edge_width - 1)
+            color = left_color * (1 - t) + right_color * t
+        image[:, x] = color.astype(np.uint8)
+
+    success, buffer = cv2.imencode(".png", image)
+    assert success
+    return buffer.tobytes()
+
+
+def make_shadow_png_bytes(width: int = 12, height: int = 12) -> bytes:
+    """PNG BGR determinista con el MISMO color lógico en dos luminosidades
+    distintas (mitad "a la luz", mitad "en sombra") -- ver spec.md M2-S01,
+    "Pruebas": "sombras (variaciones de luminosidad del mismo color
+    lógico)". Ambas mitades deben tender a fusionarse en un clustering con
+    tolerancia amplia, y a quedar separadas con tolerancia estricta."""
+    base = np.array([180, 90, 40], dtype=np.uint8)  # BGR
+    shadow = (base.astype(np.float64) * 0.55).astype(np.uint8)
+    image = np.zeros((height, width, 3), dtype=np.uint8)
+    half = width // 2
+    image[:, :half] = base
+    image[:, half:] = shadow
+    success, buffer = cv2.imencode(".png", image)
+    assert success
+    return buffer.tobytes()
+
+
+def make_near_identical_colors_png_bytes(width: int = 8, height: int = 8) -> bytes:
+    """PNG BGR determinista con dos colores casi idénticos (difieren en solo
+    unas pocas unidades por canal) en cada mitad -- ver spec.md M2-S01,
+    "Pruebas": "colores casi iguales (deben tender a fusionarse según
+    tolerancia)"."""
+    color_a = np.array([100, 150, 200], dtype=np.uint8)
+    color_b = np.array([103, 152, 202], dtype=np.uint8)
+    image = np.zeros((height, width, 3), dtype=np.uint8)
+    half = width // 2
+    image[:, :half] = color_a
+    image[:, half:] = color_b
+    success, buffer = cv2.imencode(".png", image)
+    assert success
+    return buffer.tobytes()
+
+
+def make_solid_colors_png_bytes(width: int = 12, height: int = 12) -> bytes:
+    """PNG BGR determinista con TRES bloques de colores sólidos bien
+    separados entre sí (rojo, verde, azul puros) -- ver spec.md M2-S01,
+    "Pruebas": "colores sólidos (pocos colores, separación clara)"."""
+    image = np.zeros((height, width, 3), dtype=np.uint8)
+    third = width // 3
+    image[:, :third] = (0, 0, 255)  # BGR: rojo puro
+    image[:, third : 2 * third] = (0, 255, 0)  # verde puro
+    image[:, 2 * third :] = (255, 0, 0)  # azul puro
+    success, buffer = cv2.imencode(".png", image)
+    assert success
+    return buffer.tobytes()
+
+
 NOT_AN_IMAGE = b"esto no es una imagen"

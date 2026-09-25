@@ -10,6 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app.api.routes.check import router as check_router
+from app.api.routes.color_palette import router as color_palette_router
 from app.api.routes.health import router as health_router
 from app.api.routes.info import router as info_router
 from app.api.routes.preprocess import router as preprocess_router
@@ -19,6 +20,7 @@ from app.api.routes.vectorize import router as vectorize_router
 from app.core.config import get_settings
 from app.core.errors import (
     CheckTimeoutError,
+    ColorPaletteTimeoutError,
     CorruptImageError,
     DimensionsExceededError,
     EmptyMaskError,
@@ -48,8 +50,10 @@ app = FastAPI(
         "threshold B/N (umbral global, inversión), de vectorización raster -> SVG "
         "(motor VTracer, encapsulado detrás de app.core.vector_engine.VectorEngine), de "
         "simplificación de nodos de un SVG ya vectorizado (Douglas-Peucker, ver "
-        "app.core.simplification_pipeline) y del Laser Checker de paths abiertos/duplicados "
-        "(análisis de solo lectura, ver app.core.path_checker)."
+        "app.core.simplification_pipeline), del Laser Checker de paths abiertos/duplicados "
+        "(análisis de solo lectura, ver app.core.path_checker) y de detección/reducción de "
+        "paleta de colores dominantes (clustering determinista en espacio Lab, ver "
+        "app.core.color_palette_pipeline)."
     ),
     version=settings.service_version,
 )
@@ -61,6 +65,7 @@ app.include_router(threshold_router)
 app.include_router(vectorize_router)
 app.include_router(simplify_router)
 app.include_router(check_router)
+app.include_router(color_palette_router)
 
 # Códigos HTTP por tipo de error controlado del pipeline (ver "Errores y
 # límites" de spec.md): imagen corrupta -> 400, dimensiones excesivas -> 413,
@@ -88,6 +93,7 @@ _STATUS_BY_ERROR: dict[type[PreprocessingError], int] = {
     CheckTimeoutError: 504,
     TooManySubpathsError: 413,
     SimplificationTimeoutError: 504,
+    ColorPaletteTimeoutError: 504,
 }
 
 
