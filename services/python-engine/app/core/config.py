@@ -47,6 +47,18 @@ class Settings(BaseSettings):
     # que el límite que ya se le aplicó al generarlo).
     simplify_timeout_seconds: int = 15
 
+    # Límites del Laser Checker de paths abiertos/duplicados (M1-S08). spec.md
+    # tampoco los cuantifica ("Valor(es) de tolerancia por defecto no están
+    # cuantificados -- no bloqueante, el implementador elige y documenta");
+    # supuesto documentado en el reporte del sprint. check_timeout_seconds es
+    # un presupuesto interno del proceso Python (ver
+    # app.services.path_checker_service), mismo criterio que
+    # simplify_timeout_seconds. max_check_subpaths acota la cantidad de
+    # subpaths analizables antes de intentar la detección de duplicados
+    # (O(n^2) sobre esa cantidad) -- ver app.core.errors.TooManySubpathsError.
+    check_timeout_seconds: int = 15
+    max_check_subpaths: int = 20_000
+
 
 @lru_cache
 def get_settings() -> Settings:

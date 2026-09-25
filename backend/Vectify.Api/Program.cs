@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using Vectify.Api.Checking;
 using Vectify.Api.Clients;
 using Vectify.Api.Contracts;
 using Vectify.Api.Endpoints;
@@ -220,6 +221,41 @@ builder.Services.AddSingleton<ISimplificationVersionRegistry, PersistentSimplifi
 builder.Services.AddSingleton<ISimplificationParameterValidator, SimplificationParameterValidator>();
 builder.Services.AddScoped<ISimplificationService, SimplificationService>();
 
+// Laser Checker de paths abiertos/duplicados (M1-S08): primer análisis de
+// solo lectura sobre un SVG YA generado -- una VectorVersion (M1-S05) o una
+// SimplificationVersion (M1-S07), según lo que indique el request. A
+// diferencia de las etapas anteriores, SIN caché/lock/registro versionado:
+// nunca persiste nada, cada llamada vuelve a analizar el SVG de origen desde
+// cero (determinista por construcción). Tolerancias configurables
+// (Check:*), cliente Python dedicado con su propio timeout.
+builder.Services
+    .AddOptions<CheckOptions>()
+    .Bind(builder.Configuration.GetSection(CheckOptions.SectionName))
+    .Validate(o => o.TimeoutSeconds > 0, "Check:TimeoutSeconds debe ser mayor a 0.")
+    .Validate(
+        o => o.MinCloseGapRatio >= 0 && o.MinCloseGapRatio < o.MaxCloseGapRatio,
+        "Check:MinCloseGapRatio/MaxCloseGapRatio inválidos.")
+    .Validate(
+        o => o.MinDuplicatePointRatio >= 0 && o.MinDuplicatePointRatio < o.MaxDuplicatePointRatio,
+        "Check:MinDuplicatePointRatio/MaxDuplicatePointRatio inválidos.")
+    .Validate(
+        o => o.DefaultCloseGapRatio > o.MinCloseGapRatio && o.DefaultCloseGapRatio <= o.MaxCloseGapRatio,
+        "Check:DefaultCloseGapRatio fuera del rango Min/MaxCloseGapRatio.")
+    .Validate(
+        o => o.DefaultDuplicatePointRatio > o.MinDuplicatePointRatio && o.DefaultDuplicatePointRatio <= o.MaxDuplicatePointRatio,
+        "Check:DefaultDuplicatePointRatio fuera del rango Min/MaxDuplicatePointRatio.");
+
+builder.Services.AddHttpClient<IPythonCheckClient, PythonCheckClient>((sp, client) =>
+{
+    var pythonOptions = sp.GetRequiredService<IOptions<PythonEngineOptions>>().Value;
+    var checkOptions = sp.GetRequiredService<IOptions<CheckOptions>>().Value;
+    client.BaseAddress = new Uri(pythonOptions.BaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(checkOptions.TimeoutSeconds);
+});
+
+builder.Services.AddSingleton<ICheckParameterValidator, CheckParameterValidator>();
+builder.Services.AddScoped<ICheckService, CheckService>();
+
 var app = builder.Build();
 
 var allowedOrigins = app.Services.GetRequiredService<IOptions<FrontendCorsOptions>>().Value.GetOrigins();
@@ -304,6 +340,7 @@ app.MapPreprocessEndpoints();
 app.MapThresholdEndpoints();
 app.MapVectorizationEndpoints();
 app.MapSimplificationEndpoints();
+app.MapCheckEndpoints();
 
 app.Run();
 

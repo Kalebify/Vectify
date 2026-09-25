@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { getOriginalImageUrl } from "./api/projectsApi";
 import { getPreviewImageUrl } from "./api/preprocessApi";
+import { getSimplificationSvgUrl } from "./api/simplifyApi";
 import { getVectorSvgUrl } from "./api/vectorizeApi";
 import { ServiceCard } from "./components/ServiceCard";
 import type { StatusTone } from "./components/StatusPill";
+import { CheckPanel, type CheckSourceOption } from "./components/check/CheckPanel";
 import { PreprocessPanel } from "./components/preprocess/PreprocessPanel";
 import { SimplifyPanel } from "./components/simplify/SimplifyPanel";
 import { ThresholdPanel } from "./components/threshold/ThresholdPanel";
@@ -11,6 +13,7 @@ import { UploadPanel } from "./components/upload/UploadPanel";
 import { VectorizePanel } from "./components/vectorize/VectorizePanel";
 import { useSystemHealth } from "./hooks/useSystemHealth";
 import type { PreprocessResponse } from "./types/preprocess";
+import type { SimplifyResponse } from "./types/simplify";
 import type { PythonStatus } from "./types/system";
 import type { ThresholdResponse } from "./types/threshold";
 import type { UploadImageResponse } from "./types/upload";
@@ -40,29 +43,76 @@ const BANNER_COPY: Record<"loading" | "online" | "degraded" | "error", string> =
   error: "No se pudo contactar a la Web API.",
 };
 
+/**
+ * El Laser Checker (M1-S08) acepta como fuente cualquiera de los dos SVG ya
+ * generados del pipeline: el vector original (M1-S05) o -- si el usuario ya
+ * aplicó una simplificación (M1-S07) -- esa versión simplificada. Se
+ * ofrecen ambos como opciones en vez de reemplazar uno por otro: el spec no
+ * define cuál "debería" analizarse, y un usuario puede querer comparar los
+ * issues antes/después de simplificar.
+ */
+function buildCheckSources(
+  project: UploadImageResponse,
+  vector: VectorizeResponse,
+  simplification: SimplifyResponse | null,
+): CheckSourceOption[] {
+  const sources: CheckSourceOption[] = [
+    {
+      kind: "vector",
+      id: vector.vectorId,
+      label: "Vector actual",
+      svgUrl: getVectorSvgUrl(project.projectId, project.imageId, vector.vectorId),
+      width: vector.width,
+      height: vector.height,
+    },
+  ];
+
+  if (simplification) {
+    sources.push({
+      kind: "simplification",
+      id: simplification.simplificationId,
+      label: "Última simplificación",
+      svgUrl: getSimplificationSvgUrl(project.projectId, project.imageId, simplification.simplificationId),
+      width: simplification.width,
+      height: simplification.height,
+    });
+  }
+
+  return sources;
+}
+
 function App() {
   const { status, response, errorMessage, lastCheckedAt } = useSystemHealth();
   const [activeProject, setActiveProject] = useState<UploadImageResponse | null>(null);
   const [readyPreview, setReadyPreview] = useState<PreprocessResponse | null>(null);
   const [readyMask, setReadyMask] = useState<ThresholdResponse | null>(null);
   const [readyVector, setReadyVector] = useState<VectorizeResponse | null>(null);
+  const [readySimplification, setReadySimplification] = useState<SimplifyResponse | null>(null);
 
   const handleProjectCreated = (project: UploadImageResponse | null) => {
     setReadyPreview(null);
     setReadyMask(null);
     setReadyVector(null);
+    setReadySimplification(null);
     setActiveProject(project);
   };
 
   const handlePreviewReady = (preview: PreprocessResponse) => {
     setReadyMask(null);
     setReadyVector(null);
+    setReadySimplification(null);
     setReadyPreview(preview);
   };
 
   const handleMaskReady = (mask: ThresholdResponse) => {
     setReadyVector(null);
+    setReadySimplification(null);
     setReadyMask(mask);
+  };
+
+  const handleVectorReady = (vector: VectorizeResponse) => {
+    setReadySimplification(null);
+    setReadyVector(vector);
   };
 
   const apiTone: StatusTone =
@@ -157,7 +207,7 @@ function App() {
               originalUrl={getOriginalImageUrl(activeProject.projectId, activeProject.imageId)}
               originalWidth={activeProject.width}
               originalHeight={activeProject.height}
-              onVectorReady={setReadyVector}
+              onVectorReady={handleVectorReady}
             />
           </section>
         )}
@@ -179,6 +229,26 @@ function App() {
               currentVectorUrl={getVectorSvgUrl(activeProject.projectId, activeProject.imageId, readyVector.vectorId)}
               currentVectorWidth={readyVector.width}
               currentVectorHeight={readyVector.height}
+              onSimplificationApplied={setReadySimplification}
+            />
+          </section>
+        )}
+
+        {activeProject && readyVector && (
+          <section aria-labelledby="check-heading" className="check-section">
+            <h2 id="check-heading">Paths abiertos y duplicados</h2>
+            <p className="upload-section__hint">
+              Analizá el SVG en busca de geometría que puede producir cortes láser inesperados:
+              paths que deberían estar cerrados y no lo están, y segmentos duplicados o
+              casi-duplicados. El análisis es de solo lectura: nunca modifica el SVG, y se ejecuta
+              solo cuando lo pedís.
+            </p>
+            <CheckPanel
+              key={`${activeProject.projectId}-${activeProject.imageId}-${readyVector.vectorId}-${readySimplification?.simplificationId ?? "none"}`}
+              projectId={activeProject.projectId}
+              imageId={activeProject.imageId}
+              fileName={activeProject.filename}
+              sources={buildCheckSources(activeProject, readyVector, readySimplification)}
             />
           </section>
         )}
@@ -240,7 +310,7 @@ function App() {
       </main>
 
       <footer className="app-footer">
-        <p>Vectify · M1-S07 · Simplificación de nodos</p>
+        <p>Vectify · M1-S08 · Paths abiertos y líneas duplicadas</p>
       </footer>
     </>
   );

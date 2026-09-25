@@ -2,6 +2,8 @@
 GET /health -> { status, service, version }.
 """
 
+from typing import Annotated, Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -185,6 +187,126 @@ class SimplifyResponse(BaseModel):
     content_type: str = Field(default="image/svg+xml", examples=["image/svg+xml"])
     effective_params: SimplifyParams
     metrics: SimplifyMetrics
+
+
+class CheckParams(BaseModel):
+    """Tolerancias del Laser Checker de paths abiertos/duplicados (M1-S08),
+    ambas relativas a la diagonal del bounding box de TODO el SVG de entrada
+    (mismo criterio que `SimplifyParams.epsilon_ratio`, M1-S07) -- así
+    escalan con el tamaño del diseño en vez de ser un valor absoluto en
+    unidades de pantalla/píxeles. spec.md no los cuantifica ("Valor(es) de
+    tolerancia por defecto no están cuantificados"); los defaults de acá son
+    ese supuesto documentado en el reporte del sprint: 0.5% de la diagonal
+    para "casi cerrado", 0.2% para "casi duplicado" (más estricto: un
+    duplicado casi-exacto es una señal más fuerte de un problema real que un
+    gap de cierre moderado, que puede ser una decisión de diseño legítima).
+    """
+
+    close_gap_ratio: float = Field(
+        default=0.005,
+        gt=0,
+        le=0.5,
+        description=(
+            "Tolerancia de 'debería estar cerrado': distancia máxima entre el primer y "
+            "último punto de un subpath SIN comando Z, como fracción de la diagonal del SVG."
+        ),
+    )
+    duplicate_point_ratio: float = Field(
+        default=0.002,
+        gt=0,
+        le=0.5,
+        description=(
+            "Tolerancia de 'casi-duplicado': distancia punto a punto máxima entre dos "
+            "subpaths de igual cantidad de puntos, como fracción de la diagonal del SVG."
+        ),
+    )
+
+
+class CheckBounds(BaseModel):
+    """Caja delimitadora de un único subpath (no de todo el SVG, a
+    diferencia de VectorBounds) -- suficiente para que React ubique
+    aproximadamente el issue sin tener que volver a parsear el `d` completo
+    del `<path>`."""
+
+    min_x: float
+    min_y: float
+    max_x: float
+    max_y: float
+
+
+class OpenPathIssue(BaseModel):
+    """Un subpath sin comando `Z` cuyo primer y último punto están dentro de
+    `CheckParams.close_gap_ratio` -- ver app.core.path_checker._detect_open_paths.
+    `path_index`/`subpath_index` son 0-based, en el mismo orden de documento
+    que ve React al renderizar el SVG (suficientes, junto a `bounds`, para
+    resaltar el `<path>` correspondiente -- ver spec.md, Definition of Done:
+    "localizable visualmente")."""
+
+    type: Literal["open_path"] = "open_path"
+    id: str = Field(examples=["open-0-0"])
+    severity: Literal["warning", "error"] = Field(
+        examples=["error"],
+        description="Siempre 'error': un path abierto que debería cerrarse produce un corte incompleto.",
+    )
+    path_index: int = Field(ge=0)
+    subpath_index: int = Field(ge=0)
+    start_point: tuple[float, float]
+    end_point: tuple[float, float]
+    gap_distance: float = Field(ge=0)
+    bounds: CheckBounds
+
+
+class DuplicateMember(BaseModel):
+    """Un subpath miembro de un grupo de duplicados -- ver DuplicatePathIssue."""
+
+    path_index: int = Field(ge=0)
+    subpath_index: int = Field(ge=0)
+    bounds: CheckBounds
+
+
+class DuplicatePathIssue(BaseModel):
+    """Un grupo de 2+ subpaths geométricamente iguales o casi-iguales dentro
+    de `CheckParams.duplicate_point_ratio` -- ver
+    app.core.path_checker._detect_duplicates. `members` está en orden de
+    documento; `exact` distingue un duplicado byte-a-byte (distancia ~0,
+    severidad "error": corte redundante completo, desperdicio/riesgo real)
+    de uno casi-idéntico (severidad "warning": podría ser una decisión de
+    diseño, ej. doble línea de grabado, aunque la tolerancia por defecto es
+    lo bastante chica como para que sea poco probable)."""
+
+    type: Literal["duplicate_path"] = "duplicate_path"
+    id: str = Field(examples=["dup-1"])
+    severity: Literal["warning", "error"]
+    exact: bool
+    max_point_distance: float = Field(ge=0)
+    members: list[DuplicateMember] = Field(min_length=2)
+
+
+CheckIssue = Annotated[OpenPathIssue | DuplicatePathIssue, Field(discriminator="type")]
+
+
+class CheckSummary(BaseModel):
+    open_path_count: int = Field(ge=0, examples=[1])
+    duplicate_group_count: int = Field(ge=0, examples=[1])
+
+
+class CheckResponse(BaseModel):
+    """Respuesta de POST /api/v1/check. Análisis de SOLO LECTURA: no incluye
+    ni modifica el SVG de entrada -- solo lo devuelve indirectamente a
+    través de los índices de `issues`, ya que Vectify.Api/React ya tienen el
+    SVG que enviaron a analizar."""
+
+    effective_params: CheckParams
+    summary: CheckSummary
+    issues: list[CheckIssue]
+    skipped_path_count: int = Field(
+        ge=0,
+        description=(
+            "Cantidad de <path> excluidos del análisis por contener comandos no soportados "
+            "(cualquier cosa que no sea M/L/Z absolutos en mayúscula) -- ver limitación "
+            "documentada en app.core.path_checker."
+        ),
+    )
 
 
 class ErrorResponse(BaseModel):

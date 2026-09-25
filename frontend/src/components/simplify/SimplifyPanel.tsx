@@ -1,6 +1,8 @@
+import { useEffect } from "react";
 import { getSimplificationSvgUrl } from "../../api/simplifyApi";
 import { useSimplify } from "../../hooks/useSimplify";
 import { svgToDataUrl } from "../../lib/svgToDataUrl";
+import type { SimplifyResponse } from "../../types/simplify";
 import { SimplifyComparison } from "./SimplifyComparison";
 import { SimplifyControls } from "./SimplifyControls";
 
@@ -13,6 +15,13 @@ interface SimplifyPanelProps {
   currentVectorUrl: string;
   currentVectorWidth: number;
   currentVectorHeight: number;
+  /**
+   * Notifica al padre cada vez que hay una simplificación nueva APLICADA
+   * (persistida) -- mismo criterio que VectorizePanel.onVectorReady. Usado
+   * por el Laser Checker (M1-S08) para poder ofrecer la simplificación como
+   * fuente alternativa de análisis, además del vector original. Opcional.
+   */
+  onSimplificationApplied?: (simplification: SimplifyResponse) => void;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -44,12 +53,19 @@ export function SimplifyPanel({
   currentVectorUrl,
   currentVectorWidth,
   currentVectorHeight,
+  onSimplificationApplied,
 }: SimplifyPanelProps) {
   const { preset, status, preview, applied, errorMessage, setPreset, requestPreview, apply, cancel } = useSimplify(
     projectId,
     imageId,
     sourceVectorId,
   );
+
+  useEffect(() => {
+    if (status === "applied" && applied) {
+      onSimplificationApplied?.(applied);
+    }
+  }, [status, applied, onSimplificationApplied]);
 
   const isPreviewing = status === "previewing";
   const isApplying = status === "applying";
