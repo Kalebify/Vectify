@@ -4,10 +4,11 @@
   "title": "M1-S09 · Dimensiones reales en milímetros",
   "stack": "ASP.NET Core/Vector (persiste dimensiones físicas, valida, actualiza metadata SVG width/height/viewBox) · React (inputs con unidades, lock aspect ratio, preview) — probablemente sin tocar Python (operación de metadata/escala, no de geometría/imagen) — derivado del cuerpo de la tarjeta y del campo Área",
   "branch": "sprint/3c1d77b2-dimensiones-mm",
-  "column": "Backlog",
-  "phase": "spec-frozen",
+  "column": "Done",
+  "phase": "review",
   "fix_rounds": 0,
   "preview_url": null,
+  "pr_url": "https://github.com/Kalebify/Vectify/pull/11",
   "started_at": "2026-09-25T00:00:00Z",
   "exceptions": [
     "Board sin propiedad Tecnología/Stack: stack derivado del cuerpo de la tarjeta y del campo Área.",
