@@ -337,6 +337,97 @@ def test_empty_svg_reports_no_issues():
 
 
 # ---------------------------------------------------------------------------
+# Resolución de `transform="translate(...)"` (fix M1-S11): VtracerEngine
+# emite formas congruentes en posiciones reales distintas como el MISMO `d`
+# local repetido, cada una con su propio translate -- hay que resolverlo
+# antes de comparar, o se reporta un falso positivo de "duplicado".
+# ---------------------------------------------------------------------------
+
+
+def test_congruent_shapes_at_different_translated_positions_are_not_duplicates():
+    # Mismo `d` local byte a byte (reproduce el caso real de
+    # tests/e2e/fixtures/problematic.png), pero cada `<path>` tiene un
+    # translate distinto -- las posiciones ABSOLUTAS no se superponen, así
+    # que NO es un duplicado real.
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300">'
+        '<path d="M0,0 L12,2 L22,8 L10,10 Z" fill="#000000" transform="translate(67,34)"/>'
+        '<path d="M0,0 L12,2 L22,8 L10,10 Z" fill="#000000" transform="translate(172,139)"/>'
+        "</svg>"
+    )
+
+    result = _analyze(svg)
+
+    assert result["duplicate_issues"] == []
+    assert result["skipped_path_count"] == 0
+
+
+def test_same_local_d_and_same_translate_is_a_real_duplicate():
+    # Mismo `d` local Y el MISMO transform -- misma posición ABSOLUTA real:
+    # esto sigue siendo (y siempre fue) un duplicado exacto legítimo.
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300">'
+        '<path d="M0,0 L12,2 L22,8 L10,10 Z" fill="#000000" transform="translate(67,34)"/>'
+        '<path d="M0,0 L12,2 L22,8 L10,10 Z" fill="#000000" transform="translate(67,34)"/>'
+        "</svg>"
+    )
+
+    result = _analyze(svg)
+
+    assert len(result["duplicate_issues"]) == 1
+    issue = result["duplicate_issues"][0]
+    assert issue["exact"] is True
+    assert issue["severity"] == "error"
+    assert [m["path_index"] for m in issue["members"]] == [0, 1]
+
+
+def test_different_local_d_that_lands_on_same_absolute_position_is_duplicate():
+    # `d` local DISTINTO, pero al aplicar cada translate caen en las MISMAS
+    # coordenadas absolutas -- antes era un falso negativo (nunca se
+    # comparaban en coordenadas absolutas); ahora se detecta correctamente.
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">'
+        '<path d="M0,0 L6,0 L6,6 L0,6 Z" transform="translate(10,10)"/>'
+        '<path d="M4,4 L10,4 L10,10 L4,10 Z" transform="translate(6,6)"/>'
+        "</svg>"
+    )
+
+    result = _analyze(svg)
+
+    assert len(result["duplicate_issues"]) == 1
+    assert result["duplicate_issues"][0]["exact"] is True
+
+
+def test_unsupported_transform_excludes_the_path_and_counts_as_skipped():
+    # `rotate(45)` no es `translate(...)` -- no hay forma segura de
+    # resolverlo, así que el <path> completo se excluye (mismo criterio que
+    # un comando de path no soportado), NUNCA se analiza ignorando el
+    # transform en silencio.
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">'
+        '<path d="M0,0 L10,0 L10,10 L0,10 Z" transform="rotate(45)"/>'
+        '<path d="M50,50 L60,50 L60,60 L50,60 Z"/>'
+        "</svg>"
+    )
+
+    result = _analyze(svg)
+
+    assert result["open_path_issues"] == []
+    assert result["duplicate_issues"] == []
+    assert result["skipped_path_count"] == 1
+
+
+def test_path_without_transform_attribute_is_analyzed_as_before():
+    # Sin `transform` en absoluto -- equivalente a translate(0,0), se sigue
+    # analizando igual que antes del fix.
+    result = _analyze(CORRECT_DESIGN_SVG)
+
+    assert result["open_path_issues"] == []
+    assert result["duplicate_issues"] == []
+    assert result["skipped_path_count"] == 0
+
+
+# ---------------------------------------------------------------------------
 # Salvaguarda de rendimiento: demasiados subpaths analizables.
 # ---------------------------------------------------------------------------
 
