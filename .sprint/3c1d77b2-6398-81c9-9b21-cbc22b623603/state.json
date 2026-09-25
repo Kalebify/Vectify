@@ -1,0 +1,19 @@
+{
+  "card_id": "3c1d77b2-6398-81c9-9b21-cbc22b623603",
+  "card_url": "https://app.notion.com/p/3c1d77b2639881c99b21cbc22b623603",
+  "title": "M1-S10 · Exportación SVG",
+  "stack": "ASP.NET Core (endpoint de export, sanitización de nombre de archivo, headers, auditoría básica) · React (diálogo de exportación: versión, tamaño, issues del checker, descarga) — sin tocar Python (solo sirve un artefacto ya generado por una etapa anterior) — derivado del cuerpo de la tarjeta y del campo Área",
+  "branch": "sprint/3c1d77b2-exportacion-svg",
+  "column": "Done",
+  "phase": "review",
+  "fix_rounds": 0,
+  "preview_url": null,
+  "pr_url": "https://github.com/Kalebify/Vectify/pull/12",
+  "started_at": "2026-09-25T00:00:00Z",
+  "exceptions": [
+    "Board sin propiedad Tecnología/Stack: stack derivado del cuerpo de la tarjeta y del campo Área.",
+    "Tarjeta no es un sitio web de marketing: se saltan web-design-architect y web-qa-auditor, mismo acuerdo que las tarjetas anteriores. Verificación por build/tests locales.",
+    "Por decisión explícita del usuario, el orquestador mueve la tarjeta a Doing y luego a Done al terminar; el usuario mueve Done→Test manualmente.",
+    "Nivel de persistencia de la auditoría de exportación, esquema de nombre de archivo y si el checker se re-ejecuta automáticamente no están definidos por el spec — decisión del implementador, documentada como supuesto."
+  ]
+}

@@ -4,6 +4,7 @@ using Vectify.Api.Clients;
 using Vectify.Api.Contracts;
 using Vectify.Api.Dimensioning;
 using Vectify.Api.Endpoints;
+using Vectify.Api.Export;
 using Vectify.Api.Middleware;
 using Vectify.Api.Options;
 using Vectify.Api.Preprocessing;
@@ -280,6 +281,13 @@ builder.Services.AddSingleton<IDimensionVersionRegistry, PersistentDimensionVers
 builder.Services.AddSingleton<IDimensionParameterValidator, DimensionParameterValidator>();
 builder.Services.AddScoped<IDimensionService, DimensionService>();
 
+// Exportación SVG (M1-S10): cierra el primer flujo productivo. Sirve, sin
+// modificar, los mismos bytes ya persistidos por Vectorization/
+// Simplification/Dimensioning -- SIN cliente Python, SIN caché/lock/registro
+// versionado propio (no genera ningún artefacto nuevo que versionar). Ver
+// Vectify.Api.Export.ExportService.
+builder.Services.AddScoped<IExportService, ExportService>();
+
 var app = builder.Build();
 
 var allowedOrigins = app.Services.GetRequiredService<IOptions<FrontendCorsOptions>>().Value.GetOrigins();
@@ -366,6 +374,7 @@ app.MapVectorizationEndpoints();
 app.MapSimplificationEndpoints();
 app.MapCheckEndpoints();
 app.MapDimensionEndpoints();
+app.MapExportEndpoints();
 
 app.Run();
 

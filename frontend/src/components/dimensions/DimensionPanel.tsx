@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { getDimensionedSvgUrl } from "../../api/dimensionApi";
 import { useDimensions, type DimensionStatus } from "../../hooks/useDimensions";
-import type { DimensionSourceKind } from "../../types/dimension";
+import type { DimensionResponse, DimensionSourceKind } from "../../types/dimension";
 import { DimensionControls } from "./DimensionControls";
 
 /** Un SVG ya generado (vectorizado o simplificado) que el usuario puede elegir como fuente -- mismo criterio dual que CheckSourceOption (M1-S08). */
@@ -18,6 +18,14 @@ interface DimensionPanelProps {
   imageId: string;
   /** Al menos una fuente (el vector actual); una segunda opcional si ya hay una simplificación aplicada. */
   sources: DimensionSourceOption[];
+  /**
+   * Notifica al padre cada vez que hay una DimensionVersion nueva APLICADA
+   * (persistida) -- mismo criterio que SimplifyPanel.onSimplificationApplied.
+   * Usado por el panel de Exportación (M1-S10) para poder ofrecer la versión
+   * dimensionada como una tercera fuente de descarga, además del vector y la
+   * simplificación. Opcional.
+   */
+  onDimensionApplied?: (dimension: DimensionResponse) => void;
 }
 
 const STATUS_LABEL: Record<DimensionStatus, string> = {
@@ -35,7 +43,7 @@ const STATUS_LABEL: Record<DimensionStatus, string> = {
  * una nueva versión (nunca sobrescribe la anterior, ver
  * Vectify.Api.Dimensioning.DimensionVersion).
  */
-export function DimensionPanel({ projectId, imageId, sources }: DimensionPanelProps) {
+export function DimensionPanel({ projectId, imageId, sources, onDimensionApplied }: DimensionPanelProps) {
   const [selectedIndex, setSelectedIndex] = useState(sources.length - 1);
   const selectedSource = sources[selectedIndex] ?? sources[0];
 
@@ -59,6 +67,12 @@ export function DimensionPanel({ projectId, imageId, sources }: DimensionPanelPr
     selectedSource.widthPx,
     selectedSource.heightPx,
   );
+
+  useEffect(() => {
+    if (status === "applied" && applied) {
+      onDimensionApplied?.(applied);
+    }
+  }, [status, applied, onDimensionApplied]);
 
   const isApplying = status === "applying";
   const appliedSvgUrl = applied ? getDimensionedSvgUrl(projectId, imageId, applied.dimensionId) : null;
