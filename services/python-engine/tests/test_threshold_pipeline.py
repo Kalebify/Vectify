@@ -8,8 +8,79 @@ import numpy as np
 import pytest
 
 from app.core import threshold_pipeline
-from tests.support import make_checkerboard_png_bytes, make_png_bytes
+from app.core.errors import CorruptImageError
+from tests.support import make_checkerboard_png_bytes, make_png_bytes, make_rgba_png_bytes
 from app.core import pipeline
+
+
+# --- read_image_with_alpha / split_alpha_channel ---
+
+
+def test_read_image_with_alpha_preserves_4_channels_for_rgba_png():
+    data = make_rgba_png_bytes(3, 3, color=(10, 20, 30), alpha=64)
+
+    image = threshold_pipeline.read_image_with_alpha(data)
+
+    assert image.ndim == 3
+    assert image.shape[2] == 4
+
+
+def test_read_image_with_alpha_raises_corrupt_image_error_for_invalid_bytes():
+    with pytest.raises(CorruptImageError):
+        threshold_pipeline.read_image_with_alpha(b"esto no es una imagen")
+
+
+def test_read_image_with_alpha_raises_corrupt_image_error_for_empty_bytes():
+    with pytest.raises(CorruptImageError):
+        threshold_pipeline.read_image_with_alpha(b"")
+
+
+def test_split_alpha_channel_separates_bgr_and_alpha_for_4_channel_image():
+    image = np.full((2, 2, 4), (10, 20, 30, 64), dtype=np.uint8)
+
+    bgr, alpha = threshold_pipeline.split_alpha_channel(image)
+
+    assert bgr.shape == (2, 2, 3)
+    assert (alpha == 64).all()
+
+
+def test_split_alpha_channel_is_passthrough_for_3_channel_image():
+    image = np.full((2, 2, 3), (10, 20, 30), dtype=np.uint8)
+
+    bgr, alpha = threshold_pipeline.split_alpha_channel(image)
+
+    assert bgr is image
+    assert alpha is None
+
+
+# --- apply_alpha_as_background ---
+
+
+def test_apply_alpha_as_background_forces_fully_transparent_pixels_to_zero():
+    mask = np.full((2, 2), 255, dtype=np.uint8)
+    alpha = np.array([[255, 0], [255, 0]], dtype=np.uint8)
+
+    result = threshold_pipeline.apply_alpha_as_background(mask, alpha)
+
+    assert tuple(result[0]) == (255, 0)
+    assert tuple(result[1]) == (255, 0)
+
+
+def test_apply_alpha_as_background_is_passthrough_when_alpha_is_none():
+    mask = np.full((2, 2), 255, dtype=np.uint8)
+
+    result = threshold_pipeline.apply_alpha_as_background(mask, None)
+
+    assert result is mask
+
+
+def test_apply_alpha_as_background_does_not_mutate_input_mask():
+    mask = np.full((2, 2), 255, dtype=np.uint8)
+    alpha = np.zeros((2, 2), dtype=np.uint8)
+
+    threshold_pipeline.apply_alpha_as_background(mask, alpha)
+
+    assert (mask == 255).all()
 
 
 # --- to_grayscale_single_channel ---

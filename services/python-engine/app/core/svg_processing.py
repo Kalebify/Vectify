@@ -26,8 +26,25 @@ ET.register_namespace("", _SVG_NS)
 # Elementos que nunca deberían sobrevivir la sanitización, sin importar qué
 # motor los haya generado: <script> (ejecución arbitraria), <foreignObject>
 # (permite incrustar HTML/JS dentro de SVG), <iframe>/<embed>/<object>
-# (carga de contenido externo), <audio>/<video> (carga de medios externos).
-_DANGEROUS_LOCAL_NAMES = {"script", "foreignobject", "iframe", "embed", "object", "audio", "video"}
+# (carga de contenido externo), <audio>/<video> (carga de medios externos),
+# <style> (puede traer @import url(...) a hojas de estilo externas -- VTracer
+# es trazado geométrico puro y nunca necesita generar CSS, así que alcanza
+# con eliminar el elemento entero, no hace falta sanear su contenido).
+_DANGEROUS_LOCAL_NAMES = {"script", "foreignobject", "iframe", "embed", "object", "audio", "video", "style"}
+
+# Atributos de presentación que pueden llevar una referencia `url(...)` (por
+# ej. `fill:url(#gradiente)` o, de forma maliciosa, `fill:url(https://evil...)`).
+# `style` es el más común (CSS inline), pero los atributos de presentación
+# directos (`fill`, `stroke`, `clip-path`, `mask`, `filter`) también aceptan
+# `url(...)` como valor.
+_URL_BEARING_ATTRS = {"style", "fill", "stroke", "clip-path", "mask", "filter"}
+
+# `url(` seguido de algo que NO es una referencia interna (`#fragmento`) --
+# ej. `url(https://evil.example/x.css)`, `url('//evil.example/a.svg')`,
+# `url(evil.svg)`. Las referencias internas (`url(#gradiente-interno)`) se
+# permiten: son legítimas para gradientes/patterns/clip-paths dentro del
+# mismo documento.
+_EXTERNAL_URL_RE = re.compile(r"url\(\s*['\"]?(?!#)", re.IGNORECASE)
 
 # Defensa contra XXE/expansión de entidades: se rechaza cualquier DOCTYPE o
 # declaración de entidad ANTES de parsear, en vez de confiar en que el parser
@@ -100,6 +117,17 @@ def _strip_dangerous_attributes(root: ET.Element) -> None:
             # `url(javascript:...)`) que contenga el esquema javascript: se
             # elimina, sin importar su nombre.
             if "javascript:" in value.lower():
+                del element.attrib[attr_name]
+                continue
+
+            # Atributos de presentación (style, fill, stroke, clip-path,
+            # mask, filter) con un `url(...)` que no sea una referencia
+            # interna (`#id`) se eliminan por completo -- ej.
+            # `style="fill:url(https://evil.example/a.svg)"` o
+            # `<style>@import url(...)</style>` ya cubierto arriba por
+            # _DANGEROUS_LOCAL_NAMES. No se intenta reescribir el valor: se
+            # quita el atributo entero para no dejar CSS parcialmente válido.
+            if local in _URL_BEARING_ATTRS and _EXTERNAL_URL_RE.search(value):
                 del element.attrib[attr_name]
 
 

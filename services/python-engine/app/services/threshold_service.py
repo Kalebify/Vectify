@@ -30,7 +30,12 @@ class ThresholdingService:
         """
         self._reject_if_header_dimensions_exceed_limits(data)
 
-        image = pipeline.read_image_safely(data)
+        # A diferencia de Preprocessing/Vectorization (que usan
+        # pipeline.read_image_safely, IMREAD_COLOR, sin canal alpha),
+        # Threshold decodifica preservando alpha: un píxel completamente
+        # transparente debe quedar como background sin importar el color RGB
+        # que tenga "debajo" -- ver threshold_pipeline.apply_alpha_as_background.
+        image = threshold_pipeline.read_image_with_alpha(data)
 
         pipeline.check_dimensions(
             image,
@@ -39,8 +44,11 @@ class ThresholdingService:
             self._settings.max_image_pixels,
         )
 
-        gray = threshold_pipeline.to_grayscale_single_channel(image)
+        bgr_image, alpha = threshold_pipeline.split_alpha_channel(image)
+
+        gray = threshold_pipeline.to_grayscale_single_channel(bgr_image)
         mask = threshold_pipeline.apply_threshold(gray, params.value, params.invert)
+        mask = threshold_pipeline.apply_alpha_as_background(mask, alpha)
 
         metrics = threshold_pipeline.compute_threshold_metrics(mask)
         encoded_png = pipeline.encode_png(mask)

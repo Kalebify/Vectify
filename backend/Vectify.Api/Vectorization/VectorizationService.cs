@@ -191,6 +191,11 @@ public sealed class VectorizationService : IVectorizationService
         PythonVectorizeState.EngineError => "processing_error",
         PythonVectorizeState.Unavailable => "engine_unavailable",
         PythonVectorizeState.InvalidResponse => "invalid_response",
+        // Igual que InvalidResponse: la respuesta de Python no pasa la validación
+        // defensiva adicional del cliente (Defecto 3 de la ronda de QA sobre
+        // M1-S05/M1-S06) -- Vectify.Api no confía en su contenido, mismo código y
+        // semántica HTTP (502) que un JSON con campos faltantes.
+        PythonVectorizeState.InvalidSvg => "invalid_response",
         _ => "processing_error",
     };
 }

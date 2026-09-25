@@ -17,6 +17,78 @@ aleatoriedad ni efectos secundarios.
 import cv2
 import numpy as np
 
+from app.core.errors import CorruptImageError
+
+# Un píxel se considera "sin contenido" (BACKGROUND) cuando su canal alpha es
+# <= este umbral. Deliberadamente 0 (transparencia TOTAL), no un valor
+# intermedio: alpha parcial (ej. anti-aliasing en los bordes de un logo) sigue
+# siendo una decisión del umbral B/N sobre su color compuesto, no de alpha --
+# solo la ausencia total de contenido se fuerza a background sin mirar el
+# color RGB que OpenCV compuso "debajo".
+ALPHA_BACKGROUND_THRESHOLD = 0
+
+
+def read_image_with_alpha(data: bytes) -> np.ndarray:
+    """Decodifica bytes de imagen preservando el canal alpha si existe, a
+    diferencia de app.core.pipeline.read_image_safely (usado por
+    Preprocessing y Vectorization, sin cambios), que decodifica con
+    cv2.IMREAD_COLOR y por lo tanto DESCARTA cualquier canal alpha -- un
+    píxel transparente terminaba tratándose según el color RGB que tuviera
+    "debajo" en vez de como ausencia de contenido. Usado exclusivamente por
+    el flujo de threshold (ThresholdingService), donde la transparencia debe
+    tener significado semántico propio -- ver spec.md M1-S04, "transparencias"
+    como caso de prueba explícito.
+
+    Devuelve el array tal cual lo decodifica OpenCV: 2 dimensiones (gris) o 3
+    dimensiones con 3 canales (BGR, sin alpha) o 4 canales (BGRA, con alpha) --
+    la mayoría de las imágenes no tienen alpha, por lo que el caso común sigue
+    siendo BGR de 3 canales.
+    """
+    if not data:
+        raise CorruptImageError("El archivo está vacío.")
+
+    try:
+        array = np.frombuffer(data, dtype=np.uint8)
+        image = cv2.imdecode(array, cv2.IMREAD_UNCHANGED)
+    except cv2.error as exc:  # pragma: no cover - OpenCV rara vez lanza acá en vez de devolver None
+        raise CorruptImageError(f"No se pudo decodificar la imagen: {exc}") from exc
+
+    if image is None:
+        raise CorruptImageError(
+            "No se pudo decodificar la imagen: el contenido está corrupto o el formato no es soportado."
+        )
+
+    return image
+
+
+def split_alpha_channel(image: np.ndarray) -> tuple[np.ndarray, np.ndarray | None]:
+    """Separa el canal alpha si la imagen decodificada tiene 4 canales
+    (BGRA), devolviendo (imagen_bgr, alpha). Si no tiene alpha (el caso
+    común: gris de 2 dimensiones o BGR de 3 canales), es un passthrough que
+    devuelve (imagen, None) sin modificar nada.
+    """
+    if image.ndim == 3 and image.shape[2] == 4:
+        return image[:, :, :3], image[:, :, 3]
+    return image, None
+
+
+def apply_alpha_as_background(
+    mask: np.ndarray, alpha: np.ndarray | None, alpha_threshold: int = ALPHA_BACKGROUND_THRESHOLD
+) -> np.ndarray:
+    """Fuerza a BACKGROUND (0) cualquier píxel cuyo canal alpha original sea
+    <= `alpha_threshold`, sin importar el valor que le haya asignado
+    `apply_threshold` según su color RGB compuesto -- ver
+    ALPHA_BACKGROUND_THRESHOLD para la justificación del umbral. Si `alpha`
+    es None (imagen sin canal alpha, el caso común), es un passthrough que
+    devuelve `mask` sin modificar.
+    """
+    if alpha is None:
+        return mask
+
+    result = mask.copy()
+    result[alpha <= alpha_threshold] = 0
+    return result
+
 
 def to_grayscale_single_channel(image: np.ndarray) -> np.ndarray:
     """Reduce a un único canal de gris, requerido por cv2.threshold. Acepta

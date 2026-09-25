@@ -1,5 +1,18 @@
 status: ok
 
+## Ronda de corrección — 2026-09-25 (rama fix/3c1d77b2-svg-security-persistence)
+
+El usuario probó manualmente M1-S05/M1-S06 y reportó, entre otros, dos defectos que rastrean hasta esta tarjeta:
+
+- **Semántica de transparencia incorrecta**: el threshold decodificaba con `IMREAD_COLOR`, descartando el canal alpha — un píxel transparente se trataba según el color RGB que tuviera "debajo" en vez de como ausencia de contenido, aunque la tarjeta pedía "transparencias" como caso de prueba explícito y los tests existentes solo verificaban que no crasheara. Arreglo: `threshold_pipeline.read_image_with_alpha` + `apply_alpha_as_background` fuerzan a background cualquier píxel con alpha≈0, sin importar el color compuesto. Tests nuevos verifican la semántica real, no solo ausencia de crash.
+- **Registro de configuración solo en memoria**: `InMemoryThresholdConfigRegistry` se perdía al reiniciar el backend (aunque los archivos de máscara sobrevivían en el volumen Docker). Arreglo: `PersistentThresholdConfigRegistry`, mismo patrón de sidecar JSON + rehidratación que `PersistentProjectRegistry` (M1-S02).
+
+Verificación de esta ronda: `dotnet test` → 191/191, `pytest` → 135/135, sin regresiones. Detalle completo en la conversación del sprint y en el PR correspondiente (todavía sin abrir al momento de escribir esto).
+
+**No confirmé** la "carrera de respuestas del threshold" que el mismo reporte mencionaba como pendiente — revisé `ThresholdService.cs` a fondo y el lock por parámetros sigue aplicado correctamente desde el primer commit de esta tarjeta, sin cambios.
+
+---
+
 Archivos (backend — ASP.NET Core):
 - `backend/Vectify.Api/Threshold/ThresholdParameters.cs` — parámetros efectivos (Value 0-255, Invert) + clave de caché.
 - `backend/Vectify.Api/Threshold/ThresholdRawMetrics.cs` — métricas crudas (foreground/background %) devueltas por Python.

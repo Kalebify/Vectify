@@ -197,6 +197,19 @@ public sealed class VectorizationServiceTests
     }
 
     [Fact]
+    public async Task GenerateVectorAsync_WhenPythonResponseFailsDefensiveValidation_ReturnsUpstreamErrorWithInvalidResponseCode()
+    {
+        var (service, _, _, pythonClient) = CreateService();
+        pythonClient.Respond = () => new PythonVectorizeResult(
+            PythonVectorizeState.InvalidSvg, null, null, null, null, null, "SVG no es XML bien formado");
+
+        var result = await service.GenerateVectorAsync(ProjectId, ImageId, DefaultRequest(), CancellationToken.None);
+
+        var error = Assert.IsType<VectorResult.UpstreamError>(result);
+        Assert.Equal("invalid_response", error.Code);
+    }
+
+    [Fact]
     public async Task GenerateVectorAsync_WhenPythonTimesOut_ReturnsUpstreamErrorWithTimeoutCode()
     {
         var (service, _, _, pythonClient) = CreateService();

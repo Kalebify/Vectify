@@ -102,6 +102,47 @@ def test_sanitize_svg_removes_foreign_object_and_iframe():
     assert "evil.example" not in sanitized
 
 
+def test_sanitize_svg_removes_style_element_with_external_import():
+    malicious = (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">'
+        "<style>@import url(https://evil.example/x.css)</style>"
+        '<path d="M0,0 L10,0 L10,10 L0,10 Z"/>'
+        "</svg>"
+    )
+
+    sanitized = sanitize_svg(malicious)
+
+    assert "<style" not in sanitized
+    assert "evil.example" not in sanitized
+    assert "<path" in sanitized
+
+
+def test_sanitize_svg_strips_style_attribute_with_external_url():
+    malicious = (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">'
+        '<rect width="10" height="10" style="fill:url(https://evil.example/a.svg)"/>'
+        "</svg>"
+    )
+
+    sanitized = sanitize_svg(malicious)
+
+    assert "evil.example" not in sanitized
+    assert "style=" not in sanitized
+
+
+def test_sanitize_svg_keeps_style_attribute_with_internal_url_reference():
+    benign = (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">'
+        '<defs><linearGradient id="gradiente-interno"/></defs>'
+        '<rect width="10" height="10" style="fill:url(#gradiente-interno)"/>'
+        "</svg>"
+    )
+
+    sanitized = sanitize_svg(benign)
+
+    assert 'style="fill:url(#gradiente-interno)"' in sanitized
+
+
 def test_sanitize_svg_rejects_malformed_xml():
     with pytest.raises(InvalidSvgError):
         sanitize_svg("<svg><path d='M0,0'></svg-not-closed>")

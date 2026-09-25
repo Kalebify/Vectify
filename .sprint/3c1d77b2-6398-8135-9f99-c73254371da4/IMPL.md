@@ -1,5 +1,19 @@
 status: ok
 
+## Segunda ronda de corrección — 2026-09-25 (rama fix/3c1d77b2-svg-security-persistence)
+
+El usuario probó manualmente M1-S05/M1-S06 y encontró 3 defectos más que rastrean hasta esta tarjeta, verificados contra el código antes de corregir:
+
+- **Sanitización de SVG permitía CSS externo (hueco de seguridad real)**: `<style>@import url(...)</style>` y `style="fill:url(...)"` con URLs externas sobrevivían la sanitización — solo se revisaban `href`/`xlink:href`, nunca `url(...)` dentro de CSS. Arreglo: `<style>` ahora se elimina por completo (elemento entero); atributos de presentación (`style`, `fill`, `stroke`, `clip-path`, `mask`, `filter`) con `url(...)` externo se eliminan, preservando `url(#interno)` legítimo.
+- **Validación defensiva incompleta en `PythonVectorizeClient.cs`**: solo verificaba que `Svg`/`Bounds` no fueran null. Arreglo: valida XML bien formado con `<svg>` raíz, dimensiones/métricas positivas, bounds finitos y coherentes, Content-Type esperado, y límite de tamaño de respuesta (`MaxSvgResponseBytes`, default 10MB) — defensa en profundidad aunque Python ya valide del lado suyo.
+- **`InMemoryVectorVersionRegistry` sin persistencia**: se perdía al reiniciar. Arreglo: `PersistentVectorVersionRegistry`, mismo patrón de sidecar JSON que `PersistentProjectRegistry`.
+
+Verificación de esta ronda: `dotnet test` → 191/191, `pytest` → 135/135, sin regresiones.
+
+**Timeout de VTracer sin matar el proceso**: reportado de nuevo, pero ya estaba documentado como limitación conocida desde el commit original (el hilo puede seguir corriendo en background; no hay forma de matarlo desde Python sin terminar el proceso). No se resolvió en esta ronda — requeriría aislar VTracer en un subproceso separado, un cambio de arquitectura mayor que el usuario decidió posponer.
+
+---
+
 Archivos (Python — `services/python-engine`):
 - `app/core/vector_engine.py` — Protocol `VectorEngine` + `VtracerEngine`: encapsula VTracer (inversión de máscara, `mode="polygon"`, `hierarchical="stacked"`, documentados y verificados empíricamente), sin filtrar detalles del motor fuera de este módulo.
 - `app/core/svg_processing.py` — `sanitize_svg` (quita `<script>`, `foreignObject`, `iframe`/`embed`/`object`/`audio`/`video`, handlers `on*`, `href`/`xlink:href` externos, rechaza DOCTYPE/ENTITY) y `compute_svg_stats` (paths, nodos aproximados, bounds) sobre el SVG ya sanitizado.

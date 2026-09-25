@@ -20,16 +20,18 @@ internal static class VectorizePayloads
         double maxX = 8,
         double maxY = 8,
         double boundsWidth = 6,
-        double boundsHeight = 6)
+        double boundsHeight = 6,
+        string contentType = "image/svg+xml")
     {
         var svgJson = System.Text.Json.JsonSerializer.Serialize(svg ?? SimpleSquareSvg);
+        var contentTypeJson = System.Text.Json.JsonSerializer.Serialize(contentType);
 
         return string.Create(
             CultureInfo.InvariantCulture,
             $$"""
             {
               "svg": {{svgJson}},
-              "content_type": "image/svg+xml",
+              "content_type": {{contentTypeJson}},
               "width": {{width}},
               "height": {{height}},
               "metrics": {
