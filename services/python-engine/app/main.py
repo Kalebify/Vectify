@@ -14,6 +14,7 @@ from app.api.routes.color_palette import router as color_palette_router
 from app.api.routes.components import router as components_router
 from app.api.routes.health import router as health_router
 from app.api.routes.info import router as info_router
+from app.api.routes.physical_union import router as physical_union_router
 from app.api.routes.preprocess import router as preprocess_router
 from app.api.routes.simplify import router as simplify_router
 from app.api.routes.threshold import router as threshold_router
@@ -29,6 +30,9 @@ from app.core.errors import (
     InvalidInputSvgError,
     InvalidParametersError,
     InvalidSvgError,
+    PhysicalUnionImpossibleError,
+    PhysicalUnionInvalidGeometryError,
+    PhysicalUnionTimeoutError,
     PreprocessingError,
     SimplificationTimeoutError,
     SvgInputTooLargeError,
@@ -56,8 +60,10 @@ app = FastAPI(
         "app.core.simplification_pipeline), del Laser Checker de paths abiertos/duplicados "
         "(análisis de solo lectura, ver app.core.path_checker), de detección/reducción de "
         "paleta de colores dominantes (clustering determinista en espacio Lab, ver "
-        "app.core.color_palette_pipeline) y de componentes físicos independientes por capa "
-        "(M2-S03, análisis de solo lectura, ver app.core.component_analysis)."
+        "app.core.color_palette_pipeline), de componentes físicos independientes por capa "
+        "(M2-S03, análisis de solo lectura, ver app.core.component_analysis) y de unión física de "
+        "piezas (M2-S06, modifica geometría: unión booleana + bridging simple con Shapely, ver "
+        "app.core.physical_union)."
     ),
     version=settings.service_version,
 )
@@ -71,6 +77,7 @@ app.include_router(simplify_router)
 app.include_router(check_router)
 app.include_router(color_palette_router)
 app.include_router(components_router)
+app.include_router(physical_union_router)
 
 # Códigos HTTP por tipo de error controlado del pipeline (ver "Errores y
 # límites" de spec.md): imagen corrupta -> 400, dimensiones excesivas -> 413,
@@ -101,6 +108,9 @@ _STATUS_BY_ERROR: dict[type[PreprocessingError], int] = {
     ColorPaletteTimeoutError: 504,
     ComponentAnalysisTimeoutError: 504,
     TooManySubpathsForComponentsError: 413,
+    PhysicalUnionTimeoutError: 504,
+    PhysicalUnionInvalidGeometryError: 422,
+    PhysicalUnionImpossibleError: 422,
 }
 
 

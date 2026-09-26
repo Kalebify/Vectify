@@ -9,6 +9,7 @@ using Vectify.Api.Endpoints;
 using Vectify.Api.Export;
 using Vectify.Api.Middleware;
 using Vectify.Api.Options;
+using Vectify.Api.PhysicalUnion;
 using Vectify.Api.Preprocessing;
 using Vectify.Api.Projects;
 using Vectify.Api.Simplification;
@@ -405,6 +406,43 @@ builder.Services
 builder.Services.AddSingleton<IComponentGroupVersionRegistry, PersistentComponentGroupVersionRegistry>();
 builder.Services.AddScoped<IComponentGroupService, ComponentGroupService>();
 
+// Unión física de piezas (M2-S06): SEXTA tarjeta de MVP2 sobre el módulo de
+// componentes -- A DIFERENCIA de M2-S05 (agrupar, lógico, nunca toca
+// geometría), esta SÍ modifica geometría real: fusiona 2+ componentes
+// físicos ya calculados (M2-S03) en una única pieza fabricable (unión
+// booleana para piezas solapadas/tangentes, bridge simple/directo para
+// piezas separadas -- ver services/python-engine/app/core/physical_union.py,
+// que usa Shapely, ver justificación en IMPL.md del sprint). Preview
+// calcula la geometría real SIN persistir nada; confirm persiste el
+// resultado como una VectorVersion NUEVA en el MISMO IVectorVersionRegistry
+// que el resto del pipeline -- reutilizando el tipo ya existente, no uno
+// paralelo -- más un PhysicalUnionVersion de auditoría versionado por el
+// VectorId de origen, mismo patrón que ComponentGroupSetVersion. La
+// VectorVersion anterior NUNCA se destruye. Cliente Python dedicado con su
+// propio timeout (más alto que Component:TimeoutSeconds: además de las
+// operaciones booleanas/bridging, Python corre una segunda pasada completa
+// del analizador de componentes como validación post-operación no
+// negociable, ver spec.md: "nunca fingir unión").
+builder.Services
+    .AddOptions<PhysicalUnionOptions>()
+    .Bind(builder.Configuration.GetSection(PhysicalUnionOptions.SectionName))
+    .Validate(o => o.TimeoutSeconds > 0, "PhysicalUnion:TimeoutSeconds debe ser mayor a 0.");
+
+builder.Services.AddHttpClient<IPythonPhysicalUnionClient, PythonPhysicalUnionClient>((sp, client) =>
+{
+    var pythonOptions = sp.GetRequiredService<IOptions<PythonEngineOptions>>().Value;
+    var physicalUnionOptions = sp.GetRequiredService<IOptions<PhysicalUnionOptions>>().Value;
+    client.BaseAddress = new Uri(pythonOptions.BaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(physicalUnionOptions.TimeoutSeconds);
+});
+
+builder.Services
+    .AddOptions<PhysicalUnionRegistryOptions>()
+    .Bind(builder.Configuration.GetSection(PhysicalUnionRegistryOptions.SectionName));
+
+builder.Services.AddSingleton<IPhysicalUnionVersionRegistry, PersistentPhysicalUnionVersionRegistry>();
+builder.Services.AddScoped<IPhysicalUnionService, PhysicalUnionService>();
+
 // Exportación SVG (M1-S10): cierra el primer flujo productivo. Sirve, sin
 // modificar, los mismos bytes ya persistidos por Vectorization/
 // Simplification/Dimensioning -- SIN cliente Python, SIN caché/lock/registro
@@ -503,6 +541,7 @@ app.MapColorPaletteEndpoints();
 app.MapVectorLayerEndpoints();
 app.MapComponentEndpoints();
 app.MapComponentGroupEndpoints();
+app.MapPhysicalUnionEndpoints();
 
 app.Run();
 

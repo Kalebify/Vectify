@@ -1,7 +1,9 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getVectorLayerSvgUrl } from "../../api/vectorLayersApi";
 import { useComponentGroups } from "../../hooks/useComponentGroups";
 import { useExplodedView } from "../../hooks/useExplodedView";
 import { useLayerComponents } from "../../hooks/useLayerComponents";
+import { usePhysicalUnion } from "../../hooks/usePhysicalUnion";
 import { useVectorLayers } from "../../hooks/useVectorLayers";
 import { ComponentTree } from "./ComponentTree";
 import { ExplodedLegend } from "./ExplodedLegend";
@@ -55,6 +57,25 @@ export function LayersPanel({ projectId, imageId, paletteId }: LayersPanelProps)
     paletteId,
   );
 
+  // Unión física CONFIRMADA (M2-S06): la capa de origen pasa a apuntar al
+  // VectorId NUEVO resultante (el anterior sigue existiendo intacto, solo
+  // que esta vista ya no lo muestra como "el vigente" de esa capa) -- un
+  // override puramente local, análogo a cómo Simplification/Dimension
+  // pueden operar sobre un VectorId sin que VectorLayerSetVersion (M2-S02)
+  // se entere; ver IMPL.md del sprint, "Ambigüedades resueltas".
+  const [vectorIdOverrides, setVectorIdOverrides] = useState<Record<string, string>>({});
+  // Memoizado a propósito: useComponentGroups/useLayerComponents dependen de
+  // la IDENTIDAD de este array (deps de sus propios efectos/callbacks) --
+  // recrearlo en cada render (con el mismo contenido) dispararía sus
+  // efectos de más, reintentando fetches ya resueltos innecesariamente.
+  const effectiveLayers = useMemo(
+    () =>
+      (layerSet?.layers ?? []).map((layer) =>
+        vectorIdOverrides[layer.groupId] ? { ...layer, vectorId: vectorIdOverrides[layer.groupId]! } : layer,
+      ),
+    [layerSet, vectorIdOverrides],
+  );
+
   const {
     status: componentsStatus,
     errorMessage: componentsErrorMessage,
@@ -62,7 +83,7 @@ export function LayersPanel({ projectId, imageId, paletteId }: LayersPanelProps)
     selected: selectedComponent,
     compute: computeComponents,
     select: selectComponent,
-  } = useLayerComponents(projectId, imageId, layerSet?.layers ?? []);
+  } = useLayerComponents(projectId, imageId, effectiveLayers);
 
   const {
     groupsByLayer,
@@ -75,14 +96,65 @@ export function LayersPanel({ projectId, imageId, paletteId }: LayersPanelProps)
     ungroup: ungroupComponents,
     rename: renameComponentGroup,
     selectGroupAsSet,
-  } = useComponentGroups(projectId, imageId, layerSet?.layers ?? [], componentsByGroup);
+  } = useComponentGroups(projectId, imageId, effectiveLayers, componentsByGroup);
+
+  const handlePhysicalUnionConfirmed = useCallback((layerGroupId: string, newVectorId: string) => {
+    setVectorIdOverrides((current) => ({ ...current, [layerGroupId]: newVectorId }));
+  }, []);
+
+  // La geometría de la capa cambió (unión física confirmada): los
+  // componentes/grupos calculados para el VectorId ANTERIOR ya no aplican
+  // -- se recalculan sobre el nuevo resultado fusionado, mismo flujo que
+  // "Recalcular componentes", disparado automáticamente. DEBE ir en un
+  // efecto (no llamarse directo en el handler de arriba): `computeComponents`
+  // recién refleja el VectorId nuevo una vez que `effectiveLayers` se
+  // recalculó con el `vectorIdOverrides` YA aplicado -- en el mismo render
+  // del handler todavía apunta al vector anterior (la actualización de
+  // estado de React es asíncrona).
+  const previousOverridesRef = useRef(vectorIdOverrides);
+  useEffect(() => {
+    if (previousOverridesRef.current !== vectorIdOverrides) {
+      previousOverridesRef.current = vectorIdOverrides;
+      computeComponents();
+    }
+  }, [vectorIdOverrides, computeComponents]);
+
+  const {
+    phaseByLayer: physicalUnionPhaseByLayer,
+    previewByLayer: physicalUnionPreviewByLayer,
+    errorMessageByLayer: physicalUnionErrorByLayer,
+    requestPreview: requestPhysicalUnionPreview,
+    cancelPreview: cancelPhysicalUnionPreview,
+    confirm: confirmPhysicalUnion,
+  } = usePhysicalUnion(projectId, imageId, handlePhysicalUnionConfirmed);
+
+  const handleRequestPhysicalUnion = useCallback(
+    (layerGroupId: string, vectorId: string) => {
+      if (!groupSelection || groupSelection.layerGroupId !== layerGroupId) {
+        return;
+      }
+      requestPhysicalUnionPreview(layerGroupId, vectorId, groupSelection.componentIds);
+    },
+    [groupSelection, requestPhysicalUnionPreview],
+  );
+
+  const handleConfirmPhysicalUnion = useCallback(
+    (layerGroupId: string, vectorId: string) => {
+      const preview = physicalUnionPreviewByLayer[layerGroupId];
+      if (!preview) {
+        return;
+      }
+      confirmPhysicalUnion(layerGroupId, vectorId, preview.componentIds);
+    },
+    [physicalUnionPreviewByLayer, confirmPhysicalUnion],
+  );
 
   const { viewMode, separationPercent, setViewMode, setSeparationPercent } = useExplodedView();
 
   const isBusy = status === "generating";
   const isComputingComponents = componentsStatus === "loading";
 
-  const selectedLayer = selectedComponent && layerSet?.layers.find((layer) => layer.groupId === selectedComponent.groupId);
+  const selectedLayer = selectedComponent && effectiveLayers.find((layer) => layer.groupId === selectedComponent.groupId);
   const selectedComponentDetail =
     selectedComponent &&
     componentsByGroup[selectedComponent.groupId]?.find((component) => component.id === selectedComponent.componentId);
@@ -112,7 +184,7 @@ export function LayersPanel({ projectId, imageId, paletteId }: LayersPanelProps)
       {layerSet && (
         <div className="layers-panel__body">
           <div className="layers-panel__sidebar">
-            <LayerList layers={layerSet.layers} visibility={visibility} onToggleVisibility={toggleVisibility} />
+            <LayerList layers={effectiveLayers} visibility={visibility} onToggleVisibility={toggleVisibility} />
 
             <div className="layers-panel__controls">
               <button
@@ -141,7 +213,7 @@ export function LayersPanel({ projectId, imageId, paletteId }: LayersPanelProps)
             )}
 
             <ComponentTree
-              layers={layerSet.layers}
+              layers={effectiveLayers}
               componentsByGroup={componentsByGroup}
               selected={selectedComponent}
               onSelect={selectComponent}
@@ -154,6 +226,12 @@ export function LayersPanel({ projectId, imageId, paletteId }: LayersPanelProps)
               onSelectGroupAsSet={selectGroupAsSet}
               onUngroup={ungroupComponents}
               onRenameGroup={renameComponentGroup}
+              onRequestPhysicalUnion={handleRequestPhysicalUnion}
+              physicalUnionPhaseByLayer={physicalUnionPhaseByLayer}
+              physicalUnionPreviewByLayer={physicalUnionPreviewByLayer}
+              physicalUnionErrorByLayer={physicalUnionErrorByLayer}
+              onConfirmPhysicalUnion={handleConfirmPhysicalUnion}
+              onCancelPhysicalUnion={cancelPhysicalUnionPreview}
             />
 
             {selectedComponentDetail && selectedLayer && (
@@ -186,7 +264,7 @@ export function LayersPanel({ projectId, imageId, paletteId }: LayersPanelProps)
             />
 
             <LayerCanvas
-              layers={layerSet.layers}
+              layers={effectiveLayers}
               visibility={visibility}
               sourceWidthPx={layerSet.sourceWidthPx}
               sourceHeightPx={layerSet.sourceHeightPx}
@@ -200,7 +278,7 @@ export function LayersPanel({ projectId, imageId, paletteId }: LayersPanelProps)
             />
 
             {viewMode === "exploded" && (
-              <ExplodedLegend layers={layerSet.layers} componentsByGroup={componentsByGroup} />
+              <ExplodedLegend layers={effectiveLayers} componentsByGroup={componentsByGroup} />
             )}
           </div>
         </div>

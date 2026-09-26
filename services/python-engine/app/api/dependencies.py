@@ -5,6 +5,7 @@ from app.services.color_palette_service import ColorPaletteService
 from app.services.component_analysis_service import ComponentAnalysisService
 from app.services.info_service import InfoService
 from app.services.path_checker_service import PathCheckerService
+from app.services.physical_union_service import PhysicalUnionService
 from app.services.preprocessing_service import PreprocessingService
 from app.services.simplification_service import SimplificationService
 from app.services.threshold_service import ThresholdingService
@@ -41,3 +42,7 @@ def get_color_palette_service(settings: Settings = Depends(get_settings)) -> Col
 
 def get_component_analysis_service(settings: Settings = Depends(get_settings)) -> ComponentAnalysisService:
     return ComponentAnalysisService(settings)
+
+
+def get_physical_union_service(settings: Settings = Depends(get_settings)) -> PhysicalUnionService:
+    return PhysicalUnionService(settings)

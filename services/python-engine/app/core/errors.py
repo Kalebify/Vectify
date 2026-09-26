@@ -161,6 +161,52 @@ class ComponentAnalysisTimeoutError(PreprocessingError):
     code = "component_analysis_timeout"
 
 
+class PhysicalUnionTimeoutError(PreprocessingError):
+    """La unión física de componentes (M2-S06, ver
+    app.services.physical_union_service.PhysicalUnionService) tardó más que
+    PhysicalUnion:TimeoutSeconds/physical_union_timeout_seconds y se abortó.
+    Mismo criterio que ComponentAnalysisTimeoutError: el cómputo (booleanas/
+    bridging con Shapely, más la re-validación de componentes sobre el
+    resultado) es puro Python/GEOS sin punto de cancelación cooperativa, se
+    acota con un hilo separado (best effort, ver
+    PhysicalUnionService._union_with_timeout)."""
+
+    code = "physical_union_timeout"
+
+
+class PhysicalUnionInvalidGeometryError(PreprocessingError):
+    """Uno o más de los componentes seleccionados para la unión física
+    (M2-S06) tiene geometría autointersectante, degenerada (menos de 3
+    puntos, área ~0) o que de cualquier otra forma no se puede procesar de
+    forma SEGURA con las operaciones booleanas disponibles (ver
+    app.core.physical_union). Deliberadamente NUNCA se intenta "arreglar"
+    la geometría inválida en silencio (ej. `buffer(0)` de Shapely, que
+    puede alterar la forma sin que el usuario lo sepa) -- se rechaza la
+    operación completa con un mensaje explícito en vez de arriesgar un
+    resultado corrupto (ver spec.md M2-S06, criterio de aceptación: "nunca
+    fingir unión")."""
+
+    code = "physical_union_invalid_geometry"
+
+
+class PhysicalUnionImpossibleError(PreprocessingError):
+    """La unión física (M2-S06) no logró producir una única pieza conexa a
+    partir de los componentes seleccionados: tras generar el resultado (
+    booleanas para piezas solapadas/tangentes, bridges simples/directos
+    para piezas separadas -- ver app.core.physical_union) se reanalizó el
+    SVG resultante con EL MISMO analizador de componentes físicos de M2-S03
+    (app.core.component_analysis.analyze_svg_components) y la cantidad de
+    componentes no coincide con la esperada (las piezas NO seleccionadas
+    intactas, más exactamente 1 pieza fusionada a partir de las
+    seleccionadas). Ver spec.md M2-S06, criterio de aceptación explícito:
+    "Nunca fingir unión si las piezas siguen desconectadas" -- esta
+    excepción es la forma en que ese criterio se hace cumplir: la operación
+    se rechaza por completo (nunca se persiste un resultado parcial o
+    incorrecto) y el mensaje explica el conteo esperado vs. el real."""
+
+    code = "physical_union_impossible"
+
+
 class TooManySubpathsForComponentsError(PreprocessingError):
     """El SVG de entrada del análisis de componentes físicos (M2-S03) tiene
     más subpaths analizables que Component:MaxSubpaths/max_component_subpaths.
