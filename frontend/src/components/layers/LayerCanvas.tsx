@@ -1,3 +1,5 @@
+import type { LayerComponentPayload } from "../../types/components";
+import type { SelectedComponent } from "../../hooks/useLayerComponents";
 import type { VectorLayerPayload } from "../../types/vectorLayers";
 
 interface LayerCanvasProps {
@@ -6,6 +8,17 @@ interface LayerCanvasProps {
   sourceWidthPx: number;
   sourceHeightPx: number;
   getSvgUrl: (vectorId: string) => string;
+  /**
+   * Componentes físicos por capa (M2-S03), opcional -- si se provee (junto
+   * con `onSelectComponent`), se dibuja un overlay clickeable por
+   * componente sobre cada capa VISIBLE, usando sus `bounds` (mismas
+   * unidades que sourceWidthPx/sourceHeightPx, ver spec.md M2-S02:
+   * "normalización de coordenadas") para posicionarlo con inset en
+   * porcentaje -- selección bidireccional lista/canvas.
+   */
+  componentsByGroup?: Record<string, LayerComponentPayload[]>;
+  selected?: SelectedComponent | null;
+  onSelectComponent?: (groupId: string, componentId: string) => void;
 }
 
 /**
@@ -23,7 +36,16 @@ interface LayerCanvasProps {
  * nunca ejecuta script embebido dentro de un `<img>` aunque el SVG ya esté
  * saneado en el backend.
  */
-export function LayerCanvas({ layers, visibility, sourceWidthPx, sourceHeightPx, getSvgUrl }: LayerCanvasProps) {
+export function LayerCanvas({
+  layers,
+  visibility,
+  sourceWidthPx,
+  sourceHeightPx,
+  getSvgUrl,
+  componentsByGroup,
+  selected,
+  onSelectComponent,
+}: LayerCanvasProps) {
   const visibleLayers = layers.filter((layer) => visibility[layer.groupId] ?? true);
 
   return (
@@ -48,6 +70,37 @@ export function LayerCanvas({ layers, visibility, sourceWidthPx, sourceHeightPx,
           />
         ))
       )}
+
+      {onSelectComponent &&
+        visibleLayers.map((layer) => {
+          const components = componentsByGroup?.[layer.groupId];
+          if (!components) {
+            return null;
+          }
+
+          return components.map((component, index) => {
+            const isSelected = selected?.groupId === layer.groupId && selected?.componentId === component.id;
+            const widthPercent = ((component.bounds.maxX - component.bounds.minX) / sourceWidthPx) * 100;
+            const heightPercent = ((component.bounds.maxY - component.bounds.minY) / sourceHeightPx) * 100;
+
+            return (
+              <button
+                key={`${layer.groupId}-${component.id}`}
+                type="button"
+                className={`layer-canvas__component${isSelected ? " layer-canvas__component--selected" : ""}`}
+                style={{
+                  left: `${(component.bounds.minX / sourceWidthPx) * 100}%`,
+                  top: `${(component.bounds.minY / sourceHeightPx) * 100}%`,
+                  width: `${widthPercent}%`,
+                  height: `${heightPercent}%`,
+                }}
+                aria-pressed={isSelected}
+                aria-label={`Pieza ${index + 1} de ${layer.name}`}
+                onClick={() => onSelectComponent(layer.groupId, component.id)}
+              />
+            );
+          });
+        })}
     </div>
   );
 }

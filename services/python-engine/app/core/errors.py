@@ -147,3 +147,29 @@ class TooManySubpathsError(PreprocessingError):
     agotar CPU/memoria antes siquiera de llegar al timeout."""
 
     code = "too_many_subpaths"
+
+
+class ComponentAnalysisTimeoutError(PreprocessingError):
+    """El análisis de componentes físicos independientes por capa (M2-S03,
+    ver app.services.component_analysis_service.ComponentAnalysisService)
+    tardó más que Component:TimeoutSeconds/component_timeout_seconds y se
+    abortó. Mismo criterio que CheckTimeoutError: la detección de
+    contención/contacto entre subpaths es O(n^2) sobre la cantidad de
+    subpaths analizables (puro Python), se acota con un hilo separado (best
+    effort, ver ComponentAnalysisService._analyze_with_timeout)."""
+
+    code = "component_analysis_timeout"
+
+
+class TooManySubpathsForComponentsError(PreprocessingError):
+    """El SVG de entrada del análisis de componentes físicos (M2-S03) tiene
+    más subpaths analizables que Component:MaxSubpaths/max_component_subpaths.
+    Salvaguarda de rendimiento explícita (además del timeout), mismo
+    criterio que TooManySubpathsError: tanto la detección de contención
+    (nesting, O(n^2) con un point-in-polygon O(m) por par) como la de
+    contacto/"tocarse" (O(n^2) comparaciones de segmento a segmento) escalan
+    con el cuadrado de la cantidad de subpaths -- un diseño con una cantidad
+    excesiva se rechaza de forma controlada en vez de arriesgar agotar
+    CPU/memoria antes de llegar al timeout."""
+
+    code = "too_many_component_subpaths"

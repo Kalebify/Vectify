@@ -83,6 +83,34 @@ class Settings(BaseSettings):
     color_palette_min_colors: int = 1
     color_palette_max_colors_upper_bound: int = 64
 
+    # Componentes físicos independientes por capa (M2-S03). spec.md no
+    # cuantifica el criterio exacto de "tocarse" ni el umbral de "componente
+    # diminuto" ("el implementador decide y documenta"); supuestos
+    # documentados en el reporte del sprint, mismo estilo que
+    # Check:DefaultCloseGapRatio/DefaultDuplicatePointRatio (M1-S08):
+    # component_default_touch_ratio (0.1% de la diagonal del SVG) es más
+    # estricto que la tolerancia de "casi cerrado" de M1-S08 (0.5%) a
+    # propósito -- "tocarse" acá decide si dos piezas se fusionan en una sola
+    # (una decisión de mayor impacto que solo avisar de un posible defecto),
+    # así que el umbral es más conservador. component_default_tiny_area_ratio
+    # (0.05% del área total del bounding box de la capa) NO filtra
+    # componentes diminutos (ver app.core.component_analysis): se reportan
+    # igual, marcados `is_tiny`, porque en el dominio de corte láser una
+    # pieza real -aunque chica- nunca debería desaparecer en silencio.
+    # component_timeout_seconds es un presupuesto interno del proceso Python
+    # (mismo criterio que check_timeout_seconds): tanto la detección de
+    # contención como la de contacto son O(n^2) puro Python, se acotan con un
+    # hilo separado. max_component_subpaths acota la cantidad de subpaths
+    # analizables antes de intentar ambos análisis O(n^2).
+    component_timeout_seconds: int = 15
+    max_component_subpaths: int = 20_000
+    component_default_touch_ratio: float = 0.001
+    component_default_tiny_area_ratio: float = 0.0005
+    component_min_touch_ratio: float = 0.0
+    component_max_touch_ratio: float = 0.5
+    component_min_tiny_area_ratio: float = 0.0
+    component_max_tiny_area_ratio: float = 0.5
+
     # Salvaguarda de rendimiento: si la imagen tiene más colores únicos que
     # esto (fotografías/degradés de tono continuo, no el caso de uso
     # principal de esta herramienta -- logos/diseños gráficos para corte

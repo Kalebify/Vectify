@@ -2,6 +2,7 @@ from fastapi import Depends
 
 from app.core.config import Settings, get_settings
 from app.services.color_palette_service import ColorPaletteService
+from app.services.component_analysis_service import ComponentAnalysisService
 from app.services.info_service import InfoService
 from app.services.path_checker_service import PathCheckerService
 from app.services.preprocessing_service import PreprocessingService
@@ -36,3 +37,7 @@ def get_path_checker_service(settings: Settings = Depends(get_settings)) -> Path
 
 def get_color_palette_service(settings: Settings = Depends(get_settings)) -> ColorPaletteService:
     return ColorPaletteService(settings)
+
+
+def get_component_analysis_service(settings: Settings = Depends(get_settings)) -> ComponentAnalysisService:
+    return ComponentAnalysisService(settings)

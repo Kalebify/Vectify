@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.routes.check import router as check_router
 from app.api.routes.color_palette import router as color_palette_router
+from app.api.routes.components import router as components_router
 from app.api.routes.health import router as health_router
 from app.api.routes.info import router as info_router
 from app.api.routes.preprocess import router as preprocess_router
@@ -21,6 +22,7 @@ from app.core.config import get_settings
 from app.core.errors import (
     CheckTimeoutError,
     ColorPaletteTimeoutError,
+    ComponentAnalysisTimeoutError,
     CorruptImageError,
     DimensionsExceededError,
     EmptyMaskError,
@@ -32,6 +34,7 @@ from app.core.errors import (
     SvgInputTooLargeError,
     SvgOutputTooLargeError,
     TooManySubpathsError,
+    TooManySubpathsForComponentsError,
     VectorizationEngineError,
     VectorizationTimeoutError,
 )
@@ -51,9 +54,10 @@ app = FastAPI(
         "(motor VTracer, encapsulado detrás de app.core.vector_engine.VectorEngine), de "
         "simplificación de nodos de un SVG ya vectorizado (Douglas-Peucker, ver "
         "app.core.simplification_pipeline), del Laser Checker de paths abiertos/duplicados "
-        "(análisis de solo lectura, ver app.core.path_checker) y de detección/reducción de "
+        "(análisis de solo lectura, ver app.core.path_checker), de detección/reducción de "
         "paleta de colores dominantes (clustering determinista en espacio Lab, ver "
-        "app.core.color_palette_pipeline)."
+        "app.core.color_palette_pipeline) y de componentes físicos independientes por capa "
+        "(M2-S03, análisis de solo lectura, ver app.core.component_analysis)."
     ),
     version=settings.service_version,
 )
@@ -66,6 +70,7 @@ app.include_router(vectorize_router)
 app.include_router(simplify_router)
 app.include_router(check_router)
 app.include_router(color_palette_router)
+app.include_router(components_router)
 
 # Códigos HTTP por tipo de error controlado del pipeline (ver "Errores y
 # límites" de spec.md): imagen corrupta -> 400, dimensiones excesivas -> 413,
@@ -94,6 +99,8 @@ _STATUS_BY_ERROR: dict[type[PreprocessingError], int] = {
     TooManySubpathsError: 413,
     SimplificationTimeoutError: 504,
     ColorPaletteTimeoutError: 504,
+    ComponentAnalysisTimeoutError: 504,
+    TooManySubpathsForComponentsError: 413,
 }
 
 
