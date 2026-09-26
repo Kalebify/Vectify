@@ -1,7 +1,10 @@
 import { getVectorLayerSvgUrl } from "../../api/vectorLayersApi";
+import { useExplodedView } from "../../hooks/useExplodedView";
 import { useLayerComponents } from "../../hooks/useLayerComponents";
 import { useVectorLayers } from "../../hooks/useVectorLayers";
 import { ComponentTree } from "./ComponentTree";
+import { ExplodedLegend } from "./ExplodedLegend";
+import { ExplodedViewControls } from "./ExplodedViewControls";
 import { LayerCanvas } from "./LayerCanvas";
 import { LayerList } from "./LayerList";
 
@@ -36,6 +39,13 @@ function formatUnits(value: number): string {
  * Consume la paleta CONFIRMADA de M2-S01 (paletteId) -- no vuelve a mostrar
  * ni editar los grupos de color en sí, eso es responsabilidad exclusiva de
  * ColorPalettePanel.
+ *
+ * También orquesta spec.md M2-S04 ("vista explotada"): `useExplodedView`
+ * decide únicamente CÓMO se dibuja el mismo LayerCanvas (ensamblada o
+ * explotada) -- `visibility` (M2-S02) y `componentsByGroup`/`selected`
+ * (M2-S03) son exactamente los mismos objetos en ambos modos, así que
+ * aislar/ocultar un color y la selección de un componente ya son
+ * consistentes entre las dos vistas sin ningún código adicional.
  */
 export function LayersPanel({ projectId, imageId, paletteId }: LayersPanelProps) {
   const { status, layerSet, visibility, errorMessage, generate, toggleVisibility } = useVectorLayers(
@@ -52,6 +62,8 @@ export function LayersPanel({ projectId, imageId, paletteId }: LayersPanelProps)
     compute: computeComponents,
     select: selectComponent,
   } = useLayerComponents(projectId, imageId, layerSet?.layers ?? []);
+
+  const { viewMode, separationPercent, setViewMode, setSeparationPercent } = useExplodedView();
 
   const isBusy = status === "generating";
   const isComputingComponents = componentsStatus === "loading";
@@ -136,16 +148,31 @@ export function LayersPanel({ projectId, imageId, paletteId }: LayersPanelProps)
             )}
           </div>
 
-          <LayerCanvas
-            layers={layerSet.layers}
-            visibility={visibility}
-            sourceWidthPx={layerSet.sourceWidthPx}
-            sourceHeightPx={layerSet.sourceHeightPx}
-            getSvgUrl={(vectorId) => getVectorLayerSvgUrl(projectId, imageId, vectorId)}
-            componentsByGroup={componentsByGroup}
-            selected={selectedComponent}
-            onSelectComponent={selectComponent}
-          />
+          <div className="layers-panel__canvas-area">
+            <ExplodedViewControls
+              viewMode={viewMode}
+              onChangeViewMode={setViewMode}
+              separationPercent={separationPercent}
+              onChangeSeparationPercent={setSeparationPercent}
+            />
+
+            <LayerCanvas
+              layers={layerSet.layers}
+              visibility={visibility}
+              sourceWidthPx={layerSet.sourceWidthPx}
+              sourceHeightPx={layerSet.sourceHeightPx}
+              getSvgUrl={(vectorId) => getVectorLayerSvgUrl(projectId, imageId, vectorId)}
+              componentsByGroup={componentsByGroup}
+              selected={selectedComponent}
+              onSelectComponent={selectComponent}
+              exploded={viewMode === "exploded"}
+              separationPercent={separationPercent}
+            />
+
+            {viewMode === "exploded" && (
+              <ExplodedLegend layers={layerSet.layers} componentsByGroup={componentsByGroup} />
+            )}
+          </div>
         </div>
       )}
 
