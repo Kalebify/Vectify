@@ -3,13 +3,16 @@ import { getVectorLayerSvgUrl } from "../../api/vectorLayersApi";
 import { useComponentGroups } from "../../hooks/useComponentGroups";
 import { useExplodedView } from "../../hooks/useExplodedView";
 import { useLayerComponents } from "../../hooks/useLayerComponents";
+import { useManufacturingOperations } from "../../hooks/useManufacturingOperations";
 import { usePhysicalUnion } from "../../hooks/usePhysicalUnion";
 import { useVectorLayers } from "../../hooks/useVectorLayers";
+import type { ManufacturingOperationValue } from "../../types/manufacturingOperations";
 import { ComponentTree } from "./ComponentTree";
 import { ExplodedLegend } from "./ExplodedLegend";
 import { ExplodedViewControls } from "./ExplodedViewControls";
 import { LayerCanvas } from "./LayerCanvas";
 import { LayerList } from "./LayerList";
+import { ManufacturingOperationSummary } from "./ManufacturingOperationSummary";
 
 interface LayersPanelProps {
   projectId: string;
@@ -151,6 +154,19 @@ export function LayersPanel({ projectId, imageId, paletteId }: LayersPanelProps)
 
   const { viewMode, separationPercent, setViewMode, setSeparationPercent } = useExplodedView();
 
+  // Intención de fabricación por capa (M2-S07): pura metadata, nunca toca
+  // geometría -- ver useManufacturingOperations. Se resuelve contra el
+  // layerSetId ACTUAL (no contra vectorIdOverrides: una unión física
+  // confirmada, M2-S06, no cambia qué capa DE COLOR es, solo su geometría).
+  const {
+    operations: manufacturingOperations,
+    summary: manufacturingSummary,
+    errorMessage: manufacturingErrorMessage,
+    mutatingGroupId: manufacturingMutatingGroupId,
+    assign: assignManufacturingOperation,
+  } = useManufacturingOperations(projectId, imageId, paletteId, layerSet?.layerSetId ?? null);
+  const [manufacturingFilter, setManufacturingFilter] = useState<ManufacturingOperationValue | "all">("all");
+
   const isBusy = status === "generating";
   const isComputingComponents = componentsStatus === "loading";
 
@@ -184,7 +200,27 @@ export function LayersPanel({ projectId, imageId, paletteId }: LayersPanelProps)
       {layerSet && (
         <div className="layers-panel__body">
           <div className="layers-panel__sidebar">
-            <LayerList layers={effectiveLayers} visibility={visibility} onToggleVisibility={toggleVisibility} />
+            <ManufacturingOperationSummary
+              summary={manufacturingSummary}
+              filter={manufacturingFilter}
+              onChangeFilter={setManufacturingFilter}
+            />
+
+            {manufacturingErrorMessage && (
+              <p className="upload-panel__error" role="alert">
+                {manufacturingErrorMessage}
+              </p>
+            )}
+
+            <LayerList
+              layers={effectiveLayers}
+              visibility={visibility}
+              onToggleVisibility={toggleVisibility}
+              operations={manufacturingOperations}
+              onChangeOperation={assignManufacturingOperation}
+              mutatingGroupId={manufacturingMutatingGroupId}
+              operationFilter={manufacturingFilter}
+            />
 
             <div className="layers-panel__controls">
               <button
