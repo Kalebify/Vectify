@@ -1,0 +1,18 @@
+{
+  "card_id": "3c1d77b2-6398-8164-bdeb-cbc507a835d0",
+  "card_url": "https://app.notion.com/p/3c1d77b263988164bdebcbc507a835d0",
+  "title": "M2-S07 · Operación por color: corte/grabado",
+  "stack": "React (selector/filtros/resumen), ASP.NET Core (persistir ManufacturingOperation por capa/version)",
+  "branch": "sprint/3c1d77b2-operacion-color",
+  "column": "Doing",
+  "phase": "implementation",
+  "fix_rounds": 0,
+  "preview_url": null,
+  "pr_url": null,
+  "started_at": "2026-09-26T00:00:00Z",
+  "exceptions": [
+    "Corrida en modo autonomo dentro del backlog M2-S01..M2-S07 (autorizado explicitamente por el usuario).",
+    "Ultima tarjeta de MVP2: al cerrarse, todo el backlog M2-S01..M2-S07 queda completo.",
+    "Tarjeta pura metadata (no toca geometria), similar en espiritu a M1-S09 Dimensiones."
+  ]
+}
