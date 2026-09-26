@@ -17,5 +17,5 @@ def test_info_capabilities_include_every_real_pipeline_stage(client):
     response = client.get("/api/v1/info")
 
     body = response.json()
-    for capability in ("preprocess", "threshold", "vectorize", "simplify", "check", "color-palette"):
+    for capability in ("preprocess", "threshold", "vectorize", "vectorize-layers", "simplify", "check", "color-palette"):
         assert capability in body["capabilities"]

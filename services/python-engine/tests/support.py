@@ -194,4 +194,43 @@ def make_solid_colors_png_bytes(width: int = 12, height: int = 12) -> bytes:
     return buffer.tobytes()
 
 
+def make_positioned_square_mask_png_bytes(size: int, square: int, offset_x: int, offset_y: int) -> bytes:
+    """Máscara B/N con un cuadrado blanco (foreground=255) de lado `square`
+    posicionado en (offset_x, offset_y) -- a diferencia de
+    make_square_mask_png_bytes (que siempre lo centra), permite construir
+    pares de máscaras con posiciones conocidas y controladas. Usada para
+    probar capas solapadas/no solapadas y alineación pixel->vector (M2-S02,
+    ver spec.md, "Pruebas")."""
+    image = np.zeros((size, size), dtype=np.uint8)
+    image[offset_y : offset_y + square, offset_x : offset_x + square] = 255
+    success, buffer = cv2.imencode(".png", image)
+    assert success
+    return buffer.tobytes()
+
+
+def make_sparse_mask_png_bytes(size: int = 40, block: int = 4, gap: int = 4) -> bytes:
+    """Máscara B/N dispersa: bloques blancos de `block`x`block` píxeles
+    separados por huecos de `gap` píxeles, en una grilla regular sobre fondo
+    negro (varios componentes chicos y desconectados entre sí, no un único
+    bloque sólido). La máscara en sí sigue siendo estrictamente 0/255 (nunca
+    semitonos): simula la máscara binaria de un ColorGroup con
+    `has_partial_alpha=True` (M2-S01) -- el grupo se originó de una zona con
+    transparencia parcial en la imagen ORIGINAL, pero la máscara binaria que
+    llega a vectorizar es la misma forma 0/255 que cualquier otra. Ver
+    spec.md M2-S02, "Pruebas": "transparencia (grupos que vienen de zonas con
+    alpha parcial)" -- usada para confirmar que vectorizar una capa así de
+    dispersa no falla ni produce geometría corrupta. Bloques de varios
+    píxeles (no puntos aislados de 1px, que un motor de trazado puede
+    descartar como ruido por debajo de su área mínima) para que el resultado
+    sea determinísticamente no vacío."""
+    image = np.zeros((size, size), dtype=np.uint8)
+    step = block + gap
+    for y in range(0, size - block + 1, step):
+        for x in range(0, size - block + 1, step):
+            image[y : y + block, x : x + block] = 255
+    success, buffer = cv2.imencode(".png", image)
+    assert success
+    return buffer.tobytes()
+
+
 NOT_AN_IMAGE = b"esto no es una imagen"

@@ -1,0 +1,16 @@
+{
+  "card_id": "3c1d77b2-6398-81eb-b43f-e001873ccedc",
+  "card_url": "https://app.notion.com/p/3c1d77b2639881ebb43fe001873ccedc",
+  "title": "M2-S02 · Color → capas de fabricación",
+  "stack": "Python (vectorizacion por mascara), ASP.NET Core (VectorLayer/orquestacion), React (panel Layers)",
+  "branch": "sprint/3c1d77b2-capas-color",
+  "column": "Done",
+  "phase": "review",
+  "fix_rounds": 0,
+  "preview_url": null,
+  "pr_url": "https://github.com/Kalebify/Vectify/pull/16",
+  "started_at": "2026-09-26T00:00:00Z",
+  "exceptions": [
+    "Corrida en modo autonomo dentro del backlog M2-S01..M2-S07 (autorizado explicitamente por el usuario)."
+  ]
+}
