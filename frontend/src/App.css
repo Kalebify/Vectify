@@ -1641,6 +1641,13 @@ main {
   background: color-mix(in srgb, var(--accent) 25%, transparent);
 }
 
+/* Grupo lógico de componentes (M2-S05) resaltado "como conjunto": todos sus
+   miembros a la vez, distinto de la selección individual de una sola pieza. */
+.layer-canvas__component--group-selected {
+  border: 2px dashed var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
 .component-tree {
   list-style: none;
   margin: 0;
@@ -1704,6 +1711,72 @@ main {
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 1px 5px;
+}
+
+/* --- Agrupación lógica de componentes (M2-S05) --- */
+
+.component-tree__component-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.component-tree__component-row .component-tree__item {
+  flex: 1;
+}
+
+.component-tree__group-action {
+  margin-top: 6px;
+  align-self: flex-start;
+}
+
+.component-tree__groups {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 8px 0 0;
+  border-top: 1px dashed var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.component-tree__group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.component-tree__group-select {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.component-tree__group-select[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+.component-tree__group-name {
+  flex: 1;
+  min-width: 80px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.component-tree__group-stale {
+  flex-basis: 100%;
+  font-size: 11px;
+  color: var(--warning, #b45309);
 }
 
 .component-details {

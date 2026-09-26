@@ -389,6 +389,22 @@ builder.Services
 builder.Services.AddSingleton<IComponentVersionRegistry, PersistentComponentVersionRegistry>();
 builder.Services.AddScoped<IComponentAnalysisService, ComponentAnalysisService>();
 
+// Agrupación LÓGICA de componentes (M2-S05): CUARTA tarjeta de MVP2 sobre el
+// módulo de componentes. A diferencia de M2-S03, NO hay ninguna llamada a
+// Python ni a storage: agrupar/desagrupar/renombrar son ediciones de
+// metadata puras que referencian componentIds YA calculados (vía
+// IComponentAnalysisService.FindLatest, solo lectura), nunca tocan paths ni
+// crean una nueva VectorVersion/ComponentSetVersion. Mismo patrón de
+// versionado inmutable (nunca mutar una versión existente) que el resto del
+// pipeline, persistido en disco con el mismo criterio exacto que
+// PersistentComponentVersionRegistry (sidecar por VectorId).
+builder.Services
+    .AddOptions<ComponentGroupRegistryOptions>()
+    .Bind(builder.Configuration.GetSection(ComponentGroupRegistryOptions.SectionName));
+
+builder.Services.AddSingleton<IComponentGroupVersionRegistry, PersistentComponentGroupVersionRegistry>();
+builder.Services.AddScoped<IComponentGroupService, ComponentGroupService>();
+
 // Exportación SVG (M1-S10): cierra el primer flujo productivo. Sirve, sin
 // modificar, los mismos bytes ya persistidos por Vectorization/
 // Simplification/Dimensioning -- SIN cliente Python, SIN caché/lock/registro
@@ -486,6 +502,7 @@ app.MapExportEndpoints();
 app.MapColorPaletteEndpoints();
 app.MapVectorLayerEndpoints();
 app.MapComponentEndpoints();
+app.MapComponentGroupEndpoints();
 
 app.Run();
 

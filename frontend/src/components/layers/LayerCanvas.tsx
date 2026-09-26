@@ -20,6 +20,16 @@ interface LayerCanvasProps {
   selected?: SelectedComponent | null;
   onSelectComponent?: (groupId: string, componentId: string) => void;
   /**
+   * Grupo lógico de componentes (M2-S05) actualmente resaltado "como
+   * conjunto" -- interpretación de "mover/seleccionar como conjunto cuando
+   * el editor lo permita" (ver spec.md, "Ambigüedades detectadas"): todos
+   * sus `componentIds` se resaltan a la vez, independientemente de
+   * `selected` (que sigue siendo la selección INDIVIDUAL de una sola
+   * pieza). Confinado a UNA capa (`layerGroupId`) a la vez, igual que
+   * `ComponentGroup` mismo.
+   */
+  highlightedGroup?: { layerGroupId: string; componentIds: string[] } | null;
+  /**
    * Vista explotada de spec.md M2-S04: cuando es `true`, cada capa se
    * desplaza diagonalmente según su índice EN `layers` (no en
    * `visibleLayers` -- así ocultar una capa no reacomoda a las demás),
@@ -72,6 +82,7 @@ export function LayerCanvas({
   componentsByGroup,
   selected,
   onSelectComponent,
+  highlightedGroup,
   exploded = false,
   separationPercent = 0,
 }: LayerCanvasProps) {
@@ -114,6 +125,8 @@ export function LayerCanvas({
                 components &&
                 components.map((component, index) => {
                   const isSelected = selected?.groupId === layer.groupId && selected?.componentId === component.id;
+                  const isGroupHighlighted =
+                    highlightedGroup?.layerGroupId === layer.groupId && highlightedGroup.componentIds.includes(component.id);
                   const widthPercent = ((component.bounds.maxX - component.bounds.minX) / sourceWidthPx) * 100;
                   const heightPercent = ((component.bounds.maxY - component.bounds.minY) / sourceHeightPx) * 100;
 
@@ -121,14 +134,16 @@ export function LayerCanvas({
                     <button
                       key={`${layer.groupId}-${component.id}`}
                       type="button"
-                      className={`layer-canvas__component${isSelected ? " layer-canvas__component--selected" : ""}`}
+                      className={`layer-canvas__component${isSelected ? " layer-canvas__component--selected" : ""}${
+                        isGroupHighlighted ? " layer-canvas__component--group-selected" : ""
+                      }`}
                       style={{
                         left: `${(component.bounds.minX / sourceWidthPx) * 100}%`,
                         top: `${(component.bounds.minY / sourceHeightPx) * 100}%`,
                         width: `${widthPercent}%`,
                         height: `${heightPercent}%`,
                       }}
-                      aria-pressed={isSelected}
+                      aria-pressed={isSelected || isGroupHighlighted}
                       aria-label={`Pieza ${index + 1} de ${layer.name}`}
                       onClick={() => onSelectComponent(layer.groupId, component.id)}
                     />
