@@ -1,5 +1,7 @@
 import { getVectorLayerSvgUrl } from "../../api/vectorLayersApi";
+import { useLayerComponents } from "../../hooks/useLayerComponents";
 import { useVectorLayers } from "../../hooks/useVectorLayers";
+import { ComponentTree } from "./ComponentTree";
 import { LayerCanvas } from "./LayerCanvas";
 import { LayerList } from "./LayerList";
 
@@ -17,6 +19,17 @@ const STATUS_LABEL: Record<string, string> = {
   error: "",
 };
 
+const COMPONENTS_STATUS_LABEL: Record<string, string> = {
+  idle: "",
+  loading: "Calculando componentes físicos por capa…",
+  ready: "Componentes calculados: seleccioná una pieza en la lista o en el canvas para localizarla.",
+  error: "",
+};
+
+function formatUnits(value: number): string {
+  return Math.round(value).toLocaleString("es-AR");
+}
+
 /**
  * Orquesta el flujo de "Usuario podrá" de spec.md M2-S02: ver una capa por
  * color, aislarla, ocultarla y comprobar qué geometría pertenece a ella.
@@ -31,7 +44,22 @@ export function LayersPanel({ projectId, imageId, paletteId }: LayersPanelProps)
     paletteId,
   );
 
+  const {
+    status: componentsStatus,
+    errorMessage: componentsErrorMessage,
+    componentsByGroup,
+    selected: selectedComponent,
+    compute: computeComponents,
+    select: selectComponent,
+  } = useLayerComponents(projectId, imageId, layerSet?.layers ?? []);
+
   const isBusy = status === "generating";
+  const isComputingComponents = componentsStatus === "loading";
+
+  const selectedLayer = selectedComponent && layerSet?.layers.find((layer) => layer.groupId === selectedComponent.groupId);
+  const selectedComponentDetail =
+    selectedComponent &&
+    componentsByGroup[selectedComponent.groupId]?.find((component) => component.id === selectedComponent.componentId);
 
   return (
     <div className="layers-panel">
@@ -57,13 +85,66 @@ export function LayersPanel({ projectId, imageId, paletteId }: LayersPanelProps)
 
       {layerSet && (
         <div className="layers-panel__body">
-          <LayerList layers={layerSet.layers} visibility={visibility} onToggleVisibility={toggleVisibility} />
+          <div className="layers-panel__sidebar">
+            <LayerList layers={layerSet.layers} visibility={visibility} onToggleVisibility={toggleVisibility} />
+
+            <div className="layers-panel__controls">
+              <button
+                type="button"
+                className="upload-actions__button"
+                onClick={computeComponents}
+                disabled={isComputingComponents}
+              >
+                {Object.keys(componentsByGroup).length > 0 ? "Recalcular componentes" : "Calcular componentes"}
+              </button>
+              <span className="layers-panel__status" role="status">
+                {COMPONENTS_STATUS_LABEL[componentsStatus]}
+              </span>
+            </div>
+
+            {componentsErrorMessage && (
+              <p className="upload-panel__error" role="alert">
+                {componentsErrorMessage}
+              </p>
+            )}
+
+            <ComponentTree
+              layers={layerSet.layers}
+              componentsByGroup={componentsByGroup}
+              selected={selectedComponent}
+              onSelect={selectComponent}
+            />
+
+            {selectedComponentDetail && selectedLayer && (
+              <dl className="service-card__details component-details" aria-label="Métricas de la pieza seleccionada">
+                <div>
+                  <dt>Pieza seleccionada</dt>
+                  <dd>{selectedLayer.name}</dd>
+                </div>
+                <div>
+                  <dt>Área aproximada</dt>
+                  <dd>{formatUnits(selectedComponentDetail.area)} u²</dd>
+                </div>
+                <div>
+                  <dt>Bounds</dt>
+                  <dd>
+                    ({formatUnits(selectedComponentDetail.bounds.minX)}, {formatUnits(selectedComponentDetail.bounds.minY)}) –
+                    ({formatUnits(selectedComponentDetail.bounds.maxX)}, {formatUnits(selectedComponentDetail.bounds.maxY)})
+                  </dd>
+                </div>
+              </dl>
+            )}
+          </div>
+
           <LayerCanvas
             layers={layerSet.layers}
             visibility={visibility}
             sourceWidthPx={layerSet.sourceWidthPx}
             sourceHeightPx={layerSet.sourceHeightPx}
             getSvgUrl={(vectorId) => getVectorLayerSvgUrl(projectId, imageId, vectorId)}
+            componentsByGroup={componentsByGroup}
+            selected={selectedComponent}
+            onSelectComponent={selectComponent}
           />
         </div>
       )}

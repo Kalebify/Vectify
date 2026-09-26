@@ -1526,6 +1526,13 @@ main {
   }
 }
 
+.layers-panel__sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
 .layer-list {
   list-style: none;
   margin: 0;
@@ -1612,6 +1619,95 @@ main {
   margin: 0;
   padding: 12px;
   text-align: center;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.layer-canvas__component {
+  position: absolute;
+  margin: 0;
+  padding: 0;
+  border: 1px dashed transparent;
+  background: transparent;
+  cursor: pointer;
+}
+
+.layer-canvas__component:hover,
+.layer-canvas__component:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+.layer-canvas__component--selected {
+  border: 2px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.component-tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.component-tree__layer {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.component-tree__layer-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-h);
+  margin-bottom: 6px;
+}
+
+.component-tree__layer-name {
+  font-weight: 600;
+}
+
+.component-tree__components {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.component-tree__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.component-tree__item[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+.component-tree__tiny-badge {
+  font-size: 11px;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.component-details {
   font-size: 13px;
   color: var(--text);
 }

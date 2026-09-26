@@ -2,6 +2,7 @@ using Microsoft.Extensions.Options;
 using Vectify.Api.Checking;
 using Vectify.Api.Clients;
 using Vectify.Api.ColorPalette;
+using Vectify.Api.Components;
 using Vectify.Api.Contracts;
 using Vectify.Api.Dimensioning;
 using Vectify.Api.Endpoints;
@@ -355,6 +356,39 @@ builder.Services
 builder.Services.AddSingleton<IVectorLayerSetRegistry, PersistentVectorLayerSetRegistry>();
 builder.Services.AddScoped<IVectorLayerService, VectorLayerService>();
 
+// Componentes físicos independientes por capa (M2-S03): TERCERA tarjeta de
+// MVP2. La propia tarjeta no tiene una sección "ASP.NET Core" explícita en
+// Notion -- se sigue el mismo patrón arquitectónico de TODO el proyecto
+// (Python analiza, .NET persiste/orquesta/expone, React consume, ver
+// spec.md M2-S03, "Ambigüedades detectadas"): el cálculo geométrico de
+// connected components corre en Python reutilizando la infraestructura YA
+// COMPARTIDA de M1-S08 (tokenizer de paths/subpaths/transform), esta capa
+// fina localiza el SVG de origen -- cada capa YA ES una VectorVersion
+// normal (M2-S02) -- llama a Python y persiste el resultado versionado. Sin
+// tolerancias ajustables desde acá (Python aplica sus propios defaults).
+// Cliente Python dedicado con su propio timeout y un historial de
+// ComponentSetVersion persistido en disco, cacheado por VectorId (inmutable
+// una vez generado -- no necesita ninguna otra clave de caché).
+builder.Services
+    .AddOptions<ComponentOptions>()
+    .Bind(builder.Configuration.GetSection(ComponentOptions.SectionName))
+    .Validate(o => o.TimeoutSeconds > 0, "Component:TimeoutSeconds debe ser mayor a 0.");
+
+builder.Services.AddHttpClient<IPythonComponentClient, PythonComponentClient>((sp, client) =>
+{
+    var pythonOptions = sp.GetRequiredService<IOptions<PythonEngineOptions>>().Value;
+    var componentOptions = sp.GetRequiredService<IOptions<ComponentOptions>>().Value;
+    client.BaseAddress = new Uri(pythonOptions.BaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(componentOptions.TimeoutSeconds);
+});
+
+builder.Services
+    .AddOptions<ComponentRegistryOptions>()
+    .Bind(builder.Configuration.GetSection(ComponentRegistryOptions.SectionName));
+
+builder.Services.AddSingleton<IComponentVersionRegistry, PersistentComponentVersionRegistry>();
+builder.Services.AddScoped<IComponentAnalysisService, ComponentAnalysisService>();
+
 // Exportación SVG (M1-S10): cierra el primer flujo productivo. Sirve, sin
 // modificar, los mismos bytes ya persistidos por Vectorization/
 // Simplification/Dimensioning -- SIN cliente Python, SIN caché/lock/registro
@@ -451,6 +485,7 @@ app.MapDimensionEndpoints();
 app.MapExportEndpoints();
 app.MapColorPaletteEndpoints();
 app.MapVectorLayerEndpoints();
+app.MapComponentEndpoints();
 
 app.Run();
 

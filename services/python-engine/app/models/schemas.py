@@ -344,6 +344,102 @@ class CheckResponse(BaseModel):
     )
 
 
+class ComponentAnalysisParams(BaseModel):
+    """Parámetros del análisis de componentes físicos independientes por capa
+    (M2-S03): `touch_ratio` (tolerancia de "tocarse" -- distancia mínima
+    segmento-a-segmento entre dos subpaths para considerarlos la MISMA pieza
+    física) y `tiny_area_ratio` (umbral de "componente diminuto"), ambos
+    relativos -- `touch_ratio` a la diagonal del bounding box del SVG
+    completo (mismo criterio que `CheckParams`, M1-S08), `tiny_area_ratio`
+    al ÁREA del bounding box del SVG completo. spec.md no los cuantifica
+    ("el implementador decide y documenta"); los defaults de acá son ese
+    supuesto documentado en el reporte del sprint: ver
+    app.core.config.Settings.component_default_touch_ratio/
+    component_default_tiny_area_ratio."""
+
+    touch_ratio: float = Field(
+        default=0.001,
+        ge=0,
+        le=0.5,
+        description=(
+            "Tolerancia de 'tocarse': distancia mínima segmento-a-segmento entre dos subpaths "
+            "para considerarlos la misma pieza física, como fracción de la diagonal del SVG."
+        ),
+    )
+    tiny_area_ratio: float = Field(
+        default=0.0005,
+        ge=0,
+        le=0.5,
+        description=(
+            "Umbral de 'componente diminuto': área neta del componente, como fracción del área "
+            "del bounding box de todo el SVG, por debajo de la cual se marca is_tiny=true "
+            "(se reporta igual, nunca se filtra)."
+        ),
+    )
+
+
+class ComponentBounds(BaseModel):
+    """Caja delimitadora de un único subpath o componente (no de todo el SVG)."""
+
+    min_x: float
+    min_y: float
+    max_x: float
+    max_y: float
+
+
+class ComponentMember(BaseModel):
+    """Un subpath miembro de un componente físico -- ver
+    app.core.component_analysis. `role` distingue "solid" (suma al área neta
+    del componente) de "hole" (agujero interno, resta -- ver criterio de
+    aceptación de spec.md: "un subpath que es un AGUJERO... pertenece al
+    MISMO componente")."""
+
+    path_index: int = Field(ge=0)
+    subpath_index: int = Field(ge=0)
+    role: Literal["solid", "hole"]
+    bounds: ComponentBounds
+    area: float = Field(ge=0)
+
+
+class ComponentItem(BaseModel):
+    """Un componente físico independiente -- un conjunto de subpaths que
+    forman una única pieza física conexa (unidos por contención de
+    agujero, por contacto dentro de tolerancia, o ambos). `id` es estable
+    DENTRO de esta respuesta/versión (mismo SVG + mismos parámetros -> mismo
+    id, mismo orden), NO necesariamente entre versiones distintas -- ver
+    spec.md, criterio de aceptación."""
+
+    id: str = Field(examples=["component-1"])
+    members: list[ComponentMember] = Field(min_length=1)
+    bounds: ComponentBounds
+    area: float = Field(ge=0, description="Área NETA (sólidos menos agujeros), aproximada (shoelace).")
+    is_tiny: bool = Field(
+        description="True si el área neta está por debajo de ComponentAnalysisParams.tiny_area_ratio -- se reporta igual, nunca se filtra."
+    )
+
+
+class ComponentSummary(BaseModel):
+    component_count: int = Field(ge=0, examples=[3])
+    tiny_component_count: int = Field(ge=0, examples=[0])
+
+
+class ComponentAnalysisResponse(BaseModel):
+    """Respuesta de POST /api/v1/components. Análisis de SOLO LECTURA: nunca
+    modifica el SVG de entrada ni une/separa geometría -- solo INFORMA la
+    estructura física ya existente (ver spec.md M2-S03, "Fuera de alcance")."""
+
+    effective_params: ComponentAnalysisParams
+    summary: ComponentSummary
+    components: list[ComponentItem]
+    skipped_path_count: int = Field(
+        ge=0,
+        description=(
+            "Cantidad de <path> excluidos del análisis por contener comandos/transforms no "
+            "soportados -- ver limitación documentada en app.core.svg_path_parsing."
+        ),
+    )
+
+
 class ColorPaletteParams(BaseModel):
     """Parámetros de detección/reducción de paleta de colores (M2-S01):
     tolerancia de fusión automática (distancia euclídea en espacio Lab, ver
