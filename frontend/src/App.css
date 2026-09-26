@@ -1604,8 +1604,7 @@ main {
 }
 
 .layer-canvas__layer {
-  position: absolute;
-  inset: 0;
+  display: block;
   width: 100%;
   height: 100%;
 }
@@ -1710,4 +1709,145 @@ main {
 .component-details {
   font-size: 13px;
   color: var(--text);
+}
+
+/* --- Vista explotada por colores (M2-S04) --- */
+
+.layers-panel__canvas-area {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.exploded-view-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.exploded-view-controls__mode {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.exploded-view-controls__mode-legend {
+  padding: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.exploded-view-controls__mode-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.exploded-view-controls__mode-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.exploded-view-controls__mode-option:has(input:checked) {
+  border-color: var(--accent);
+  color: var(--text-h);
+}
+
+.exploded-view-controls__separation {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-h);
+}
+
+.exploded-view-controls__separation input[type="number"] {
+  width: 84px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--text-h);
+}
+
+.exploded-view-controls__separation-unit {
+  color: var(--text);
+}
+
+/*
+ * `.layer-canvas__layer-group` reemplaza el posicionamiento absoluto que
+ * antes vivía directo en `.layer-canvas__layer`: cada capa (imagen + su
+ * overlay de componentes) ahora comparte un único wrapper posicionado, así
+ * el `transform: translate(...)` de la vista explotada mueve ambos a la vez
+ * y los clicks de selección siguen cayendo sobre la pieza desplazada.
+ * `transition` es una ayuda de percepción de profundidad al alternar vista
+ * (permitida por spec.md: "una transición simple no está prohibida"), no
+ * una animación decorativa por sí misma.
+ */
+.layer-canvas__layer-group {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transition: transform 200ms ease-out;
+}
+
+.layer-canvas--exploded {
+  overflow: auto;
+}
+
+@media (max-width: 400px) {
+  .exploded-view-controls {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+}
+
+.exploded-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.exploded-legend__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 10px 4px 4px;
+  font-size: 12px;
+}
+
+.exploded-legend__name {
+  color: var(--text-h);
+  font-weight: 600;
+}
+
+.exploded-legend__count {
+  color: var(--text);
+}
+
+@media (max-width: 400px) {
+  .exploded-legend {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
