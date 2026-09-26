@@ -2,7 +2,7 @@
  * Contratos tipados que expone ASP.NET Core para el conjunto de capas
  * vectoriales por color (M2-S02): POST/GET
  * /api/v1/projects/{id}/images/{id}/color-palette/{paletteId}/layers. Deben
- * reflejar exactamente Vectify.Api.Contracts.VectorLayerSetResponse/VectorLayerPayload.
+ * reflejar exactamente Vectorify.Api.Contracts.VectorLayerSetResponse/VectorLayerPayload.
  */
 
 export interface VectorLayerPayload {

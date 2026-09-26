@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api/v1", tags=["preprocess"])
         "pipeline (campo 'params', JSON serializado de PreprocessParams). Nunca "
         "modifica el archivo recibido: decodifica una copia en memoria, aplica las "
         "transformaciones y devuelve un preview nuevo en base64. Solo lo llama "
-        "Vectify.Api, que ya validó los rangos antes de reenviar la solicitud acá."
+        "Vectorify.Api, que ya validó los rangos antes de reenviar la solicitud acá."
     ),
     responses={
         400: {"model": ErrorResponse, "description": "Imagen corrupta o no decodificable"},

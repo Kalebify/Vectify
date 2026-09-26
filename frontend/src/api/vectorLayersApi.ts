@@ -10,7 +10,7 @@ function baseUrl(projectId: string, imageId: string, paletteId: string): string 
  * conjunto COMPLETO de capas vectoriales de una paleta de colores YA
  * confirmada -- una capa por color, en una sola llamada. Sin body: no hay
  * parámetros ajustables en este sprint (mismo criterio que
- * Vectify.Api.Vectorization.VectorParameters).
+ * Vectorify.Api.Vectorization.VectorParameters).
  */
 export function generateVectorLayers(
   projectId: string,

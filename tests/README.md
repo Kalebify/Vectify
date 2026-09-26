@@ -1,11 +1,11 @@
-# Pruebas de Vectify
+# Pruebas de Vectorify
 
 Ejecutar desde la raíz salvo que se indique otra carpeta.
 
 ## Backend
 
 ```bash
-dotnet test backend/Vectify.sln
+dotnet test backend/Vectorify.sln
 ```
 
 49 pruebas xUnit:
@@ -62,7 +62,7 @@ python -m pytest
 Desde la raíz, con las dependencias Python instaladas:
 
 ```bash
-dotnet build backend/Vectify.sln
+dotnet build backend/Vectorify.sln
 python tests/e2e/real_stack_test.py
 ```
 

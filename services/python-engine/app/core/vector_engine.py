@@ -47,7 +47,7 @@ class VtracerEngine:
     1. Inversión de la máscara: en `colormode="binary"`, VTracer trata los
        píxeles NEGROS (valor 0) como la región a rellenar/trazar y los
        BLANCOS (255) como fondo/hueco -- lo inverso de la convención interna
-       de Vectify (Threshold: foreground = 255/blanco, ver
+       de Vectorify (Threshold: foreground = 255/blanco, ver
        app.core.threshold_pipeline.compute_threshold_metrics). Sin invertir,
        el resultado sería un path que cubre todo el lienzo con un agujero
        donde debería estar la forma. Por eso se invierte con

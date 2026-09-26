@@ -1,7 +1,7 @@
 /**
  * Contratos tipados que expone ASP.NET Core para la etapa de threshold B/N
  * (POST/GET /api/v1/projects/{id}/images/{id}/threshold|masks/{maskId}).
- * Deben reflejar exactamente Vectify.Api.Contracts.ThresholdResponse/ThresholdRequest.
+ * Deben reflejar exactamente Vectorify.Api.Contracts.ThresholdResponse/ThresholdRequest.
  */
 
 export interface ThresholdParametersPayload {
@@ -52,7 +52,7 @@ export type ThresholdErrorCode =
 /**
  * Valor por defecto y rango del slider de umbral. spec.md no los cuantifica
  * (ver "Ambigüedades detectadas"); deben coincidir con
- * Vectify.Api.Options.ThresholdOptions (Threshold:*, backend/Vectify.Api/
+ * Vectorify.Api.Options.ThresholdOptions (Threshold:*, backend/Vectorify.Api/
  * appsettings.json) y con ThresholdParams del lado Python
  * (services/python-engine/app/models/schemas.py) -- documentado como
  * supuesto en el reporte del sprint.

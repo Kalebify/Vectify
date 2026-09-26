@@ -2,7 +2,7 @@
  * Contratos tipados que expone ASP.NET Core para el análisis de componentes
  * físicos independientes por capa (M2-S03): POST/GET
  * .../vectors/{vectorId}/components. Deben reflejar exactamente
- * Vectify.Api.Contracts.ComponentSetResponse/LayerComponentPayload.
+ * Vectorify.Api.Contracts.ComponentSetResponse/LayerComponentPayload.
  */
 
 export interface ComponentBoundsPayload {

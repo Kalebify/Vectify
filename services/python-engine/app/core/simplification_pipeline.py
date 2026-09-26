@@ -154,7 +154,7 @@ def simplify_svg_paths(sanitized_svg: str, epsilon_ratio: float) -> str:
     app.core.svg_processing.sanitize_svg) y un epsilon relativo (fracción de
     la diagonal del bounding box del SVG completo, no un valor absoluto en
     píxeles -- así la tolerancia escala con el tamaño del diseño, ver
-    Vectify.Api.Simplification.SimplificationOptions del lado .NET, que
+    Vectorify.Api.Simplification.SimplificationOptions del lado .NET, que
     resuelve los presets Bajo/Medio/Alto a este valor numérico antes de
     llamar acá). Devuelve un nuevo string de SVG con los `d` de cada `<path>`
     simplificados; cualquier otro atributo/elemento (fill-rule, transform,

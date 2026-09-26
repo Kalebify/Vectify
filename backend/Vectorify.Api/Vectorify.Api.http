@@ -1,0 +1,24 @@
+@Vectorify.Api_HostAddress = http://localhost:5080
+
+GET {{Vectorify.Api_HostAddress}}/health
+Accept: application/json
+
+###
+
+GET {{Vectorify.Api_HostAddress}}/api/v1/system/health
+Accept: application/json
+
+###
+
+POST {{Vectorify.Api_HostAddress}}/api/v1/projects
+Accept: application/json
+Content-Type: multipart/form-data; boundary=VectorifyBoundary
+
+--VectorifyBoundary
+Content-Disposition: form-data; name="file"; filename="ejemplo.png"
+Content-Type: image/png
+
+< ./ejemplo.png
+--VectorifyBoundary--
+
+###

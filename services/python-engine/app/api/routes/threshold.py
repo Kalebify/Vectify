@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api/v1", tags=["threshold"])
         "threshold (campo 'params', JSON serializado de ThresholdParams). Nunca modifica el "
         "archivo recibido: decodifica una copia en memoria, aplica el umbral y devuelve una "
         "máscara nueva en base64 junto con las métricas de porcentaje foreground/background. "
-        "Solo lo llama Vectify.Api, que ya validó los rangos antes de reenviar la solicitud acá."
+        "Solo lo llama Vectorify.Api, que ya validó los rangos antes de reenviar la solicitud acá."
     ),
     responses={
         400: {"model": ErrorResponse, "description": "Imagen corrupta o no decodificable"},

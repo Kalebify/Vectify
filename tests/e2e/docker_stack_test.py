@@ -23,7 +23,7 @@ def main():
                PYTHON_PORT=str(python_port), VITE_API_BASE_URL=backend,
                CORS_ALLOWED_ORIGINS=frontend, PYTHON_ENGINE_INTERNAL_URL="http://python-engine:8000",
                PYTHON_ENGINE_TIMEOUT_SECONDS="5")
-    command = ["docker", "compose", "--project-name", "vectify-check-" + uuid.uuid4().hex[:8]]
+    command = ["docker", "compose", "--project-name", "vectorify-check-" + uuid.uuid4().hex[:8]]
 
     def compose(*args):
         subprocess.run(command + list(args), cwd=ROOT, env=env, check=True)

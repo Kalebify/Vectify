@@ -24,7 +24,7 @@ class ThresholdingService:
     def process(self, data: bytes, params: ThresholdParams) -> ThresholdResponse:
         """Genera una máscara binaria a partir de los bytes recibidos (el
         preview ya preprocesado, nunca el original crudo -- eso lo decide
-        Vectify.Api antes de llamar acá) y los parámetros ya validados.
+        Vectorify.Api antes de llamar acá) y los parámetros ya validados.
         Determinista: mismos `data` + mismos `params` siempre producen el
         mismo `image_base64` y las mismas métricas.
         """

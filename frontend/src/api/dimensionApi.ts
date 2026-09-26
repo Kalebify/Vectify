@@ -1,7 +1,7 @@
 import { API_BASE_URL, httpClient } from "./httpClient";
 import type { DimensionResponse, DimensionSourceKind } from "../types/dimension";
 
-/** Cuerpo JSON de POST .../dimensions/apply: refleja Vectify.Api.Contracts.DimensionRequest. */
+/** Cuerpo JSON de POST .../dimensions/apply: refleja Vectorify.Api.Contracts.DimensionRequest. */
 interface DimensionRequestBody {
   sourceKind: DimensionSourceKind;
   sourceId: string;

@@ -2,7 +2,7 @@
  * Contratos tipados que expone ASP.NET Core para la operación de fabricación
  * por color (M2-S07): POST .../color-palette/{paletteId}/layers/{groupId}/operation
  * y GET .../color-palette/{paletteId}/layers/operations. Deben reflejar
- * exactamente Vectify.Api.Contracts.ManufacturingOperationSetResponse/
+ * exactamente Vectorify.Api.Contracts.ManufacturingOperationSetResponse/
  * ManufacturingOperationPayload/ManufacturingOperationSummaryPayload.
  */
 

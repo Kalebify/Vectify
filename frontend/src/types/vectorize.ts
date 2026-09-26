@@ -1,7 +1,7 @@
 /**
  * Contratos tipados que expone ASP.NET Core para la etapa de vectorización
  * (POST/GET /api/v1/projects/{id}/images/{id}/vectorize|vectors/{vectorId}).
- * Deben reflejar exactamente Vectify.Api.Contracts.VectorizeResponse/VectorizeRequest.
+ * Deben reflejar exactamente Vectorify.Api.Contracts.VectorizeResponse/VectorizeRequest.
  */
 
 export interface VectorBoundsPayload {

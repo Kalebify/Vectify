@@ -9,12 +9,12 @@ from pydantic import BaseModel, Field
 
 class HealthResponse(BaseModel):
     status: str = Field(examples=["ok"])
-    service: str = Field(examples=["vectify-python-engine"])
+    service: str = Field(examples=["vectorify-python-engine"])
     version: str = Field(examples=["0.1.0"])
 
 
 class InfoResponse(BaseModel):
-    service: str = Field(examples=["vectify-python-engine"])
+    service: str = Field(examples=["vectorify-python-engine"])
     version: str = Field(examples=["0.1.0"])
     capabilities: list[str] = Field(
         examples=[["health-check"]],
@@ -30,7 +30,7 @@ class PreprocessParams(BaseModel):
 
     spec.md no cuantifica rangos numéricos ("Ambigüedades detectadas"); los
     límites de acá son la fuente de verdad del lado Python y deben coincidir
-    con los que valida Vectify.Api (Preprocessing/PreprocessOptions) antes de
+    con los que valida Vectorify.Api (Preprocessing/PreprocessOptions) antes de
     llamar a este servicio — documentado como supuesto en el reporte del
     sprint.
     """
@@ -50,7 +50,7 @@ class PreprocessMetrics(BaseModel):
 
 class PreprocessResponse(BaseModel):
     """Respuesta de POST /api/v1/preprocess. Consumida únicamente por
-    Vectify.Api (el navegador nunca llama directamente a este motor); por eso
+    Vectorify.Api (el navegador nunca llama directamente a este motor); por eso
     el resultado viaja como imagen embebida en base64 en vez de un archivo
     binario separado, para mantener un único contrato JSON simple de testear
     de forma determinista.
@@ -68,7 +68,7 @@ class PreprocessResponse(BaseModel):
 
 class ThresholdParams(BaseModel):
     """Parámetros ajustables de la etapa de threshold B/N (M1-S04): umbral
-    global y su inversión. Rangos alineados con Vectify.Api.Options.ThresholdOptions
+    global y su inversión. Rangos alineados con Vectorify.Api.Options.ThresholdOptions
     (defensa en profundidad, mismo criterio que PreprocessParams). El modo
     adaptativo (vs. global) se decidió no incluir en este sprint -- ver
     reporte del sprint.
@@ -81,7 +81,7 @@ class ThresholdParams(BaseModel):
 class ThresholdMetrics(BaseModel):
     """Porcentaje crudo de píxeles foreground/background de la máscara
     resultante. La clasificación de "casi vacía/casi llena" como advertencia
-    se calcula del lado de Vectify.Api (Threshold/ThresholdService.cs), no acá.
+    se calcula del lado de Vectorify.Api (Threshold/ThresholdService.cs), no acá.
     """
 
     foreground_percent: float = Field(examples=[42.3], ge=0, le=100)
@@ -90,7 +90,7 @@ class ThresholdMetrics(BaseModel):
 
 class ThresholdResponse(BaseModel):
     """Respuesta de POST /api/v1/threshold. Igual convención que
-    PreprocessResponse: consumida únicamente por Vectify.Api, la máscara viaja
+    PreprocessResponse: consumida únicamente por Vectorify.Api, la máscara viaja
     embebida en base64 para mantener un único contrato JSON simple de testear
     de forma determinista.
     """
@@ -132,7 +132,7 @@ class VectorMetrics(BaseModel):
 
 class VectorizeResponse(BaseModel):
     """Respuesta de POST /api/v1/vectorize. Misma convención que
-    Preprocess/ThresholdResponse (consumida únicamente por Vectify.Api), pero
+    Preprocess/ThresholdResponse (consumida únicamente por Vectorify.Api), pero
     el SVG viaja como texto plano en `svg` (no base64): es XML/texto válido,
     no bytes binarios, así que no hace falta codificarlo -- FastAPI/Pydantic
     ya lo serializan como un string JSON correctamente escapado."""
@@ -150,8 +150,8 @@ class VectorLayerItem(BaseModel):
     reutiliza VectorizationService.process máscara por máscara, sin
     reinventar el trazado de contornos ya usado en M1-S05 -- con el agregado
     de `group_id`. `group_id` es opaco para Python (el GUID de ColorGroup que
-    ya administra Vectify.Api del lado de ColorPalette/M2-S01): se echoa tal
-    cual se recibió, únicamente para que Vectify.Api pueda emparejar cada SVG
+    ya administra Vectorify.Api del lado de ColorPalette/M2-S01): se echoa tal
+    cual se recibió, únicamente para que Vectorify.Api pueda emparejar cada SVG
     con su ColorGroup de origen sin depender de que el orden de la lista se
     preserve en el transporte."""
 
@@ -168,7 +168,7 @@ class VectorizeLayersResponse(BaseModel):
     por cada máscara de color recibida, cada una vectorizada de forma
     independiente. Una única llamada .NET -> Python resuelve las N
     vectorizaciones (VectorizationService.process llamado N veces DENTRO de
-    esta request), en vez de que Vectify.Api dispare N requests HTTP
+    esta request), en vez de que Vectorify.Api dispare N requests HTTP
     separadas -- ver spec.md M2-S02, "Ambigüedades detectadas". Ninguna
     máscara se recorta a su propio bounding box antes de vectorizarla: todas
     comparten las dimensiones de la imagen original, así que los SVG
@@ -187,7 +187,7 @@ class SimplifyParams(BaseModel):
     "Ambigüedades detectadas" de spec.md: "el implementador elige y
     documenta"). Los presets Bajo/Medio/Alto que ve el usuario en React no
     existen acá: se resuelven a este valor numérico del lado de
-    Vectify.Api.Simplification.SimplificationOptions antes de llamar a este
+    Vectorify.Api.Simplification.SimplificationOptions antes de llamar a este
     servicio -- Python solo conoce el epsilon ya resuelto, nunca el nombre del
     preset (mismo criterio de encapsulamiento que app.core.vector_engine).
     """
@@ -328,7 +328,7 @@ class CheckSummary(BaseModel):
 class CheckResponse(BaseModel):
     """Respuesta de POST /api/v1/check. Análisis de SOLO LECTURA: no incluye
     ni modifica el SVG de entrada -- solo lo devuelve indirectamente a
-    través de los índices de `issues`, ya que Vectify.Api/React ya tienen el
+    través de los índices de `issues`, ya que Vectorify.Api/React ya tienen el
     SVG que enviaron a analizar."""
 
     effective_params: CheckParams
@@ -443,7 +443,7 @@ class ComponentAnalysisResponse(BaseModel):
 class PhysicalUnionMemberRef(BaseModel):
     """Referencia a un subpath miembro de un `LayerComponent` YA calculado
     por M2-S03 -- exactamente `path_index`/`subpath_index`/`role` de
-    `ComponentMember`, ecoados tal cual por Vectify.Api (que ya los tiene
+    `ComponentMember`, ecoados tal cual por Vectorify.Api (que ya los tiene
     persistidos en la ComponentSetVersion vigente del VectorId, no hace
     falta recalcularlos acá)."""
 
@@ -503,7 +503,7 @@ class ColorPaletteParams(BaseModel):
     tolerancia de fusión automática (distancia euclídea en espacio Lab, ver
     app.core.color_palette_pipeline) y número objetivo (límite superior
     opcional) de colores. Rangos alineados con
-    Vectify.Api.Options.ColorPaletteOptions (defensa en profundidad, mismo
+    Vectorify.Api.Options.ColorPaletteOptions (defensa en profundidad, mismo
     criterio que el resto de los *Params)."""
 
     tolerance: float = Field(
@@ -523,7 +523,7 @@ class ColorPaletteParams(BaseModel):
 class ColorGroupPayload(BaseModel):
     """Un color/grupo detectado -- ver app.core.color_palette_pipeline.ColorGroup.
     `id` es el índice 0-based determinista (orden de presentación: área
-    descendente) dentro de ESTA detección; Vectify.Api lo usa para asignarle
+    descendente) dentro de ESTA detección; Vectorify.Api lo usa para asignarle
     un GroupId (GUID) propio y estable en su modelo versionado."""
 
     id: int = Field(ge=0, examples=[0])
@@ -544,7 +544,7 @@ class ColorPaletteMetrics(BaseModel):
 class ColorPaletteResponse(BaseModel):
     """Respuesta de POST /api/v1/color-palette. Misma convención que el
     resto de las respuestas de este motor: consumida únicamente por
-    Vectify.Api, imágenes embebidas en base64 para un contrato JSON simple y
+    Vectorify.Api, imágenes embebidas en base64 para un contrato JSON simple y
     determinista."""
 
     width: int
@@ -560,7 +560,7 @@ class ColorPaletteResponse(BaseModel):
 
 class ErrorResponse(BaseModel):
     """Forma común de error controlado, igual convención que
-    Vectify.Api.Contracts.ApiErrorResponse: `code` es estable, `message` es
+    Vectorify.Api.Contracts.ApiErrorResponse: `code` es estable, `message` es
     para logs/debug humano."""
 
     code: str = Field(examples=["corrupt_image"])

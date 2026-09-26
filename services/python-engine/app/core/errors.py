@@ -1,5 +1,5 @@
 """Errores controlados del pipeline de preprocesamiento. Cada subclase lleva un
-`code` estable (igual convención que Vectify.Api.Contracts.ApiErrorResponse: el
+`code` estable (igual convención que Vectorify.Api.Contracts.ApiErrorResponse: el
 frontend/backend mapean por código, no por el texto de `message`). Se traducen a
 respuestas JSON `{code, message}` por los exception handlers registrados en
 app.main.
@@ -29,7 +29,7 @@ class DimensionsExceededError(PreprocessingError):
 
 class InvalidParametersError(PreprocessingError):
     """Los parámetros recibidos no cumplen el esquema/rangos esperados. Defensa
-    en profundidad: Vectify.Api ya valida rangos antes de llamar a este servicio,
+    en profundidad: Vectorify.Api ya valida rangos antes de llamar a este servicio,
     pero el motor Python nunca confía ciegamente en su caller."""
 
     code = "invalid_parameters"

@@ -2,7 +2,7 @@
  * Contratos tipados que expone ASP.NET Core para la etapa de dimensiones
  * físicas en mm (M1-S09): POST .../dimensions/apply, GET
  * .../dimensions/{id}. Deben reflejar exactamente
- * Vectify.Api.Contracts.DimensionRequest/DimensionResponse.
+ * Vectorify.Api.Contracts.DimensionRequest/DimensionResponse.
  */
 
 /** Mismo criterio que M1-S08 (CheckSourceKind): se acepta un SVG ya vectorizado o ya simplificado. */

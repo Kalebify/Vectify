@@ -1,7 +1,7 @@
 """Servicio que orquesta el Laser Checker de paths abiertos/duplicados
 (M1-S08): recibe un SVG YA generado por vectorización (M1-S05) o por una
 simplificación (M1-S07), lo re-sanitiza/revalida defensivamente (nunca
-confía ciegamente en que el caller, Vectify.Api, ya lo hizo -- mismo
+confía ciegamente en que el caller, Vectorify.Api, ya lo hizo -- mismo
 criterio que SimplificationService/ThresholdingService/VectorizationService),
 corre el análisis geométrico de app.core.path_checker con una tolerancia
 relativa al tamaño del diseño, y devuelve los issues tipados. A diferencia de

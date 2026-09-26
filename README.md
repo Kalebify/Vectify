@@ -1,4 +1,4 @@
-# Vectify
+# Vectorify
 
 Base ejecutable, testeable y reproducible sobre la que se construyen los MVP
 de vectorización. Estado actual:
@@ -92,7 +92,7 @@ Con la configuración por defecto:
 - Backend (Web API): http://localhost:5080 (`/health`, `/api/v1/system/health`, Swagger en `/swagger`)
 - Motor Python: http://localhost:8001 (`/health`, `/api/v1/info`, docs en `/docs`)
 
-`docker-compose.yml` monta un volumen nombrado (`vectify_backend_data`) en
+`docker-compose.yml` monta un volumen nombrado (`vectorify_backend_data`) en
 `/app/App_Data` del contenedor `backend`, así que los originales
 (`LocalFileStorage`) y los sidecars de metadata de proyecto/threshold/
 vectorización/simplificación (`PersistentProjectRegistry`,
@@ -123,7 +123,7 @@ cp .env.example .env
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
 
 # 2) Backend
-cd backend/Vectify.Api
+cd backend/Vectorify.Api
 dotnet run
 # Sirve en http://localhost:5080 (ver Properties/launchSettings.json).
 # PythonEngine:BaseUrl por defecto en appsettings.json apunta a http://localhost:8001.
@@ -159,7 +159,7 @@ BACKEND_URL=http://localhost:5080 PYTHON_URL=http://localhost:8001 \
 
 # E2E de carga de imágenes (M1-S02): arranca solo la Web API real (Python no
 # participa en este sprint) y ejercita HTTP real de carga válida e inválida.
-dotnet build backend/Vectify.sln
+dotnet build backend/Vectorify.sln
 node tests/e2e/upload_e2e_test.mjs
 
 # E2E del pipeline completo (M1-S11): requiere la pila YA arriba (backend
@@ -172,7 +172,7 @@ BACKEND_URL=http://localhost:5080 node tests/e2e/full_pipeline_e2e_test.mjs
 
 Desde `frontend/`, ejecutar `npm ci`, `npm test`, `npm run build` y `npm run lint`.
 Para verificar FastAPI real, desde la raíz y con el entorno Python activo:
-`dotnet build backend/Vectify.sln` y `python tests/e2e/real_stack_test.py`.
+`dotnet build backend/Vectorify.sln` y `python tests/e2e/real_stack_test.py`.
 Con Docker disponible: `python tests/e2e/docker_stack_test.py` construye una pila
 isolada y verifica health, CORS y recuperación. Para smoke sin Bash:
 `python tests/e2e/smoke_test.py`.
@@ -213,7 +213,7 @@ secretos reales.
 | `Check__DefaultCloseGapRatio` | `backend` (appsettings o env) | `0.005` | Tolerancia por defecto (fracción de la diagonal del SVG) para detectar un path "que debería estar cerrado" (supuesto: spec.md no la cuantifica) |
 | `Check__DefaultDuplicatePointRatio` | `backend` (appsettings o env) | `0.002` | Tolerancia por defecto para detectar paths/segmentos casi-duplicados |
 | `CORS_ALLOWED_ORIGINS` | `.env` (raíz) | `http://localhost:5173,http://127.0.0.1:5173` | Valor que docker-compose pasa a `Cors__AllowedOrigins`; si cambias `FRONTEND_PORT`, actualízalo |
-| `SERVICE_NAME` / `SERVICE_VERSION` | `services/python-engine/.env` | `vectify-python-engine` / `0.1.0` | Identidad reportada en `/health` y `/api/v1/info` |
+| `SERVICE_NAME` / `SERVICE_VERSION` | `services/python-engine/.env` | `vectorify-python-engine` / `0.1.0` | Identidad reportada en `/health` y `/api/v1/info` |
 | `HOST` / `PORT` | `services/python-engine/.env` | `0.0.0.0` / `8000` | Bind del servidor uvicorn |
 | `LOG_LEVEL` | `services/python-engine/.env` | `info` | Nivel de logging del motor |
 | `FRONTEND_PORT` / `BACKEND_PORT` / `PYTHON_PORT` | `.env` (raíz) | `5173` / `5080` / `8001` | Puertos publicados por `docker-compose.yml` |
@@ -224,7 +224,7 @@ secretos reales.
 `GET /health` en el motor Python responde:
 
 ```json
-{ "status": "ok", "service": "vectify-python-engine", "version": "0.1.0" }
+{ "status": "ok", "service": "vectorify-python-engine", "version": "0.1.0" }
 ```
 
 ASP.NET Core lo deserializa en un contrato tipado y compone
@@ -235,7 +235,7 @@ ASP.NET Core lo deserializa en un contrato tipado y compone
   "status": "online",
   "timestamp": "2026-01-01T00:00:00Z",
   "api": { "status": "online" },
-  "python": { "status": "online", "service": "vectify-python-engine", "version": "0.1.0", "message": null }
+  "python": { "status": "online", "service": "vectorify-python-engine", "version": "0.1.0", "message": null }
 }
 ```
 
@@ -295,7 +295,7 @@ en disco junto al original (`App_Data/projects/{projectId}/{imageId}.json`
 por defecto, ver `ProjectRegistry:*` abajo); al reiniciar el proceso, la Web
 API rehidrata el registro en memoria escaneando esos sidecars — sigue sin
 haber una base de datos de negocio real. Ver Swagger (`/swagger`) para el
-contrato completo y `backend/Vectify.Api/Vectify.Api.http` para ejemplos de
+contrato completo y `backend/Vectorify.Api/Vectorify.Api.http` para ejemplos de
 request.
 
 ## Preprocesamiento de imagen (M1-S03)
@@ -384,7 +384,7 @@ atributo de presentación (`style`, `fill`, `stroke`, `clip-path`, `mask`,
 (`url(#gradiente-interno)` sí se conserva — legítimo para
 gradientes/patterns dentro del mismo documento), rechaza DOCTYPE/ENTITY
 antes de parsear (defensa contra XXE) y valida que el resultado sea XML
-parseable con `<svg>` como raíz. `Vectify.Api` (`PythonVectorizeClient`)
+parseable con `<svg>` como raíz. `Vectorify.Api` (`PythonVectorizeClient`)
 aplica una segunda capa de validación defensiva sobre la respuesta de
 Python antes de aceptarla: SVG bien formado con `<svg>` como raíz,
 dimensiones/métricas positivas, bounds finitos y coherentes, Content-Type

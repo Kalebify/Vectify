@@ -1,7 +1,7 @@
 """Servicio que orquesta el análisis de componentes físicos independientes
 por capa (M2-S03): recibe un SVG YA generado por vectorización (M1-S05) --
 una capa vectorial de un solo color (M2-S02) -- lo re-sanitiza/revalida
-defensivamente (nunca confía ciegamente en que el caller, Vectify.Api, ya lo
+defensivamente (nunca confía ciegamente en que el caller, Vectorify.Api, ya lo
 hizo -- mismo criterio que PathCheckerService/SimplificationService), corre
 el análisis geométrico de app.core.component_analysis con las tolerancias
 efectivas, y devuelve los componentes tipados. Igual que PathCheckerService,

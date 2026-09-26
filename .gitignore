@@ -9,7 +9,7 @@ npm-debug.log*
 bin/
 obj/
 *.user
-backend/Vectify.Api/App_Data/
+backend/Vectorify.Api/App_Data/
 backend/.publish-check/
 
 # Python / services

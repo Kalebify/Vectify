@@ -2,7 +2,7 @@
  * Contratos tipados que expone ASP.NET Core para la detección/reducción de
  * paleta de colores (M2-S01): POST .../color-palette/detect, .../merge,
  * .../unmerge, .../rename, .../confirm, GET .../color-palette/{paletteId}.
- * Deben reflejar exactamente Vectify.Api.Contracts.ColorPaletteResponse/
+ * Deben reflejar exactamente Vectorify.Api.Contracts.ColorPaletteResponse/
  * ColorGroupPayload/*Request del backend.
  */
 

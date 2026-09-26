@@ -1,14 +1,14 @@
 """Servicio que orquesta la unión física de piezas (M2-S06): recibe un SVG
 YA generado por vectorización (una capa de un solo color, M2-S02) -- lo
 re-sanitiza/revalida defensivamente (nunca confía ciegamente en que el
-caller, Vectify.Api, ya lo hizo -- mismo criterio que
+caller, Vectorify.Api, ya lo hizo -- mismo criterio que
 ComponentAnalysisService/PathCheckerService), corre la unión geométrica de
 app.core.physical_union (booleanas + bridging simple, con la validación
 post-operación no negociable de "nunca fingir unión" YA aplicada adentro de
 esa función) y devuelve el SVG resultante tipado. A diferencia de
 ComponentAnalysisService (solo lectura), este servicio SÍ modifica
 geometría -- pero nunca escribe a disco ni conoce el concepto de
-"VectorVersion": eso es responsabilidad exclusiva de Vectify.Api
+"VectorVersion": eso es responsabilidad exclusiva de Vectorify.Api
 (PhysicalUnionService.cs), que decide si persiste el resultado como una
 VectorVersion nueva (solo al "confirmar", nunca en un "preview").
 """

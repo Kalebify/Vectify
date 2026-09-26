@@ -16,7 +16,7 @@ const PRESET_OPTIONS: Array<{ value: SimplifyPreset; label: string; hint: string
  * Selector de tolerancia Bajo/Medio/Alto (spec.md M1-S07: "Elegir
  * tolerancia/preset Bajo-Medio-Alto"). Los tres presets se resuelven a un
  * epsilon de Douglas-Peucker del lado de ASP.NET Core (ver
- * Vectify.Api.Options.SimplificationOptions) -- React solo conoce el nombre
+ * Vectorify.Api.Options.SimplificationOptions) -- React solo conoce el nombre
  * del preset, nunca el valor numérico. Radiogroup nativo (no botones
  * separados con estado propio) para que la selección tenga semántica y foco
  * de teclado correctos sin ARIA adicional.

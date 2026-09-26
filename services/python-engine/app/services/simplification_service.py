@@ -2,7 +2,7 @@
 un SVG YA generado por vectorización (o por una simplificación previa -- el
 usuario puede volver a simplificar sobre un resultado ya simplificado, mismo
 criterio de "cadena de versiones" que el resto del pipeline), lo re-sanitiza/
-revalida defensivamente (nunca confía ciegamente en que el caller, Vectify.Api,
+revalida defensivamente (nunca confía ciegamente en que el caller, Vectorify.Api,
 ya lo hizo -- mismo criterio que ThresholdingService/VectorizationService), le
 reduce la cantidad de nodos a cada `<path>` con Douglas-Peucker (ver
 app.core.simplification_pipeline) con una tolerancia relativa al tamaño del

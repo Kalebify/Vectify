@@ -1,6 +1,6 @@
 /**
  * Contrato tipado que expone ASP.NET Core en GET /api/v1/system/health.
- * Debe reflejar exactamente Vectify.Api.Contracts.SystemHealthResponse del backend.
+ * Debe reflejar exactamente Vectorify.Api.Contracts.SystemHealthResponse del backend.
  */
 
 export type PythonStatus =

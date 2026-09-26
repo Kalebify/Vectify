@@ -7,7 +7,7 @@ function response(status: PythonStatus = 'online') {
   return new Response(JSON.stringify({
     status: status === 'online' ? 'online' : 'degraded',
     timestamp: new Date().toISOString(), api: { status: 'online' },
-    python: { status, service: 'vectify-python-engine', version: '0.1.0', message: null },
+    python: { status, service: 'vectorify-python-engine', version: '0.1.0', message: null },
   }), { headers: { 'Content-Type': 'application/json' } });
 }
 
