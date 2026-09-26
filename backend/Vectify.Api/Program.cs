@@ -7,6 +7,7 @@ using Vectify.Api.Contracts;
 using Vectify.Api.Dimensioning;
 using Vectify.Api.Endpoints;
 using Vectify.Api.Export;
+using Vectify.Api.ManufacturingOperations;
 using Vectify.Api.Middleware;
 using Vectify.Api.Options;
 using Vectify.Api.PhysicalUnion;
@@ -443,6 +444,23 @@ builder.Services
 builder.Services.AddSingleton<IPhysicalUnionVersionRegistry, PersistentPhysicalUnionVersionRegistry>();
 builder.Services.AddScoped<IPhysicalUnionService, PhysicalUnionService>();
 
+// Operación de fabricación por color: Corte/Grabado/Ignorar (M2-S07):
+// SÉPTIMA y ÚLTIMA tarjeta de MVP2. Pura metadata sobre el conjunto de capas
+// YA generado por M2-S02 -- SIN ninguna llamada a Python, SIN tocar
+// geometría, SIN crear una VectorVersion/VectorLayerSetVersion nueva (ver
+// Vectify.Api.ManufacturingOperations.ManufacturingOperationService). Cada
+// asignación crea una ManufacturingOperationSetVersion NUEVA, vinculada a la
+// paleta+versión confirmada vigente al momento de asignar -- si esa paleta
+// se recalcula, las asignaciones viejas no se migran automáticamente (mismo
+// criterio que M2-S05, ComponentGroup/ComponentSetVersion). Persistido en
+// disco con el mismo patrón exacto que PersistentComponentGroupVersionRegistry.
+builder.Services
+    .AddOptions<ManufacturingOperationRegistryOptions>()
+    .Bind(builder.Configuration.GetSection(ManufacturingOperationRegistryOptions.SectionName));
+
+builder.Services.AddSingleton<IManufacturingOperationVersionRegistry, PersistentManufacturingOperationVersionRegistry>();
+builder.Services.AddScoped<IManufacturingOperationService, ManufacturingOperationService>();
+
 // Exportación SVG (M1-S10): cierra el primer flujo productivo. Sirve, sin
 // modificar, los mismos bytes ya persistidos por Vectorization/
 // Simplification/Dimensioning -- SIN cliente Python, SIN caché/lock/registro
@@ -542,6 +560,7 @@ app.MapVectorLayerEndpoints();
 app.MapComponentEndpoints();
 app.MapComponentGroupEndpoints();
 app.MapPhysicalUnionEndpoints();
+app.MapManufacturingOperationEndpoints();
 
 app.Run();
 

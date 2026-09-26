@@ -1,4 +1,4 @@
-import { OPERATION_LABEL } from "./LayerList";
+import { OPERATION_LABEL } from "./manufacturingOperationLabels";
 import type { ManufacturingOperationSummaryPayload, ManufacturingOperationValue } from "../../types/manufacturingOperations";
 
 interface ManufacturingOperationSummaryProps {
