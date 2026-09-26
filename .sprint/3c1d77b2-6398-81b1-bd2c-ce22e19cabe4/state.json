@@ -1,0 +1,18 @@
+{
+  "card_id": "3c1d77b2-6398-81b1-bd2c-ce22e19cabe4",
+  "card_url": "https://app.notion.com/p/3c1d77b2639881b1bd2cce22e19cabe4",
+  "title": "M2-S06 · Unión física de piezas",
+  "stack": "Python (operaciones booleanas/bridging, nueva dependencia de geometria), ASP.NET Core (comando versionado, nueva VectorVersion), React (preview antes/despues)",
+  "branch": "sprint/3c1d77b2-union-fisica",
+  "column": "Doing",
+  "phase": "implementation",
+  "fix_rounds": 0,
+  "preview_url": null,
+  "pr_url": null,
+  "started_at": "2026-09-26T00:00:00Z",
+  "exceptions": [
+    "Corrida en modo autonomo dentro del backlog M2-S01..M2-S07 (autorizado explicitamente por el usuario).",
+    "Tarjeta mas compleja geometricamente de MVP2: primera vez que se agrega una libreria de geometria booleana nueva (Clipper2 candidato, explicitamente sancionado por el spec) y primera vez en MVP2 que se modifica geometria real (no solo metadata).",
+    "Si la validacion post-operacion (nunca fingir union) no puede garantizarse de forma robusta, la tarjeta puede terminar en Bloqueada en vez de Done -- decision documentada en spec.md."
+  ]
+}
