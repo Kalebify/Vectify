@@ -1,4 +1,5 @@
 import { getVectorLayerSvgUrl } from "../../api/vectorLayersApi";
+import { useComponentGroups } from "../../hooks/useComponentGroups";
 import { useExplodedView } from "../../hooks/useExplodedView";
 import { useLayerComponents } from "../../hooks/useLayerComponents";
 import { useVectorLayers } from "../../hooks/useVectorLayers";
@@ -63,6 +64,19 @@ export function LayersPanel({ projectId, imageId, paletteId }: LayersPanelProps)
     select: selectComponent,
   } = useLayerComponents(projectId, imageId, layerSet?.layers ?? []);
 
+  const {
+    groupsByLayer,
+    selection: groupSelection,
+    highlighted: highlightedGroup,
+    errorMessage: groupsErrorMessage,
+    mutatingLayerGroupId,
+    toggleComponentSelection,
+    createGroup,
+    ungroup: ungroupComponents,
+    rename: renameComponentGroup,
+    selectGroupAsSet,
+  } = useComponentGroups(projectId, imageId, layerSet?.layers ?? [], componentsByGroup);
+
   const { viewMode, separationPercent, setViewMode, setSeparationPercent } = useExplodedView();
 
   const isBusy = status === "generating";
@@ -120,11 +134,26 @@ export function LayersPanel({ projectId, imageId, paletteId }: LayersPanelProps)
               </p>
             )}
 
+            {groupsErrorMessage && (
+              <p className="upload-panel__error" role="alert">
+                {groupsErrorMessage}
+              </p>
+            )}
+
             <ComponentTree
               layers={layerSet.layers}
               componentsByGroup={componentsByGroup}
               selected={selectedComponent}
               onSelect={selectComponent}
+              groupsByLayer={groupsByLayer}
+              selection={groupSelection}
+              onToggleComponentSelection={toggleComponentSelection}
+              onCreateGroup={createGroup}
+              mutatingLayerGroupId={mutatingLayerGroupId}
+              highlightedGroupId={highlightedGroup?.groupId ?? null}
+              onSelectGroupAsSet={selectGroupAsSet}
+              onUngroup={ungroupComponents}
+              onRenameGroup={renameComponentGroup}
             />
 
             {selectedComponentDetail && selectedLayer && (
@@ -165,6 +194,7 @@ export function LayersPanel({ projectId, imageId, paletteId }: LayersPanelProps)
               componentsByGroup={componentsByGroup}
               selected={selectedComponent}
               onSelectComponent={selectComponent}
+              highlightedGroup={highlightedGroup}
               exploded={viewMode === "exploded"}
               separationPercent={separationPercent}
             />
