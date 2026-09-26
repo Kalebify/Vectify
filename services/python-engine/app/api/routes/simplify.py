@@ -17,9 +17,9 @@ router = APIRouter(prefix="/api/v1", tags=["simplify"])
         "Recibe un SVG YA generado por vectorización -- o por una simplificación previa -- "
         "(multipart, campo 'file') y los parámetros de simplificación (campo 'params', JSON "
         "serializado de SimplifyParams: epsilon_ratio, relativo a la diagonal del bounding box "
-        "del SVG). No recibe el nombre del preset (Bajo/Medio/Alto): Vectify.Api ya lo resolvió "
+        "del SVG). No recibe el nombre del preset (Bajo/Medio/Alto): Vectorify.Api ya lo resolvió "
         "a un epsilon_ratio numérico antes de llamar acá. El SVG resultante se re-sanitiza y "
-        "se acompaña de nodeCount antes/después y % de reducción. Solo lo llama Vectify.Api."
+        "se acompaña de nodeCount antes/después y % de reducción. Solo lo llama Vectorify.Api."
     ),
     responses={
         400: {"model": ErrorResponse, "description": "SVG de entrada corrupto/no decodificable o no es XML/SVG válido"},

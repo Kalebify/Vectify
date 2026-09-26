@@ -1,7 +1,7 @@
 /**
  * Cálculo puro del preview de dimensiones físicas (M1-S09), 100% en el
  * cliente y SIN round-trip a la Web API: dado que aplicar dimensiones es
- * aritmética simple de escala (ver Vectify.Api.Dimensioning.SvgDimensionWriter/
+ * aritmética simple de escala (ver Vectorify.Api.Dimensioning.SvgDimensionWriter/
  * DimensionParameterValidator.ResolveDimensions -- este archivo replica esa
  * misma lógica en TypeScript), no hay ningún algoritmo ni motor externo cuyo
  * resultado no se pueda anticipar en el navegador. El resultado de esta
@@ -10,7 +10,7 @@
  * servidor al aplicar, es la única fuente de verdad de lo que se persiste.
  *
  * Rango válido [MIN_DIMENSION_MM, MAX_DIMENSION_MM]: debe coincidir con
- * Vectify.Api.Options.DimensionOptions (1mm-1000mm, supuesto documentado en
+ * Vectorify.Api.Options.DimensionOptions (1mm-1000mm, supuesto documentado en
  * el reporte del sprint) para que el preview no le muestre al usuario un
  * resultado que la Web API vaya a rechazar.
  */

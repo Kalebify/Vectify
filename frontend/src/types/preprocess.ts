@@ -1,7 +1,7 @@
 /**
  * Contratos tipados que expone ASP.NET Core para el preprocesamiento de imagen
  * (POST/GET /api/v1/projects/{id}/images/{id}/preview[s]/{previewId}). Deben
- * reflejar exactamente Vectify.Api.Contracts.PreprocessResponse / PreprocessRequest.
+ * reflejar exactamente Vectorify.Api.Contracts.PreprocessResponse / PreprocessRequest.
  */
 
 export interface PreprocessParametersPayload {
@@ -57,8 +57,8 @@ export interface ApiErrorResponse {
 
 /**
  * Valores por defecto y rangos de los sliders. spec.md no los cuantifica (ver
- * "Ambigüedades detectadas"); deben coincidir con Vectify.Api.Options.PreprocessOptions
- * (Preprocess:*, backend/Vectify.Api/appsettings.json) y con PreprocessParams del
+ * "Ambigüedades detectadas"); deben coincidir con Vectorify.Api.Options.PreprocessOptions
+ * (Preprocess:*, backend/Vectorify.Api/appsettings.json) y con PreprocessParams del
  * lado Python (services/python-engine/app/models/schemas.py) — documentado como
  * supuesto en el reporte del sprint.
  */

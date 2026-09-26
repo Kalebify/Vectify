@@ -56,7 +56,7 @@ interface LayerCanvasProps {
  * capas VISIBLES, alineados correctamente sobre la imagen base. La
  * alineación es automática y no requiere ningún cálculo de posición propio
  * de este componente: cada capa comparte el mismo sistema de coordenadas/
- * viewBox que la imagen original (Vectify.Api/el motor Python nunca recorta
+ * viewBox que la imagen original (Vectorify.Api/el motor Python nunca recorta
  * una máscara a su propio bounding box antes de vectorizarla -- ver
  * spec.md, "normalización de coordenadas"), así que apilar cada `<img>` con
  * el mismo width/height en la misma posición (position: absolute; inset: 0)

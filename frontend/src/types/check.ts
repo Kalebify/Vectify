@@ -1,7 +1,7 @@
 /**
  * Contratos tipados que expone ASP.NET Core para el Laser Checker de paths
  * abiertos/duplicados (M1-S08): POST .../check. Deben reflejar exactamente
- * Vectify.Api.Contracts.CheckRequest/CheckResponse/CheckIssuePayload.
+ * Vectorify.Api.Contracts.CheckRequest/CheckResponse/CheckIssuePayload.
  */
 
 /** El spec no aclara si el checker opera sobre una VectorVersion (M1-S05) o también sobre una SimplificationVersion (M1-S07) -- se aceptan ambas. */

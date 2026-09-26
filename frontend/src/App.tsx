@@ -254,7 +254,7 @@ function App() {
   return (
     <>
       <header className="app-header">
-        <h1>Vectify</h1>
+        <h1>Vectorify</h1>
         <p className="app-header__subtitle">
           Vectorizá tus imágenes: cargá un original y verificá el estado del sistema.
         </p>
@@ -505,7 +505,7 @@ function App() {
       </main>
 
       <footer className="app-footer">
-        <p>Vectify · M2-S02 · Capas por color</p>
+        <p>Vectorify · M2-S02 · Capas por color</p>
       </footer>
     </>
   );

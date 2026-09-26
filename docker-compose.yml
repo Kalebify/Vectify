@@ -5,7 +5,7 @@ services:
     ports:
       - "${PYTHON_PORT:-8001}:8000"
     environment:
-      SERVICE_NAME: ${SERVICE_NAME:-vectify-python-engine}
+      SERVICE_NAME: ${SERVICE_NAME:-vectorify-python-engine}
       SERVICE_VERSION: ${SERVICE_VERSION:-0.1.0}
       HOST: 0.0.0.0
       PORT: 8000
@@ -29,7 +29,7 @@ services:
       # App_Data entera, este único volumen ya cubre las tres sin necesidad de
       # declarar un volumen por subcarpeta. Sin este volumen se pierden en cada
       # `docker compose down`/restart.
-      - vectify_backend_data:/app/App_Data
+      - vectorify_backend_data:/app/App_Data
     environment:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: http://+:8080
@@ -54,4 +54,4 @@ services:
       - backend
 
 volumes:
-  vectify_backend_data:
+  vectorify_backend_data:

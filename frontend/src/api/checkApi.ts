@@ -1,7 +1,7 @@
 import { httpClient } from "./httpClient";
 import type { CheckResponse, CheckSourceKind } from "../types/check";
 
-/** Cuerpo JSON de POST .../check: refleja Vectify.Api.Contracts.CheckRequest. */
+/** Cuerpo JSON de POST .../check: refleja Vectorify.Api.Contracts.CheckRequest. */
 interface CheckRequestBody {
   sourceKind: CheckSourceKind;
   sourceId: string;

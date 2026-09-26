@@ -2,7 +2,7 @@
  * Contratos tipados que expone ASP.NET Core para la unión física de piezas
  * (M2-S06): POST .../vectors/{vectorId}/physical-union/preview y
  * .../confirm. Deben reflejar exactamente
- * Vectify.Api.Contracts.PhysicalUnionPreviewResponse/PhysicalUnionConfirmResponse.
+ * Vectorify.Api.Contracts.PhysicalUnionPreviewResponse/PhysicalUnionConfirmResponse.
  * A DIFERENCIA de "Agrupar" (M2-S05, types/componentGroups.ts): esta acción
  * SÍ modifica geometría real -- por eso sus contratos viven en un archivo
  * propio, nunca se comparten tipos con componentGroups.ts aunque hoy

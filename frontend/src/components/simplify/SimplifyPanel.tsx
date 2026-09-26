@@ -43,7 +43,7 @@ const STATUS_LABEL: Record<string, string> = {
  * (svgToDataUrl) -- "cancelar" es puramente descartar ese estado local, sin
  * llamada de red, porque no hay nada que deshacer del lado del servidor.
  * "Aplicar" sí persiste: crea una nueva versión (nunca sobrescribe la
- * anterior, ver Vectify.Api.Simplification.SimplificationVersion).
+ * anterior, ver Vectorify.Api.Simplification.SimplificationVersion).
  */
 export function SimplifyPanel({
   projectId,

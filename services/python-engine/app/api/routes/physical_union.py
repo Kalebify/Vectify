@@ -22,7 +22,7 @@ router = APIRouter(prefix="/api/v1", tags=["physical-union"])
         "(ver app.core.physical_union). Nunca finge una unión: el resultado se revalida con el MISMO "
         "analizador de componentes de M2-S03 antes de responder -- si el conteo no coincide con el "
         "esperado, responde 422 (physical_union_impossible) en vez de un SVG que 'parece' unido. Solo "
-        "lo llama Vectify.Api."
+        "lo llama Vectorify.Api."
     ),
     responses={
         400: {"model": ErrorResponse, "description": "SVG de entrada corrupto/no decodificable o no es XML/SVG válido"},

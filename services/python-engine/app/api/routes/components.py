@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api/v1", tags=["components"])
         "campo 'file') y los parámetros de tolerancia (campo 'params', JSON serializado de "
         "ComponentAnalysisParams: touch_ratio, tiny_area_ratio, ambos relativos al tamaño de la "
         "capa). Análisis de SOLO LECTURA: nunca modifica el SVG recibido ni une/separa geometría "
-        "-- solo INFORMA la estructura física ya existente. Solo lo llama Vectify.Api."
+        "-- solo INFORMA la estructura física ya existente. Solo lo llama Vectorify.Api."
     ),
     responses={
         400: {"model": ErrorResponse, "description": "SVG de entrada corrupto/no decodificable o no es XML/SVG válido"},

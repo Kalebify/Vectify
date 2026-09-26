@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/v1", tags=["color-palette"])
         "espacio Lab de forma determinista (ver app.core.color_palette_pipeline) y devuelve la "
         "paleta detectada (color, % de área, máscara por grupo) junto con un preview cuantizado. "
         "Los píxeles con alpha=0 se excluyen por completo (nunca cuentan como color). Solo lo llama "
-        "Vectify.Api, que ya validó los rangos antes de reenviar la solicitud acá."
+        "Vectorify.Api, que ya validó los rangos antes de reenviar la solicitud acá."
     ),
     responses={
         400: {"model": ErrorResponse, "description": "Imagen corrupta o no decodificable"},

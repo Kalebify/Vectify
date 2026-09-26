@@ -2,12 +2,12 @@
  * Contratos tipados que expone ASP.NET Core para la etapa de simplificación de
  * nodos (POST .../simplify/preview, POST .../simplify/apply, GET
  * .../simplifications/{id}). Deben reflejar exactamente
- * Vectify.Api.Contracts.SimplifyPreviewResponse/SimplifyResponse/SimplifyRequest.
+ * Vectorify.Api.Contracts.SimplifyPreviewResponse/SimplifyResponse/SimplifyRequest.
  */
 
 import type { VectorMetricsPayload } from "./vectorize";
 
-/** Presets Bajo/Medio/Alto que ve el usuario -- ver Vectify.Api.Options.SimplificationOptions. */
+/** Presets Bajo/Medio/Alto que ve el usuario -- ver Vectorify.Api.Options.SimplificationOptions. */
 export type SimplifyPreset = "low" | "medium" | "high";
 
 export interface SimplificationMetricsPayload {

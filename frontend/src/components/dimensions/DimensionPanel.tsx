@@ -41,7 +41,7 @@ const STATUS_LABEL: Record<DimensionStatus, string> = {
  * aplicar. El preview se calcula 100% en el cliente (ver useDimensions) --
  * "Aplicar" es la única llamada a la Web API, y persiste el resultado como
  * una nueva versión (nunca sobrescribe la anterior, ver
- * Vectify.Api.Dimensioning.DimensionVersion).
+ * Vectorify.Api.Dimensioning.DimensionVersion).
  */
 export function DimensionPanel({ projectId, imageId, sources, onDimensionApplied }: DimensionPanelProps) {
   const [selectedIndex, setSelectedIndex] = useState(sources.length - 1);

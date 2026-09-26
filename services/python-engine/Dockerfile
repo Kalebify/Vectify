@@ -18,7 +18,7 @@ COPY app ./app
 ENV HOST=0.0.0.0 \
     PORT=8000 \
     LOG_LEVEL=info \
-    SERVICE_NAME=vectify-python-engine \
+    SERVICE_NAME=vectorify-python-engine \
     SERVICE_VERSION=0.1.0
 
 EXPOSE 8000

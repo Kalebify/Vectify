@@ -217,7 +217,7 @@ interface ComponentGroupRowProps {
  * conjunto" (resalta TODOS sus componentes miembro a la vez -- ver
  * useComponentGroups.selectGroupAsSet) y "Desagrupar". Si `group.isStale`,
  * avisa sin romper que uno o más componentIds referenciados ya no existen
- * en el análisis vigente (ver Vectify.Api.Components.ComponentGroupStaleness) --
+ * en el análisis vigente (ver Vectorify.Api.Components.ComponentGroupStaleness) --
  * el grupo sigue siendo válido para su propia versión, nunca se borra solo.
  */
 function ComponentGroupRow({ group, layerName, isHighlighted, disabled, onSelectAsSet, onUngroup, onRename }: ComponentGroupRowProps) {

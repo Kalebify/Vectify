@@ -1,7 +1,7 @@
 /**
  * Contratos tipados que expone ASP.NET Core para la carga de imágenes
  * (POST /api/v1/projects, GET /api/v1/projects/{id}/images/{id}/original).
- * Deben reflejar exactamente Vectify.Api.Contracts.UploadImageResponse /
+ * Deben reflejar exactamente Vectorify.Api.Contracts.UploadImageResponse /
  * ApiErrorResponse del backend.
  */
 

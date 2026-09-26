@@ -11,7 +11,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    service_name: str = "vectify-python-engine"
+    service_name: str = "vectorify-python-engine"
     service_version: str = "0.1.0"
     host: str = "0.0.0.0"
     port: int = 8000
@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     # en el reporte del sprint. vectorize_timeout_seconds es un presupuesto
     # interno del proceso Python (ver app.services.vectorization_service),
     # independiente y menor al timeout HTTP configurado del lado de
-    # Vectify.Api (Vectorize:TimeoutSeconds), para que el error tipado de
+    # Vectorify.Api (Vectorize:TimeoutSeconds), para que el error tipado de
     # Python llegue a tiempo en vez de que el cliente HTTP corte primero.
     vectorize_timeout_seconds: int = 25
     max_svg_output_bytes: int = 5_000_000
@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     # supuesto documentado en el reporte del sprint. simplify_timeout_seconds
     # es un presupuesto interno del proceso Python (ver
     # app.services.simplification_service), independiente y menor al timeout
-    # HTTP configurado del lado de Vectify.Api (Simplify:TimeoutSeconds), mismo
+    # HTTP configurado del lado de Vectorify.Api (Simplify:TimeoutSeconds), mismo
     # criterio que vectorize_timeout_seconds. El SVG de entrada reutiliza
     # max_svg_output_bytes como límite de tamaño (nunca debería ser más grande
     # que el límite que ya se le aplicó al generarlo).

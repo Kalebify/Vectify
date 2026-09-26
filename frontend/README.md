@@ -1,4 +1,4 @@
-# Vectify — Frontend
+# Vectorify — Frontend
 
 React + TypeScript + Vite. Pantalla de diagnóstico (estado de la Web API y,
 a través de ella, del motor Python) más el flujo de carga de imagen (M1-S02:

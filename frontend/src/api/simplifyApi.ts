@@ -1,7 +1,7 @@
 import { API_BASE_URL, httpClient } from "./httpClient";
 import type { SimplifyPreset, SimplifyPreviewResponse, SimplifyResponse } from "../types/simplify";
 
-/** Cuerpo JSON compartido por preview/apply: reflejan Vectify.Api.Contracts.SimplifyRequest. */
+/** Cuerpo JSON compartido por preview/apply: reflejan Vectorify.Api.Contracts.SimplifyRequest. */
 interface SimplifyRequestBody {
   vectorId: string;
   preset: SimplifyPreset | null;

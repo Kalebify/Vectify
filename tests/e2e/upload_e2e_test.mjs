@@ -5,7 +5,7 @@
 // (formato no soportado, archivo vacío, archivo corrupto). Python no participa en
 // este sprint, así que este E2E no lo arranca.
 //
-// Requiere: `dotnet build backend/Vectify.sln` ya ejecutado (usa el DLL compilado).
+// Requiere: `dotnet build backend/Vectorify.sln` ya ejecutado (usa el DLL compilado).
 // Uso: node tests/e2e/upload_e2e_test.mjs
 
 import { spawn } from "node:child_process";
@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 import net from "node:net";
 
 const ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
-const API_DLL = join(ROOT, "backend", "Vectify.Api", "bin", "Debug", "net9.0", "Vectify.Api.dll");
+const API_DLL = join(ROOT, "backend", "Vectorify.Api", "bin", "Debug", "net9.0", "Vectorify.Api.dll");
 
 // PNG 1x1 real y válido (misma firma que usan los tests unitarios de backend).
 const VALID_PNG = Buffer.from(
@@ -66,7 +66,7 @@ function assert(condition, message) {
 async function main() {
   const apiPort = await freePort();
   const apiUrl = `http://127.0.0.1:${apiPort}`;
-  const storageRoot = mkdtempSync(join(tmpdir(), "vectify-upload-e2e-"));
+  const storageRoot = mkdtempSync(join(tmpdir(), "vectorify-upload-e2e-"));
 
   const env = {
     ...process.env,

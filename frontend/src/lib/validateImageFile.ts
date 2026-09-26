@@ -1,8 +1,8 @@
 import type { UploadErrorCode } from "../types/upload";
 
 /**
- * Validación UX en el cliente: espeja las reglas de Vectify.Api.Validation.ImageUploadValidator
- * (mismos valores por defecto que backend/Vectify.Api/appsettings.json: Upload:MaxFileSizeBytes /
+ * Validación UX en el cliente: espeja las reglas de Vectorify.Api.Validation.ImageUploadValidator
+ * (mismos valores por defecto que backend/Vectorify.Api/appsettings.json: Upload:MaxFileSizeBytes /
  * Upload:AllowedContentTypes) para dar feedback inmediato sin esperar la respuesta HTTP.
  * La Web API vuelve a validar todo esto — esto es solo UX, nunca la fuente de verdad.
  */

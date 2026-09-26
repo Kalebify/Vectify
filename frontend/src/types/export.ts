@@ -2,7 +2,7 @@
  * Contratos tipados que expone ASP.NET Core para la exportación SVG
  * (M1-S10): GET .../export?sourceKind=...&sourceId=.... No hay un cuerpo
  * JSON de éxito (el endpoint devuelve directamente el SVG como archivo
- * descargable, ver Vectify.Api.Endpoints.ExportEndpoints) -- este archivo
+ * descargable, ver Vectorify.Api.Endpoints.ExportEndpoints) -- este archivo
  * solo refleja sourceKind y los códigos de error controlados.
  */
 

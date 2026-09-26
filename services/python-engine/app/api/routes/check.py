@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api/v1", tags=["check"])
         "campo 'file') y los parámetros de tolerancia (campo 'params', JSON serializado de "
         "CheckParams: close_gap_ratio, duplicate_point_ratio, ambas relativas a la diagonal del "
         "bounding box del SVG). Análisis de SOLO LECTURA: nunca modifica el SVG recibido ni "
-        "produce uno nuevo. Solo lo llama Vectify.Api."
+        "produce uno nuevo. Solo lo llama Vectorify.Api."
     ),
     responses={
         400: {"model": ErrorResponse, "description": "SVG de entrada corrupto/no decodificable o no es XML/SVG válido"},

@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/v1", tags=["vectorize"])
         "detrás de app.core.vector_engine.VectorEngine (VTracer, ver spec.md, 'Decisión "
         "bloqueante resuelta con el usuario') con una configuración fija y determinista. "
         "El SVG resultante se sanitiza (sin <script>, sin referencias externas) antes de "
-        "devolverse. Solo lo llama Vectify.Api."
+        "devolverse. Solo lo llama Vectorify.Api."
     ),
     responses={
         400: {"model": ErrorResponse, "description": "Máscara corrupta o no decodificable"},
@@ -48,12 +48,12 @@ async def vectorize_mask(
         "array de strings, mismo orden y cantidad que 'files'). Vectoriza cada máscara de forma "
         "INDEPENDIENTE reutilizando VectorizationService.process (el mismo motor/pipeline de "
         "M1-S05, sin reinventar el trazado de contornos) N veces DENTRO de esta única request -- "
-        "evita N round-trips HTTP separados entre Vectify.Api y este motor. Ninguna máscara se "
+        "evita N round-trips HTTP separados entre Vectorify.Api y este motor. Ninguna máscara se "
         "recorta a su bounding box: todas comparten las dimensiones de la imagen original, así "
         "que los SVG resultantes ya comparten el mismo sistema de coordenadas/viewBox sin "
         "normalización adicional. Si cualquier máscara falla (corrupta, vacía, demasiado grande, "
         "timeout), toda la solicitud falla -- el conjunto de capas se genera todo o nada, nunca "
-        "parcial. Solo lo llama Vectify.Api."
+        "parcial. Solo lo llama Vectorify.Api."
     ),
     responses={
         400: {"model": ErrorResponse, "description": "Alguna máscara es corrupta o no decodificable"},

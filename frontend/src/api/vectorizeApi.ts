@@ -6,7 +6,7 @@ import type { VectorizeResponse } from "../types/vectorize";
  * máscara de origen) la vectorización de una máscara B/N ya generada
  * (M1-S04). El navegador nunca llama a Python directamente: todo pasa por la
  * Web API. Sin parámetros ajustables en este sprint (ver
- * Vectify.Api.Vectorization.VectorParameters).
+ * Vectorify.Api.Vectorization.VectorParameters).
  */
 export function generateVector(
   projectId: string,

@@ -2,13 +2,13 @@
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
 
-COPY Vectify.sln ./
-COPY Vectify.Api/Vectify.Api.csproj Vectify.Api/
-COPY Vectify.Api.Tests/Vectify.Api.Tests.csproj Vectify.Api.Tests/
-RUN dotnet restore Vectify.Api/Vectify.Api.csproj
+COPY Vectorify.sln ./
+COPY Vectorify.Api/Vectorify.Api.csproj Vectorify.Api/
+COPY Vectorify.Api.Tests/Vectorify.Api.Tests.csproj Vectorify.Api.Tests/
+RUN dotnet restore Vectorify.Api/Vectorify.Api.csproj
 
-COPY Vectify.Api/ Vectify.Api/
-RUN dotnet publish Vectify.Api/Vectify.Api.csproj -c Release -o /app/publish --no-restore
+COPY Vectorify.Api/ Vectorify.Api/
+RUN dotnet publish Vectorify.Api/Vectorify.Api.csproj -c Release -o /app/publish --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime
 WORKDIR /app
@@ -19,4 +19,4 @@ ENV ASPNETCORE_URLS=http://+:8080 \
 
 EXPOSE 8080
 
-ENTRYPOINT ["dotnet", "Vectify.Api.dll"]
+ENTRYPOINT ["dotnet", "Vectorify.Api.dll"]

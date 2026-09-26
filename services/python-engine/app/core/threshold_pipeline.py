@@ -120,7 +120,7 @@ def compute_threshold_metrics(mask: np.ndarray) -> dict[str, float]:
     resultante, con la inversión ya aplicada por `apply_threshold`) vs.
     background (valor 0). Ver spec.md M1-S04: "Python calcula métricas de
     porcentaje foreground/background junto con la máscara". La clasificación
-    de "casi vacía/casi llena" como advertencia vive del lado de Vectify.Api
+    de "casi vacía/casi llena" como advertencia vive del lado de Vectorify.Api
     (ver Threshold/ThresholdService.cs) -- acá solo se calcula el porcentaje
     crudo.
     """

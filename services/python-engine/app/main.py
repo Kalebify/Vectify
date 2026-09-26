@@ -49,7 +49,7 @@ configure_logging(settings.log_level)
 logger = logging.getLogger("app.main")
 
 app = FastAPI(
-    title="Vectify — Motor Python",
+    title="Vectorify — Motor Python",
     description=(
         "Microservicio de procesamiento/vectorización. Expone chequeos de salud, "
         "información del servicio, el pipeline determinista de preprocesamiento "
