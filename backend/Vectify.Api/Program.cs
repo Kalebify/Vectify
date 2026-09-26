@@ -14,6 +14,7 @@ using Vectify.Api.Simplification;
 using Vectify.Api.Storage;
 using Vectify.Api.Threshold;
 using Vectify.Api.Validation;
+using Vectify.Api.VectorLayers;
 using Vectify.Api.Vectorization;
 
 const string ApiVersion = "0.1.0";
@@ -323,6 +324,37 @@ builder.Services.AddSingleton<IColorPaletteVersionRegistry, PersistentColorPalet
 builder.Services.AddSingleton<IColorPaletteParameterValidator, ColorPaletteParameterValidator>();
 builder.Services.AddScoped<IColorPaletteService, ColorPaletteService>();
 
+// Capas vectoriales por color (M2-S02): SEGUNDA tarjeta de MVP2, consume la
+// paleta CONFIRMADA de M2-S01 (IColorPaletteService.FindLatest -- sin volver
+// a llamar a Python para eso) y, por cada ColorGroup, vectoriza su máscara
+// de forma independiente reutilizando el motor YA EXISTENTE de M1-S05 (una
+// única llamada .NET -> Python resuelve las N vectorizaciones, ver
+// IPythonVectorLayerClient). Cada SVG resultante se persiste como una
+// VectorVersion normal en el MISMO IVectorVersionRegistry que M1-S05 --
+// reutilizando el tipo ya existente, no uno paralelo. Cliente Python
+// dedicado con su propio timeout (más alto: una sola request vectoriza N
+// máscaras) y un historial de VectorLayerSetVersion persistido en disco --
+// mismo criterio de caché+lock+versionado que ColorPalette/Vectorization.
+builder.Services
+    .AddOptions<VectorLayerOptions>()
+    .Bind(builder.Configuration.GetSection(VectorLayerOptions.SectionName))
+    .Validate(o => o.TimeoutSeconds > 0, "VectorLayer:TimeoutSeconds debe ser mayor a 0.");
+
+builder.Services.AddHttpClient<IPythonVectorLayerClient, PythonVectorLayerClient>((sp, client) =>
+{
+    var pythonOptions = sp.GetRequiredService<IOptions<PythonEngineOptions>>().Value;
+    var vectorLayerOptions = sp.GetRequiredService<IOptions<VectorLayerOptions>>().Value;
+    client.BaseAddress = new Uri(pythonOptions.BaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(vectorLayerOptions.TimeoutSeconds);
+});
+
+builder.Services
+    .AddOptions<VectorLayerRegistryOptions>()
+    .Bind(builder.Configuration.GetSection(VectorLayerRegistryOptions.SectionName));
+
+builder.Services.AddSingleton<IVectorLayerSetRegistry, PersistentVectorLayerSetRegistry>();
+builder.Services.AddScoped<IVectorLayerService, VectorLayerService>();
+
 // Exportación SVG (M1-S10): cierra el primer flujo productivo. Sirve, sin
 // modificar, los mismos bytes ya persistidos por Vectorization/
 // Simplification/Dimensioning -- SIN cliente Python, SIN caché/lock/registro
@@ -418,6 +450,7 @@ app.MapCheckEndpoints();
 app.MapDimensionEndpoints();
 app.MapExportEndpoints();
 app.MapColorPaletteEndpoints();
+app.MapVectorLayerEndpoints();
 
 app.Run();
 

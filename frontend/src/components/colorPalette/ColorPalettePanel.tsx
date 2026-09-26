@@ -1,5 +1,7 @@
+import { useEffect } from "react";
 import { getColorPalettePreviewUrl } from "../../api/colorPaletteApi";
 import { useColorPalette } from "../../hooks/useColorPalette";
+import type { ColorPaletteResponse } from "../../types/colorPalette";
 import { ColorSwatchList } from "./ColorSwatchList";
 
 interface ColorPalettePanelProps {
@@ -9,6 +11,15 @@ interface ColorPalettePanelProps {
   originalUrl: string;
   originalWidth: number;
   originalHeight: number;
+  /**
+   * Notifica a quien orquesta (App) cada vez que la última versión vigente
+   * de la paleta está confirmada -- M2-S02 (Layers) consume la paleta
+   * CONFIRMADA, así que el panel de capas solo puede activarse a partir de
+   * este evento. Se llama de nuevo (con la misma paleta) si el componente
+   * vuelve a renderizar en estado confirmado -- idempotente del lado de
+   * quien escuche, no solo la primera vez.
+   */
+  onConfirmed?: (palette: ColorPaletteResponse) => void;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -27,7 +38,15 @@ const STATUS_LABEL: Record<string, string> = {
  * flujo multicapa operando directamente sobre la imagen original YA subida
  * (M1-S02) -- no depende de ninguna otra etapa del pipeline de MVP1.
  */
-export function ColorPalettePanel({ projectId, imageId, fileName, originalUrl, originalWidth, originalHeight }: ColorPalettePanelProps) {
+export function ColorPalettePanel({
+  projectId,
+  imageId,
+  fileName,
+  originalUrl,
+  originalWidth,
+  originalHeight,
+  onConfirmed,
+}: ColorPalettePanelProps) {
   const {
     status,
     palette,
@@ -45,6 +64,16 @@ export function ColorPalettePanel({ projectId, imageId, fileName, originalUrl, o
     rename,
     confirm,
   } = useColorPalette(projectId, imageId);
+
+  useEffect(() => {
+    if (palette?.isConfirmed) {
+      onConfirmed?.(palette);
+    }
+    // Notificar de nuevo con la MISMA `palette` si `onConfirmed` cambia de
+    // identidad (ej. el padre re-renderiza con una arrow function inline)
+    // es inofensivo: App.tsx solo hace `setConfirmedPalette(palette)`, y
+    // asignar el mismo objeto de referencia no dispara un re-render extra.
+  }, [palette, onConfirmed]);
 
   const isBusy = status === "detecting" || status === "mutating";
   const isConfirmed = status === "confirmed";

@@ -30,6 +30,7 @@ class InfoService:
                 "preprocess",
                 "threshold",
                 "vectorize",
+                "vectorize-layers",
                 "simplify",
                 "check",
                 "color-palette",

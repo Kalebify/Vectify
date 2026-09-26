@@ -144,6 +144,41 @@ class VectorizeResponse(BaseModel):
     metrics: VectorMetrics
 
 
+class VectorLayerItem(BaseModel):
+    """Un color/grupo vectorizado de forma INDEPENDIENTE (M2-S02): mismo
+    contrato que VectorizeResponse (svg/content_type/width/height/metrics) --
+    reutiliza VectorizationService.process máscara por máscara, sin
+    reinventar el trazado de contornos ya usado en M1-S05 -- con el agregado
+    de `group_id`. `group_id` es opaco para Python (el GUID de ColorGroup que
+    ya administra Vectify.Api del lado de ColorPalette/M2-S01): se echoa tal
+    cual se recibió, únicamente para que Vectify.Api pueda emparejar cada SVG
+    con su ColorGroup de origen sin depender de que el orden de la lista se
+    preserve en el transporte."""
+
+    group_id: str = Field(description="Identificador del ColorGroup de origen, echoado tal cual se recibió.")
+    svg: str = Field(description="Marcado SVG YA sanitizado de esta capa (ver app.core.svg_processing.sanitize_svg)")
+    content_type: str = Field(default="image/svg+xml", examples=["image/svg+xml"])
+    width: int
+    height: int
+    metrics: VectorMetrics
+
+
+class VectorizeLayersResponse(BaseModel):
+    """Respuesta de POST /api/v1/vectorize-layers (M2-S02): una capa vectorial
+    por cada máscara de color recibida, cada una vectorizada de forma
+    independiente. Una única llamada .NET -> Python resuelve las N
+    vectorizaciones (VectorizationService.process llamado N veces DENTRO de
+    esta request), en vez de que Vectify.Api dispare N requests HTTP
+    separadas -- ver spec.md M2-S02, "Ambigüedades detectadas". Ninguna
+    máscara se recorta a su propio bounding box antes de vectorizarla: todas
+    comparten las dimensiones de la imagen original, así que los SVG
+    resultantes ya comparten el mismo sistema de coordenadas/viewBox y
+    encajan exactamente superpuestos sin normalización adicional de este
+    lado (ver spec.md, "normalización de coordenadas")."""
+
+    layers: list[VectorLayerItem]
+
+
 class SimplifyParams(BaseModel):
     """Parámetros de la etapa de simplificación de nodos (M1-S07): tolerancia
     relativa de Douglas-Peucker (ver app.core.simplification_pipeline), como

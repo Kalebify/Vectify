@@ -9,12 +9,14 @@ import { CheckPanel, type CheckSourceOption } from "./components/check/CheckPane
 import { ColorPalettePanel } from "./components/colorPalette/ColorPalettePanel";
 import { DimensionPanel, type DimensionSourceOption } from "./components/dimensions/DimensionPanel";
 import { ExportPanel, type ExportSourceOption } from "./components/export/ExportPanel";
+import { LayersPanel } from "./components/layers/LayersPanel";
 import { PreprocessPanel } from "./components/preprocess/PreprocessPanel";
 import { SimplifyPanel } from "./components/simplify/SimplifyPanel";
 import { ThresholdPanel } from "./components/threshold/ThresholdPanel";
 import { UploadPanel } from "./components/upload/UploadPanel";
 import { VectorizePanel } from "./components/vectorize/VectorizePanel";
 import { useSystemHealth } from "./hooks/useSystemHealth";
+import type { ColorPaletteResponse } from "./types/colorPalette";
 import type { DimensionResponse } from "./types/dimension";
 import type { PreprocessResponse } from "./types/preprocess";
 import type { SimplifyResponse } from "./types/simplify";
@@ -176,6 +178,7 @@ function buildExportSources(
 function App() {
   const { status, response, errorMessage, lastCheckedAt } = useSystemHealth();
   const [activeProject, setActiveProject] = useState<UploadImageResponse | null>(null);
+  const [confirmedPalette, setConfirmedPalette] = useState<ColorPaletteResponse | null>(null);
   const [readyPreview, setReadyPreview] = useState<PreprocessResponse | null>(null);
   const [readyMask, setReadyMask] = useState<ThresholdResponse | null>(null);
   const [readyVector, setReadyVector] = useState<VectorizeResponse | null>(null);
@@ -183,12 +186,22 @@ function App() {
   const [readyDimension, setReadyDimension] = useState<DimensionResponse | null>(null);
 
   const handleProjectCreated = (project: UploadImageResponse | null) => {
+    setConfirmedPalette(null);
     setReadyPreview(null);
     setReadyMask(null);
     setReadyVector(null);
     setReadySimplification(null);
     setReadyDimension(null);
     setActiveProject(project);
+  };
+
+  // M2-S02 (Layers) consume la paleta CONFIRMADA de M2-S01: recién ahí se
+  // activa el panel de capas. Independiente del resto del pipeline de MVP1
+  // (preprocess -> threshold -> vectorize -> ...): confirmar la paleta no
+  // invalida ningún estado de esa rama, son flujos paralelos sobre la misma
+  // imagen original.
+  const handlePaletteConfirmed = (palette: ColorPaletteResponse) => {
+    setConfirmedPalette(palette);
   };
 
   const handlePreviewReady = (preview: PreprocessResponse) => {
@@ -273,6 +286,24 @@ function App() {
               originalUrl={getOriginalImageUrl(activeProject.projectId, activeProject.imageId)}
               originalWidth={activeProject.width ?? 0}
               originalHeight={activeProject.height ?? 0}
+              onConfirmed={handlePaletteConfirmed}
+            />
+          </section>
+        )}
+
+        {activeProject && confirmedPalette && (
+          <section aria-labelledby="layers-heading" className="layers-section">
+            <h2 id="layers-heading">Capas por color</h2>
+            <p className="upload-section__hint">
+              Convertí cada color confirmado en una capa vectorial independiente y alineada: aislá, ocultá o
+              combiná las capas visibles en el mismo canvas. Ninguna capa se recorta a su propia forma: todas
+              comparten el mismo sistema de coordenadas que la imagen original.
+            </p>
+            <LayersPanel
+              key={`${activeProject.projectId}-${activeProject.imageId}-${confirmedPalette.paletteId}-${confirmedPalette.version}`}
+              projectId={activeProject.projectId}
+              imageId={activeProject.imageId}
+              paletteId={confirmedPalette.paletteId}
             />
           </section>
         )}
@@ -474,7 +505,7 @@ function App() {
       </main>
 
       <footer className="app-footer">
-        <p>Vectify · M2-S01 · Paleta de colores</p>
+        <p>Vectify · M2-S02 · Capas por color</p>
       </footer>
     </>
   );
