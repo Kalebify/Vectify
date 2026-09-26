@@ -1,9 +1,12 @@
 import { useState } from "react";
 import type { GroupSelection } from "../../hooks/useComponentGroups";
+import type { PhysicalUnionPhase } from "../../hooks/usePhysicalUnion";
 import type { SelectedComponent } from "../../hooks/useLayerComponents";
 import type { ComponentGroupPayload } from "../../types/componentGroups";
 import type { LayerComponentPayload } from "../../types/components";
+import type { PhysicalUnionPreviewResponse } from "../../types/physicalUnion";
 import type { VectorLayerPayload } from "../../types/vectorLayers";
+import { PhysicalUnionPanel } from "./PhysicalUnionPanel";
 
 interface ComponentTreeProps {
   layers: VectorLayerPayload[];
@@ -21,6 +24,22 @@ interface ComponentTreeProps {
   onSelectGroupAsSet?: (layerGroupId: string, groupId: string) => void;
   onUngroup?: (layerGroupId: string, vectorId: string, groupId: string) => void;
   onRenameGroup?: (layerGroupId: string, vectorId: string, groupId: string, name: string) => void;
+
+  /**
+   * Unión FÍSICA de componentes (M2-S06) -- explícitamente DISTINTA de
+   * "Agrupar" arriba: modifica geometría real, en vez de una referencia
+   * lógica. Reutiliza la MISMA selección múltiple (`selection`/
+   * `onToggleComponentSelection`) que "Agrupar": con 2+ piezas
+   * seleccionadas de una capa aparecen AMBOS botones, uno al lado del otro,
+   * con texto/color que deja clara la diferencia. Todos opcionales para que
+   * ComponentTree siga funcionando sin ellos.
+   */
+  onRequestPhysicalUnion?: (layerGroupId: string, vectorId: string) => void;
+  physicalUnionPhaseByLayer?: Record<string, PhysicalUnionPhase>;
+  physicalUnionPreviewByLayer?: Record<string, PhysicalUnionPreviewResponse | null>;
+  physicalUnionErrorByLayer?: Record<string, string | null>;
+  onConfirmPhysicalUnion?: (layerGroupId: string, vectorId: string) => void;
+  onCancelPhysicalUnion?: (layerGroupId: string) => void;
 }
 
 function pieceCountLabel(count: number): string {
@@ -58,6 +77,12 @@ export function ComponentTree({
   onSelectGroupAsSet,
   onUngroup,
   onRenameGroup,
+  onRequestPhysicalUnion,
+  physicalUnionPhaseByLayer,
+  physicalUnionPreviewByLayer,
+  physicalUnionErrorByLayer,
+  onConfirmPhysicalUnion,
+  onCancelPhysicalUnion,
 }: ComponentTreeProps) {
   const layersWithComponents = layers.filter((layer) => componentsByGroup[layer.groupId] !== undefined);
 
@@ -122,6 +147,33 @@ export function ComponentTree({
               >
                 Agrupar {layerSelection.componentIds.length} piezas seleccionadas
               </button>
+            )}
+
+            {/* Unión FÍSICA (M2-S06): acción DISTINTA de "Agrupar" arriba --
+                modifica geometría real (nueva versión de la capa), en vez de
+                crear una referencia lógica. Mismo criterio de aparición (2+
+                piezas seleccionadas de esta capa), botón/clase propios para
+                que quede visualmente clara la diferencia. */}
+            {onRequestPhysicalUnion && layerSelection && layerSelection.componentIds.length >= 2 && (
+              <button
+                type="button"
+                className="upload-actions__button component-tree__union-action"
+                disabled={isMutating}
+                onClick={() => onRequestPhysicalUnion(layer.groupId, layer.vectorId)}
+              >
+                Unir físicamente {layerSelection.componentIds.length} piezas seleccionadas
+              </button>
+            )}
+
+            {physicalUnionPreviewByLayer && physicalUnionPhaseByLayer && (
+              <PhysicalUnionPanel
+                layerName={layer.name}
+                phase={physicalUnionPhaseByLayer[layer.groupId] ?? "idle"}
+                preview={physicalUnionPreviewByLayer[layer.groupId] ?? null}
+                errorMessage={physicalUnionErrorByLayer?.[layer.groupId] ?? null}
+                onConfirm={() => onConfirmPhysicalUnion?.(layer.groupId, layer.vectorId)}
+                onCancel={() => onCancelPhysicalUnion?.(layer.groupId)}
+              />
             )}
 
             {groups.length > 0 && (

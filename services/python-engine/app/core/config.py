@@ -111,6 +111,28 @@ class Settings(BaseSettings):
     component_min_tiny_area_ratio: float = 0.0
     component_max_tiny_area_ratio: float = 0.5
 
+    # Unión física de piezas (M2-S06). Reutiliza EXACTAMENTE los mismos
+    # component_default_touch_ratio/component_default_tiny_area_ratio/
+    # max_component_subpaths de arriba para el criterio de "tocarse"/
+    # "diminuto"/salvaguarda de rendimiento (ver spec.md, "Ambigüedades
+    # detectadas": "el implementador reutiliza el mismo criterio de
+    # tolerancia relativa ya establecido en M2-S03") -- ver
+    # app.models.schemas.PhysicalUnionParams, que espeja esos mismos
+    # valores como default. physical_union_timeout_seconds es un
+    # presupuesto interno del proceso Python (mismo criterio que
+    # component_timeout_seconds): el cómputo booleano/bridging con Shapely
+    # más la re-validación de componentes del resultado es CPU-bound puro
+    # Python/GEOS, se acota con un hilo separado.
+    # physical_union_default_bridge_width_ratio (2% de la diagonal del SVG
+    # completo) es un supuesto documentado (spec.md no lo cuantifica): lo
+    # bastante ancho para que el bridge sea una pieza físicamente cortable
+    # con láser (no una línea infinitesimal), lo bastante angosto para no
+    # invadir visualmente piezas cercanas no seleccionadas en el caso común.
+    physical_union_timeout_seconds: int = 20
+    physical_union_default_bridge_width_ratio: float = 0.02
+    physical_union_min_bridge_width_ratio: float = 0.001
+    physical_union_max_bridge_width_ratio: float = 0.5
+
     # Salvaguarda de rendimiento: si la imagen tiene más colores únicos que
     # esto (fotografías/degradés de tono continuo, no el caso de uso
     # principal de esta herramienta -- logos/diseños gráficos para corte

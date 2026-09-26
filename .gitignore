@@ -36,3 +36,6 @@ Thumbs.db
 
 # Node.js portable usado localmente (activar-node.ps1)
 node-v*-win-x64/
+
+# Scratch de agentes (copias temporales para correr suites en Docker, etc.)
+.test-worktrees/

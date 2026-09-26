@@ -440,6 +440,64 @@ class ComponentAnalysisResponse(BaseModel):
     )
 
 
+class PhysicalUnionMemberRef(BaseModel):
+    """Referencia a un subpath miembro de un `LayerComponent` YA calculado
+    por M2-S03 -- exactamente `path_index`/`subpath_index`/`role` de
+    `ComponentMember`, ecoados tal cual por Vectify.Api (que ya los tiene
+    persistidos en la ComponentSetVersion vigente del VectorId, no hace
+    falta recalcularlos acá)."""
+
+    path_index: int = Field(ge=0)
+    subpath_index: int = Field(ge=0)
+    role: Literal["solid", "hole"]
+
+
+class PhysicalUnionSelection(BaseModel):
+    """Un componente físico completo seleccionado para la unión: su id (solo
+    para mensajes de error legibles) y la lista de sus subpaths miembro."""
+
+    component_id: str
+    members: list[PhysicalUnionMemberRef] = Field(min_length=1)
+
+
+class PhysicalUnionParams(BaseModel):
+    """Parámetros de la unión física de piezas (M2-S06): la selección de 2+
+    componentes a fusionar, más las MISMAS tolerancias relativas de M2-S03
+    (`touch_ratio`/`tiny_area_ratio`, ver ComponentAnalysisParams -- se
+    reutiliza EXACTAMENTE el mismo criterio, ver spec.md, "Ambigüedades
+    detectadas") y `bridge_width_ratio` (ancho del bridge simple/directo
+    para piezas separadas, como fracción de la diagonal del SVG completo --
+    spec.md no lo cuantifica, ver
+    app.core.config.Settings.physical_union_default_bridge_width_ratio)."""
+
+    selections: list[PhysicalUnionSelection] = Field(min_length=2)
+    touch_ratio: float = Field(default=0.001, ge=0, le=0.5)
+    tiny_area_ratio: float = Field(default=0.0005, ge=0, le=0.5)
+    bridge_width_ratio: float = Field(default=0.02, ge=0, le=0.5)
+
+
+class PhysicalUnionResponse(BaseModel):
+    """Respuesta de POST /api/v1/components/union. El SVG viaja como texto
+    plano en `svg` (misma convención que Vectorize/SimplifyResponse). Nunca
+    se devuelve un `PhysicalUnionResponse` "parcialmente exitoso": si la
+    validación post-operación (reanalizar el resultado con EL MISMO
+    analizador de M2-S03) no confirma el conteo esperado de componentes, el
+    servicio lanza PhysicalUnionImpossibleError en vez de construir esta
+    respuesta (ver app.core.physical_union, "nunca fingir unión")."""
+
+    svg: str = Field(description="Marcado SVG con las piezas seleccionadas YA fusionadas, sanitizado de nuevo")
+    content_type: str = Field(default="image/svg+xml", examples=["image/svg+xml"])
+    width: int
+    height: int
+    metrics: VectorMetrics
+    effective_params: PhysicalUnionParams
+    component_count_before: int = Field(ge=0)
+    component_count_after: int = Field(ge=0)
+    expected_component_count_after: int = Field(ge=0)
+    strategy: Literal["boolean_union", "bridge", "mixed"]
+    bridge_count: int = Field(ge=0)
+
+
 class ColorPaletteParams(BaseModel):
     """Parámetros de detección/reducción de paleta de colores (M2-S01):
     tolerancia de fusión automática (distancia euclídea en espacio Lab, ver

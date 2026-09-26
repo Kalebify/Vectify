@@ -1779,6 +1779,75 @@ main {
   color: var(--warning, #b45309);
 }
 
+/* --- Unión FÍSICA de componentes (M2-S06) --- deliberadamente DISTINTA en
+   color de "Agrupar" arriba (M2-S05): esta acción SÍ modifica geometría
+   real, se le da un acento de advertencia (naranja/ámbar) en vez del
+   acento neutro de agrupar. */
+
+.component-tree__union-action {
+  margin-top: 6px;
+  margin-left: 8px;
+  align-self: flex-start;
+  border-color: var(--warning, #b45309);
+  color: var(--warning, #b45309);
+}
+
+.physical-union-panel {
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--warning, #b45309);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--warning, #b45309) 8%, transparent);
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.physical-union-panel--error {
+  background: color-mix(in srgb, var(--warning, #b45309) 15%, transparent);
+}
+
+.physical-union-panel__warning {
+  margin: 0;
+  font-weight: 600;
+  color: var(--warning, #b45309);
+}
+
+.physical-union-panel__note {
+  margin: 0;
+  color: var(--text);
+}
+
+.physical-union-panel__preview img {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.physical-union-panel__counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 0;
+}
+
+.physical-union-panel__counts dt {
+  font-size: 11px;
+  color: var(--text);
+  opacity: 0.8;
+}
+
+.physical-union-panel__counts dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.physical-union-panel__actions {
+  display: flex;
+  gap: 8px;
+}
+
 .component-details {
   font-size: 13px;
   color: var(--text);
