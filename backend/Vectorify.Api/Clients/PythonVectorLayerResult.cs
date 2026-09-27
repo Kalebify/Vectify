@@ -1,3 +1,4 @@
+using Vectorify.Api.VectorLayers;
 using Vectorify.Api.Vectorization;
 
 namespace Vectorify.Api.Clients;
@@ -52,7 +53,8 @@ public sealed record PythonVectorLayerItemResult(
     string ContentType,
     int Width,
     int Height,
-    VectorMetrics Metrics);
+    VectorMetrics Metrics,
+    LayerRasterValidation RasterValidation);
 
 public sealed record PythonVectorLayerBatchResult(
     PythonVectorLayerState State,

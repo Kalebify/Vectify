@@ -233,6 +233,45 @@ def make_sparse_mask_png_bytes(size: int = 40, block: int = 4, gap: int = 4) -> 
     return buffer.tobytes()
 
 
+def make_quadrant_mask_png_bytes(size: int, quadrant: int) -> bytes:
+    """Máscara B/N con UN cuadrante (2x2, `quadrant` 0=top-left, 1=top-right,
+    2=bottom-left, 3=bottom-right) en blanco (255), el resto en negro (0) --
+    4 máscaras que NO se solapan y cubren el lienzo COMPLETO, usadas para
+    replicar un fixture de "4 colores contiguos" (M2.1-S03, ver spec.md,
+    'Pruebas': 'colores contiguos') -- a diferencia de
+    make_positioned_square_mask_png_bytes, estas 4 máscaras se TOCAN entre sí
+    en toda la línea media del lienzo, el caso exacto que la validación
+    raster-vs-vector no debe reportar como falsa contaminación."""
+    image = np.zeros((size, size), dtype=np.uint8)
+    half = size // 2
+    x0, x1 = (0, half) if quadrant % 2 == 0 else (half, size)
+    y0, y1 = (0, half) if quadrant < 2 else (half, size)
+    image[y0:y1, x0:x1] = 255
+    success, buffer = cv2.imencode(".png", image)
+    assert success
+    return buffer.tobytes()
+
+
+def make_adjacent_masks_png_bytes(width: int = 60, height: int = 40, split: int | None = None) -> tuple[bytes, bytes]:
+    """Par de máscaras B/N COMPLEMENTARIAS que se tocan en un único borde
+    vertical recto (izquierda/derecha), sin solaparse ni dejar hueco entre
+    ellas -- el caso "colores contiguos" de M2.1-S03 (spec.md, 'Pruebas'):
+    dos capas de colores distintos que comparten un borde de contacto real,
+    usado para verificar que la validación raster-vs-vector NO reporta
+    contaminación cruzada ahí solo por antialiasing/redondeo de coordenadas.
+    """
+    split_x = split if split is not None else width // 2
+    left = np.zeros((height, width), dtype=np.uint8)
+    left[:, :split_x] = 255
+    right = np.zeros((height, width), dtype=np.uint8)
+    right[:, split_x:] = 255
+
+    success_left, buffer_left = cv2.imencode(".png", left)
+    success_right, buffer_right = cv2.imencode(".png", right)
+    assert success_left and success_right
+    return buffer_left.tobytes(), buffer_right.tobytes()
+
+
 def make_bw_two_color_png_bytes(width: int = 12, height: int = 12) -> bytes:
     """PNG BGR determinista, blanco y negro puro (2 colores, sin
     antialiasing) -- caso de regresión explícito de M2.1-S02 (spec.md,

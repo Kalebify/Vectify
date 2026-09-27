@@ -5,6 +5,7 @@ using System.Xml.Linq;
 using Microsoft.Extensions.Options;
 using Vectorify.Api.Contracts;
 using Vectorify.Api.Options;
+using Vectorify.Api.VectorLayers;
 using Vectorify.Api.Vectorization;
 
 namespace Vectorify.Api.Clients;
@@ -215,6 +216,11 @@ public sealed class PythonVectorLayerClient : IPythonVectorLayerClient
                 return false;
             }
 
+            if (!TryConvertRasterValidation(groupId, item.RasterValidation, out var rasterValidation, out reason))
+            {
+                return false;
+            }
+
             converted.Add(new PythonVectorLayerItemResult(
                 groupId,
                 item.Svg,
@@ -224,10 +230,50 @@ public sealed class PythonVectorLayerClient : IPythonVectorLayerClient
                 new VectorMetrics(
                     metrics.PathCount,
                     metrics.ApproxNodeCount,
-                    new VectorBounds(bounds.MinX, bounds.MinY, bounds.MaxX, bounds.MaxY, bounds.Width, bounds.Height))));
+                    new VectorBounds(bounds.MinX, bounds.MinY, bounds.MaxX, bounds.MaxY, bounds.Width, bounds.Height)),
+                rasterValidation!));
         }
 
         layers = converted;
+        reason = null;
+        return true;
+    }
+
+    /// <summary>
+    /// Defensa en profundidad adicional (M2.1-S03) sobre `raster_validation`:
+    /// debe estar presente (Python SIEMPRE lo calcula desde que esta tarjeta
+    /// existe) y sus ratios/tolerancias deben ser finitos y no negativos --
+    /// mismo criterio que la validación de bounds/métricas de arriba.
+    /// </summary>
+    private static bool TryConvertRasterValidation(
+        Guid groupId, PythonRasterValidationPayload? payload, out LayerRasterValidation? result, out string? reason)
+    {
+        result = null;
+
+        if (payload is null)
+        {
+            reason = $"La capa del grupo {groupId:N} no contiene el campo 'raster_validation' esperado.";
+            return false;
+        }
+
+        var ratiosAndTolerances = new[]
+        {
+            payload.OwnMismatchRatio, payload.OwnMismatchTolerance, payload.ContaminationRatio, payload.ContaminationTolerance,
+        };
+        if (ratiosAndTolerances.Any(v => double.IsNaN(v) || double.IsInfinity(v) || v < 0))
+        {
+            reason = $"La validación raster-vs-vector devuelta por el motor Python para la capa {groupId:N} contiene valores no finitos o negativos.";
+            return false;
+        }
+
+        result = new LayerRasterValidation(
+            payload.OwnMismatchRatio,
+            payload.OwnMismatchTolerance,
+            payload.OwnMismatchWithinTolerance,
+            payload.ContaminationRatio,
+            payload.ContaminationTolerance,
+            payload.ContaminationWithinTolerance,
+            payload.Warnings ?? new List<string>());
         reason = null;
         return true;
     }

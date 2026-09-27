@@ -313,6 +313,128 @@ public sealed class VectorLayerServiceTests
         Assert.Equal(confirmed.SourceHeightPx, ready.Record.SourceHeightPx);
     }
 
+    // ---- Validación raster-vs-vector (M2.1-S03) ----
+
+    [Fact]
+    public async Task GenerateLayersAsync_WhenSuccessful_EachLayerCarriesTheRasterValidationComputedByPython()
+    {
+        // El CÁLCULO ya lo hizo Python (ver services/python-engine, app.core.raster_validation) --
+        // VectorLayerService solo debe transportarlo tal cual a la capa persistida, sin recalcular nada.
+        var (service, paletteService, _, _, _, pythonClient) = CreateService();
+        var confirmed = await DetectAndConfirmPaletteAsync(paletteService);
+        var customValidation = new LayerRasterValidation(
+            OwnMismatchRatio: 0.02, OwnMismatchTolerance: 0.15, OwnMismatchWithinTolerance: true,
+            ContaminationRatio: 0.0, ContaminationTolerance: 0.01, ContaminationWithinTolerance: true,
+            Warnings: Array.Empty<string>());
+        pythonClient.Respond = masks => new PythonVectorLayerBatchResult(
+            PythonVectorLayerState.Success,
+            masks.Select(mask => new PythonVectorLayerItemResult(
+                mask.GroupId,
+                "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\"><path d=\"M2,2 L8,2 L8,8 L2,8 Z\"/></svg>",
+                "image/svg+xml", 10, 10, new VectorMetrics(1, 4, new VectorBounds(2, 2, 8, 8, 6, 6)),
+                customValidation)).ToList(),
+            Message: null);
+
+        var result = await service.GenerateLayersAsync(ProjectId, ImageId, confirmed.PaletteId, CancellationToken.None);
+        var ready = Assert.IsType<VectorLayerSetResult.Ready>(result);
+
+        foreach (var layer in ready.Record.Layers)
+        {
+            Assert.Equal(customValidation.OwnMismatchRatio, layer.RasterValidation.OwnMismatchRatio);
+            Assert.Equal(customValidation.OwnMismatchTolerance, layer.RasterValidation.OwnMismatchTolerance);
+            Assert.Equal(customValidation.OwnMismatchWithinTolerance, layer.RasterValidation.OwnMismatchWithinTolerance);
+            Assert.Equal(customValidation.ContaminationRatio, layer.RasterValidation.ContaminationRatio);
+            Assert.Equal(customValidation.ContaminationTolerance, layer.RasterValidation.ContaminationTolerance);
+            Assert.Equal(customValidation.ContaminationWithinTolerance, layer.RasterValidation.ContaminationWithinTolerance);
+            Assert.Empty(layer.RasterValidation.Warnings);
+        }
+    }
+
+    [Fact]
+    public async Task GenerateLayersAsync_WhenRasterValidationIsOutOfTolerance_LogsAWarningButStillGeneratesTheLayer()
+    {
+        // Decisión documentada (spec.md, "Ambigüedades detectadas"): advertir,
+        // NUNCA bloquear -- una discrepancia fuera de tolerancia se loggea,
+        // pero la capa se genera y persiste igual.
+        var recordingLogger = new RecordingLogger<VectorLayerService>();
+        var projectRegistry = new InMemoryProjectRegistry();
+        projectRegistry.Save(new ProjectRecord(
+            ProjectId, ImageId, "original.png", "image/png", 1024, 4, 4, "ready", SourceStorageKey, null, DateTimeOffset.UtcNow));
+        var storage = new FakeFileStorage();
+        storage.Saved[SourceStorageKey] = Encoding.UTF8.GetBytes("fake-original-bytes");
+        var paletteRegistry = new InMemoryColorPaletteVersionRegistry();
+        var paletteValidator = new ColorPaletteParameterValidator(Microsoft.Extensions.Options.Options.Create(new ColorPaletteOptions()));
+        var paletteClient = new FakePythonColorPaletteClient();
+        var paletteService = new ColorPaletteService(
+            projectRegistry, paletteRegistry, paletteValidator, paletteClient, storage, NullLogger<ColorPaletteService>.Instance);
+        var layerSetRegistry = new InMemoryVectorLayerSetRegistry();
+        var vectorRegistry = new InMemoryVectorVersionRegistry();
+        var pythonLayerClient = new FakePythonVectorLayerClient();
+        var contaminatedValidation = new LayerRasterValidation(
+            OwnMismatchRatio: 0.01, OwnMismatchTolerance: 0.15, OwnMismatchWithinTolerance: true,
+            ContaminationRatio: 0.40, ContaminationTolerance: 0.01, ContaminationWithinTolerance: false,
+            Warnings: new List<string> { "El área vectorizada de esta capa contiene 40.00% de píxeles de OTRO color -- posible contaminación cruzada." });
+        pythonLayerClient.Respond = masks => new PythonVectorLayerBatchResult(
+            PythonVectorLayerState.Success,
+            masks.Select(mask => new PythonVectorLayerItemResult(
+                mask.GroupId,
+                "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\"><path d=\"M2,2 L8,2 L8,8 L2,8 Z\"/></svg>",
+                "image/svg+xml", 10, 10, new VectorMetrics(1, 4, new VectorBounds(2, 2, 8, 8, 6, 6)),
+                contaminatedValidation)).ToList(),
+            Message: null);
+        var service = new VectorLayerService(
+            paletteService, layerSetRegistry, vectorRegistry, pythonLayerClient, storage, recordingLogger);
+
+        var confirmed = await DetectAndConfirmPaletteAsync(paletteService);
+        var result = await service.GenerateLayersAsync(ProjectId, ImageId, confirmed.PaletteId, CancellationToken.None);
+
+        // Nunca bloquea: la generación sigue siendo exitosa.
+        var ready = Assert.IsType<VectorLayerSetResult.Ready>(result);
+        Assert.Equal(confirmed.Groups.Count, ready.Record.Layers.Count);
+        Assert.All(ready.Record.Layers, layer => Assert.False(layer.RasterValidation.ContaminationWithinTolerance));
+
+        foreach (var group in confirmed.Groups)
+        {
+            Assert.Contains(
+                recordingLogger.Messages,
+                m => m.Contains(group.GroupId.ToString()) && m.Contains("contamina", StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    // ---- Reordenar no debe alterar geometría (spec.md, "Requisitos") ----
+
+    [Fact]
+    public async Task GenerateLayersAsync_ReversingTheReportedLayersOrderNeverChangesAnyGroupsVectorIdOrPersistedSvg()
+    {
+        var (service, paletteService, storage, _, _, _) = CreateService();
+        var confirmed = await DetectAndConfirmPaletteAsync(paletteService);
+
+        var result = await service.GenerateLayersAsync(ProjectId, ImageId, confirmed.PaletteId, CancellationToken.None);
+        var ready = Assert.IsType<VectorLayerSetResult.Ready>(result);
+
+        // "Order" (M2.1-S03) se computa como la POSICIÓN en esta lista (ver
+        // Vectorify.Api.Endpoints.ConsolidatedVectorLayerEndpoints) -- nunca
+        // identifica una capa. Invertir el orden reportado no debe alterar
+        // NINGÚN VectorId ni el SVG ya persistido: la geometría vive en su
+        // propia VectorVersion, completamente independiente de la posición
+        // en esta lista.
+        var reversedLayers = ready.Record.Layers.Reverse().ToList();
+
+        Assert.Equal(
+            ready.Record.Layers.Select(l => l.GroupId).OrderBy(id => id),
+            reversedLayers.Select(l => l.GroupId).OrderBy(id => id));
+
+        foreach (var layer in ready.Record.Layers)
+        {
+            var reorderedLayer = reversedLayers.Single(l => l.GroupId == layer.GroupId);
+            Assert.Equal(layer.VectorId, reorderedLayer.VectorId);
+
+            var svgKey = storage.Saved.Keys.Single(k => k.Contains("/vector-layers/") && k.Contains(layer.VectorId.ToString("N")));
+            var persistedSvg = Encoding.UTF8.GetString(storage.Saved[svgKey]);
+            Assert.Contains("M2,2 L8,2 L8,8 L2,8 Z", persistedSvg);
+        }
+    }
+
     // ---- Ciclo cache/versión ----
 
     [Fact]
@@ -393,7 +515,8 @@ public sealed class VectorLayerServiceTests
             masks.Take(masks.Count - 1).Select(mask => new PythonVectorLayerItemResult(
                 mask.GroupId,
                 "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\"><path d=\"M2,2 L8,2 L8,8 L2,8 Z\"/></svg>",
-                "image/svg+xml", 10, 10, new VectorMetrics(1, 4, new VectorBounds(2, 2, 8, 8, 6, 6)))).ToList(),
+                "image/svg+xml", 10, 10, new VectorMetrics(1, 4, new VectorBounds(2, 2, 8, 8, 6, 6)),
+                FakePythonVectorLayerClient.DefaultRasterValidation())).ToList(),
             Message: null);
 
         var result = await service.GenerateLayersAsync(ProjectId, ImageId, confirmed.PaletteId, CancellationToken.None);

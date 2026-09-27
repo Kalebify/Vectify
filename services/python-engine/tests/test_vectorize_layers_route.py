@@ -12,10 +12,13 @@ import json
 
 import pytest
 
+from app.core.config import get_settings
 from tests.support import (
     NOT_AN_IMAGE,
+    make_adjacent_masks_png_bytes,
     make_mask_png_bytes,
     make_positioned_square_mask_png_bytes,
+    make_quadrant_mask_png_bytes,
     make_ring_mask_png_bytes,
     make_sparse_mask_png_bytes,
     make_square_mask_png_bytes,
@@ -42,7 +45,12 @@ def _post_vectorize_layers(client, masks: list[bytes], group_ids: list[str]):
 
 
 def test_vectorize_layers_returns_one_layer_per_mask_matching_group_ids(client):
-    masks = [make_square_mask_png_bytes(size=60, square=30), make_ring_mask_png_bytes()]
+    # Mismo tamaño de lienzo para ambas máscaras -- invariante real de M2-S02
+    # ("Ninguna máscara se recorta a su bounding box: todas comparten las
+    # dimensiones de la imagen original") del que depende la validación
+    # raster-vs-vector de M2.1-S03 (compara cada capa contra la UNIÓN de las
+    # demás máscaras recibidas, que deben tener las mismas dimensiones).
+    masks = [make_square_mask_png_bytes(size=60, square=30), make_ring_mask_png_bytes(size=60, outer_radius=20, inner_radius=8)]
     group_ids = ["group-a", "group-b"]
 
     response = _post_vectorize_layers(client, masks, group_ids)
@@ -115,7 +123,9 @@ def test_vectorize_layers_overlapping_masks_are_each_vectorized_independently(cl
 
 
 def test_vectorize_layers_hole_topology_matches_a_single_direct_vectorization(client):
-    masks = [make_square_mask_png_bytes(size=60, square=30), make_ring_mask_png_bytes()]
+    # Mismo tamaño de lienzo para ambas máscaras -- ver comentario de
+    # test_vectorize_layers_returns_one_layer_per_mask_matching_group_ids.
+    masks = [make_square_mask_png_bytes(size=60, square=30), make_ring_mask_png_bytes(size=60, outer_radius=20, inner_radius=8)]
 
     response = _post_vectorize_layers(client, masks, ["solid", "ring"])
 
@@ -210,3 +220,148 @@ def test_vectorize_layers_rejects_when_any_mask_is_empty(client):
 
     assert response.status_code == 422
     assert response.json()["code"] == "empty_mask"
+
+
+# ---- Validación raster-vs-vector (M2.1-S03) ----
+# Ver spec.md, "Criterios de aceptación ampliados" y app.core.raster_validation
+# (evidencia empírica de los umbrales en app.core.config.Settings).
+
+
+def _settings():
+    return get_settings()
+
+
+def test_vectorize_layers_a_single_solid_shape_reports_zero_contamination_and_low_own_mismatch(client):
+    # Una sola máscara (sin otras capas con las que solaparse): contaminación
+    # cero por definición; el mismatch propio de un cuadrado con vértices
+    # exactos en la grilla de píxeles debe ser (esencialmente) cero.
+    masks = [make_square_mask_png_bytes(size=60, square=30)]
+
+    response = _post_vectorize_layers(client, masks, ["solid"])
+
+    validation = response.json()["layers"][0]["raster_validation"]
+    assert validation["own_mismatch_within_tolerance"] is True
+    assert validation["contamination_ratio"] == pytest.approx(0.0)
+    assert validation["contamination_within_tolerance"] is True
+    assert validation["warnings"] == []
+    assert validation["own_mismatch_tolerance"] == pytest.approx(_settings().raster_validation_own_mismatch_tolerance)
+    assert validation["contamination_tolerance"] == pytest.approx(_settings().raster_validation_contamination_tolerance)
+
+
+def test_vectorize_layers_a_ring_with_a_hole_reports_an_own_mismatch_within_tolerance(client):
+    # Forma curva (círculo con agujero, aproximada por un polígono de vértice
+    # finito por VtracerEngine mode="polygon"): tiene un margen de error
+    # geométrico genuino, no un bug -- own_mismatch_tolerance (0.15, ver
+    # Settings) se eligió con evidencia empírica justamente para cubrir este
+    # caso (reporte del sprint: peor círculo observado, radio 5px, 9.88%).
+    masks = [make_ring_mask_png_bytes(size=60, outer_radius=20, inner_radius=8)]
+
+    response = _post_vectorize_layers(client, masks, ["ring"])
+
+    validation = response.json()["layers"][0]["raster_validation"]
+    assert validation["own_mismatch_within_tolerance"] is True
+    assert validation["contamination_ratio"] == pytest.approx(0.0)
+
+
+def test_vectorize_layers_two_non_overlapping_shapes_report_zero_contamination_against_each_other(client):
+    size = 100
+    masks = [
+        make_positioned_square_mask_png_bytes(size=size, square=20, offset_x=5, offset_y=5),
+        make_positioned_square_mask_png_bytes(size=size, square=20, offset_x=70, offset_y=70),
+    ]
+
+    response = _post_vectorize_layers(client, masks, ["top-left", "bottom-right"])
+
+    for layer in response.json()["layers"]:
+        validation = layer["raster_validation"]
+        assert validation["contamination_ratio"] == pytest.approx(0.0)
+        assert validation["contamination_within_tolerance"] is True
+        assert validation["warnings"] == []
+
+
+def test_vectorize_layers_four_colors_each_report_zero_contamination_against_the_other_three(client):
+    # 4 cuadrantes que cubren el lienzo COMPLETO sin solaparse -- fixture
+    # "4 colores" de spec.md (M2.1-S03, "Pruebas"), reverificado con el nuevo
+    # contrato: cada capa debe reportar contaminación cruzada cero contra la
+    # unión de las otras 3.
+    size = 100
+    masks = [make_quadrant_mask_png_bytes(size, quadrant) for quadrant in range(4)]
+    group_ids = ["top-left", "top-right", "bottom-left", "bottom-right"]
+
+    response = _post_vectorize_layers(client, masks, group_ids)
+
+    assert response.status_code == 200
+    layers = response.json()["layers"]
+    assert len(layers) == 4
+    for layer in layers:
+        validation = layer["raster_validation"]
+        assert validation["contamination_ratio"] == pytest.approx(0.0, abs=1e-9)
+        assert validation["contamination_within_tolerance"] is True
+
+
+def test_vectorize_layers_contiguous_colors_touching_at_a_straight_border_report_no_false_positive_contamination(client):
+    # Dos colores que se TOCAN en un borde recto compartido (sin solaparse,
+    # sin hueco) -- el caso explícito de spec.md para verificar que la
+    # validación NO da falsos positivos de contaminación por antialiasing/
+    # redondeo de coordenadas en el borde de contacto.
+    left_bytes, right_bytes = make_adjacent_masks_png_bytes(width=80, height=50, split=40)
+
+    response = _post_vectorize_layers(client, [left_bytes, right_bytes], ["left", "right"])
+
+    assert response.status_code == 200
+    for layer in response.json()["layers"]:
+        validation = layer["raster_validation"]
+        assert validation["contamination_ratio"] <= _settings().raster_validation_contamination_tolerance
+        assert validation["contamination_within_tolerance"] is True
+
+
+def test_vectorize_layers_separate_components_of_the_same_color_report_a_raster_validation_within_tolerance(client):
+    # Varios bloques desconectados del MISMO color dentro de una única
+    # máscara (mismo fixture que M2-S02/M2-S03 para "componentes separados
+    # del mismo color") -- confirma que la corrección de supermuestreo de
+    # rasterize_svg_mask (necesaria justamente para formas chicas como estos
+    # bloques de 4x4) mantiene el mismatch propio dentro de tolerancia.
+    masks = [make_sparse_mask_png_bytes(size=40, block=4, gap=4)]
+
+    response = _post_vectorize_layers(client, masks, ["scattered"])
+
+    validation = response.json()["layers"][0]["raster_validation"]
+    assert validation["own_mismatch_within_tolerance"] is True
+
+
+def test_vectorize_layers_mask_from_partial_alpha_group_reports_a_raster_validation_within_tolerance(client):
+    # Máscara binaria 0/255 (formato de salida ya normalizado, M1-S04) cuyo
+    # ColorGroup de origen viene de una zona con transparencia parcial en la
+    # imagen ORIGINAL (M2-S01/M2-S02, "transparencia") -- la máscara en sí es
+    # estrictamente binaria, así que la validación debe comportarse
+    # exactamente igual que con cualquier otra máscara sin transparencia.
+    masks = [make_sparse_mask_png_bytes(size=40, block=4, gap=4)]
+
+    response = _post_vectorize_layers(client, masks, ["semi-transparent-group"])
+
+    validation = response.json()["layers"][0]["raster_validation"]
+    assert validation["own_mismatch_within_tolerance"] is True
+    assert validation["contamination_ratio"] == pytest.approx(0.0)
+
+
+def test_vectorize_layers_reorder_of_group_ids_does_not_change_any_layers_svg_or_metrics(client):
+    # "Reordenar un layer no debe alterar su geometría" (spec.md, "Requisitos"):
+    # la geometría de cada capa depende SOLO de su propia máscara, nunca del
+    # orden en que se envían/devuelven las demás -- invocar el mismo par de
+    # máscaras en orden inverso debe producir el MISMO SVG/métricas por
+    # group_id, solo con las entradas de `layers` en otro orden.
+    masks = [make_square_mask_png_bytes(size=50, square=20), make_ring_mask_png_bytes(size=50, outer_radius=15, inner_radius=5)]
+    group_ids = ["solid", "ring"]
+
+    forward = _post_vectorize_layers(client, masks, group_ids).json()
+    reversed_masks = list(reversed(masks))
+    reversed_group_ids = list(reversed(group_ids))
+    backward = _post_vectorize_layers(client, reversed_masks, reversed_group_ids).json()
+
+    forward_by_id = {layer["group_id"]: layer for layer in forward["layers"]}
+    backward_by_id = {layer["group_id"]: layer for layer in backward["layers"]}
+
+    assert set(forward_by_id) == set(backward_by_id) == {"solid", "ring"}
+    for group_id in forward_by_id:
+        assert forward_by_id[group_id]["svg"] == backward_by_id[group_id]["svg"]
+        assert forward_by_id[group_id]["metrics"] == backward_by_id[group_id]["metrics"]

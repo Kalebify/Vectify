@@ -41,7 +41,8 @@ public sealed class PythonVectorLayerClientTests
     private static Task<PythonVectorLayerBatchResult> InvokeAsync(PythonVectorLayerClient client) =>
         client.VectorizeLayersAsync(SampleMasks());
 
-    private static string LayerJson(Guid groupId, string svg = SvgFixture, string contentType = "image/svg+xml", int width = 10, int height = 10) =>
+    private static string LayerJson(
+        Guid groupId, string svg = SvgFixture, string contentType = "image/svg+xml", int width = 10, int height = 10, string? rasterValidationJson = null) =>
         $$"""
         {
           "group_id": "{{groupId:N}}",
@@ -49,8 +50,15 @@ public sealed class PythonVectorLayerClientTests
           "content_type": "{{contentType}}",
           "width": {{width}},
           "height": {{height}},
-          "metrics": {"path_count": 1, "approx_node_count": 4, "bounds": {"min_x": 2.0, "min_y": 2.0, "max_x": 8.0, "max_y": 8.0, "width": 6.0, "height": 6.0} }
+          "metrics": {"path_count": 1, "approx_node_count": 4, "bounds": {"min_x": 2.0, "min_y": 2.0, "max_x": 8.0, "max_y": 8.0, "width": 6.0, "height": 6.0} },
+          "raster_validation": {{rasterValidationJson ?? DefaultRasterValidationJson}}
         }
+        """;
+
+    private const string DefaultRasterValidationJson = """
+        {"own_mismatch_ratio": 0.0, "own_mismatch_tolerance": 0.15, "own_mismatch_within_tolerance": true,
+         "contamination_ratio": 0.0, "contamination_tolerance": 0.01, "contamination_within_tolerance": true,
+         "warnings": []}
         """;
 
     private const string SvgFixture = "<svg xmlns=\\\"http://www.w3.org/2000/svg\\\" width=\\\"10\\\" height=\\\"10\\\"><path d=\\\"M2,2 L8,2 L8,8 L2,8 Z\\\"/></svg>";
@@ -70,6 +78,73 @@ public sealed class PythonVectorLayerClientTests
         Assert.Equal(2, result.Layers!.Count);
         Assert.Contains(result.Layers, l => l.GroupId == GroupA);
         Assert.Contains(result.Layers, l => l.GroupId == GroupB);
+
+        // M2.1-S03: raster_validation se parsea y mapea al tipo tipado, sin perder ningún campo.
+        var layerA = result.Layers!.Single(l => l.GroupId == GroupA);
+        Assert.Equal(0.0, layerA.RasterValidation.OwnMismatchRatio);
+        Assert.Equal(0.15, layerA.RasterValidation.OwnMismatchTolerance);
+        Assert.True(layerA.RasterValidation.OwnMismatchWithinTolerance);
+        Assert.Equal(0.0, layerA.RasterValidation.ContaminationRatio);
+        Assert.Equal(0.01, layerA.RasterValidation.ContaminationTolerance);
+        Assert.True(layerA.RasterValidation.ContaminationWithinTolerance);
+        Assert.Empty(layerA.RasterValidation.Warnings);
+    }
+
+    [Fact]
+    public async Task VectorizeLayersAsync_WhenRasterValidationHasWarnings_PropagatesThemVerbatim()
+    {
+        var rasterValidationWithWarning = """
+            {"own_mismatch_ratio": 0.4, "own_mismatch_tolerance": 0.15, "own_mismatch_within_tolerance": false,
+             "contamination_ratio": 0.0, "contamination_tolerance": 0.01, "contamination_within_tolerance": true,
+             "warnings": ["La geometría vectorial difiere de su máscara de origen en 40.00%."]}
+            """;
+        var body = $$"""{"layers": [{{LayerJson(GroupA, rasterValidationJson: rasterValidationWithWarning)}}, {{LayerJson(GroupB)}}]}""";
+        var client = CreateClient((_, _) => Task.FromResult(JsonResponse(HttpStatusCode.OK, body)));
+
+        var result = await InvokeAsync(client);
+
+        var layerA = result.Layers!.Single(l => l.GroupId == GroupA);
+        Assert.False(layerA.RasterValidation.OwnMismatchWithinTolerance);
+        Assert.Single(layerA.RasterValidation.Warnings);
+    }
+
+    [Fact]
+    public async Task VectorizeLayersAsync_WhenRasterValidationFieldIsMissing_ReturnsInvalidSvgState()
+    {
+        var bodyWithoutRasterValidation = $$"""
+            {"layers": [
+              {
+                "group_id": "{{GroupA:N}}",
+                "svg": "{{SvgFixture}}",
+                "content_type": "image/svg+xml",
+                "width": 10,
+                "height": 10,
+                "metrics": {"path_count": 1, "approx_node_count": 4, "bounds": {"min_x": 2.0, "min_y": 2.0, "max_x": 8.0, "max_y": 8.0, "width": 6.0, "height": 6.0} }
+              },
+              {{LayerJson(GroupB)}}
+            ]}
+            """;
+        var client = CreateClient((_, _) => Task.FromResult(JsonResponse(HttpStatusCode.OK, bodyWithoutRasterValidation)));
+
+        var result = await InvokeAsync(client);
+
+        Assert.Equal(PythonVectorLayerState.InvalidSvg, result.State);
+    }
+
+    [Fact]
+    public async Task VectorizeLayersAsync_WhenRasterValidationRatioIsNegative_ReturnsInvalidSvgState()
+    {
+        var negativeRasterValidation = """
+            {"own_mismatch_ratio": -0.1, "own_mismatch_tolerance": 0.15, "own_mismatch_within_tolerance": true,
+             "contamination_ratio": 0.0, "contamination_tolerance": 0.01, "contamination_within_tolerance": true,
+             "warnings": []}
+            """;
+        var body = $$"""{"layers": [{{LayerJson(GroupA, rasterValidationJson: negativeRasterValidation)}}, {{LayerJson(GroupB)}}]}""";
+        var client = CreateClient((_, _) => Task.FromResult(JsonResponse(HttpStatusCode.OK, body)));
+
+        var result = await InvokeAsync(client);
+
+        Assert.Equal(PythonVectorLayerState.InvalidSvg, result.State);
     }
 
     [Fact]

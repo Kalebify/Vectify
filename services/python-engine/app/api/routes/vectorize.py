@@ -1,13 +1,25 @@
 import json
+import logging
 
+import cv2
+import numpy as np
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 
 from app.api.dependencies import get_vectorization_service
+from app.core.config import Settings, get_settings
 from app.core.errors import InvalidParametersError
-from app.models.schemas import ErrorResponse, VectorizeLayersResponse, VectorizeResponse, VectorLayerItem
+from app.core.raster_validation import compare_layer_raster, rasterize_svg_mask
+from app.models.schemas import (
+    ErrorResponse,
+    RasterValidationResult,
+    VectorizeLayersResponse,
+    VectorizeResponse,
+    VectorLayerItem,
+)
 from app.services.vectorization_service import VectorizationService
 
 router = APIRouter(prefix="/api/v1", tags=["vectorize"])
+logger = logging.getLogger(__name__)
 
 
 @router.post(
@@ -53,7 +65,11 @@ async def vectorize_mask(
         "que los SVG resultantes ya comparten el mismo sistema de coordenadas/viewBox sin "
         "normalización adicional. Si cualquier máscara falla (corrupta, vacía, demasiado grande, "
         "timeout), toda la solicitud falla -- el conjunto de capas se genera todo o nada, nunca "
-        "parcial. Solo lo llama Vectorify.Api."
+        "parcial. Cada capa devuelta incluye `raster_validation` (M2.1-S03): el SVG resultante se "
+        "rasteriza de vuelta y se compara contra su propia máscara de origen y contra la unión de "
+        "las demás máscaras recibidas (detecta contaminación cruzada entre colores) -- una "
+        "discrepancia por encima de tolerancia se loggea como advertencia, nunca bloquea la "
+        "respuesta. Solo lo llama Vectorify.Api."
     ),
     responses={
         400: {"model": ErrorResponse, "description": "Alguna máscara es corrupta o no decodificable"},
@@ -67,6 +83,7 @@ async def vectorize_layers(
     files: list[UploadFile] = File(..., description="Máscaras B/N (PNG), una por ColorGroup"),
     group_ids: str = Form(..., description="JSON array de IDs (string) de ColorGroup, mismo orden/cantidad que 'files'"),
     service: VectorizationService = Depends(get_vectorization_service),
+    settings: Settings = Depends(get_settings),
 ) -> VectorizeLayersResponse:
     try:
         parsed_group_ids = json.loads(group_ids)
@@ -87,10 +104,46 @@ async def vectorize_layers(
     if len(files) == 0:
         raise InvalidParametersError("Debe enviarse al menos una máscara para vectorizar.")
 
-    layers: list[VectorLayerItem] = []
+    # Traza cada máscara de forma independiente (sin cambios sobre M2-S02),
+    # pero además conserva la máscara binaria REALMENTE usada para trazar
+    # (process_with_mask, M2.1-S03) -- necesaria más abajo para la
+    # validación raster-vs-vector de CADA capa contra las demás.
+    results: list[tuple[str, VectorizeResponse, np.ndarray]] = []
     for group_id, file in zip(parsed_group_ids, files):
         data = await file.read()
-        result = service.process(data)
+        response, mask = service.process_with_mask(data)
+        results.append((group_id, response, mask))
+
+    layers: list[VectorLayerItem] = []
+    for index, (group_id, result, own_mask) in enumerate(results):
+        other_masks_union = np.zeros_like(own_mask)
+        for other_index, (_, _, other_mask) in enumerate(results):
+            if other_index != index:
+                other_masks_union = cv2.bitwise_or(other_masks_union, other_mask)
+
+        reconstructed = rasterize_svg_mask(result.svg, result.width, result.height)
+        outcome = compare_layer_raster(
+            reconstructed,
+            own_mask,
+            other_masks_union,
+            settings.raster_validation_own_mismatch_tolerance,
+            settings.raster_validation_contamination_tolerance,
+        )
+
+        if outcome.warnings:
+            # Advertir, NUNCA bloquear la generación de la capa -- decisión
+            # documentada en el reporte del sprint (M2.1-S03, "Ambigüedades
+            # detectadas"): una discrepancia por encima de tolerancia es una
+            # señal para revisar, no una razón para fallar toda la request
+            # (que ya de por sí es "todo o nada" a nivel de errores de
+            # trazado -- esto es deliberadamente distinto, una advertencia de
+            # calidad, no un error).
+            logger.warning(
+                "Validación raster-vs-vector fuera de tolerancia para group_id=%s: %s",
+                group_id,
+                "; ".join(outcome.warnings),
+            )
+
         layers.append(
             VectorLayerItem(
                 group_id=group_id,
@@ -99,6 +152,7 @@ async def vectorize_layers(
                 width=result.width,
                 height=result.height,
                 metrics=result.metrics,
+                raster_validation=RasterValidationResult(**outcome.to_dict()),
             )
         )
 

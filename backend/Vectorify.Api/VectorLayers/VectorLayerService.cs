@@ -203,8 +203,20 @@ public sealed class VectorLayerService : IVectorLayerService
                     CreatedAt: DateTimeOffset.UtcNow);
                 _vectorRegistry.Save(vectorVersion);
 
+                // M2.1-S03: la validación raster-vs-vector YA la calculó el
+                // motor Python (ver PythonVectorLayerClient/raster_validation.py)
+                // -- acá solo se surfacea como advertencia si corresponde,
+                // sin recalcular nada. Nunca bloquea la generación de la capa
+                // (decisión documentada: "advertir, no bloquear").
+                if (!layerResult.RasterValidation.IsWithinTolerance)
+                {
+                    _logger.LogWarning(
+                        "Validación raster-vs-vector fuera de tolerancia para la capa {GroupId} ({ColorHex}) de la paleta {PaletteId} de {ProjectId}/{ImageId}: {Warnings}",
+                        group.GroupId, group.ColorHex, paletteId, projectId, imageId, string.Join(" ", layerResult.RasterValidation.Warnings));
+                }
+
                 layers.Add(new VectorLayer(
-                    group.GroupId, group.Name, group.ColorHex, group.AreaPercent, group.HasPartialAlpha, vectorId));
+                    group.GroupId, group.Name, group.ColorHex, group.AreaPercent, group.HasPartialAlpha, vectorId, layerResult.RasterValidation));
             }
 
             var version = _layerSetRegistry.NextVersion(projectId, imageId, paletteId);

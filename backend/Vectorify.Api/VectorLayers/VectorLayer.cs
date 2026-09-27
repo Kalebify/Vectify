@@ -14,6 +14,15 @@ namespace Vectorify.Api.VectorLayers;
 /// resto del pipeline (Simplification/Check/Dimension ya saben resolver un
 /// VectorId explícito, así que una capa individual es, para el resto del
 /// pipeline, indistinguible de cualquier otro SVG vectorizado).
+///
+/// <see cref="RasterValidation"/> (M2.1-S03, NUEVO): resultado -- ya
+/// calculado por el motor Python al generar esta capa, ver
+/// <see cref="LayerRasterValidation"/> -- de comparar la geometría vectorial
+/// resultante contra su máscara raster de origen y contra las máscaras de
+/// las demás capas de la misma paleta. Persistido junto al resto de la capa
+/// para que el contrato consolidado (ver
+/// Vectorify.Api.Endpoints.ConsolidatedVectorLayerEndpoints) pueda exponerlo
+/// sin volver a llamar a Python.
 /// </summary>
 public sealed record VectorLayer(
     Guid GroupId,
@@ -21,4 +30,5 @@ public sealed record VectorLayer(
     string ColorHex,
     double AreaPercent,
     bool HasPartialAlpha,
-    Guid VectorId);
+    Guid VectorId,
+    LayerRasterValidation RasterValidation);
