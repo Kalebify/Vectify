@@ -1,0 +1,17 @@
+{
+  "card_id": "3e8d77b2-6398-819b-9119-ebc2e252e3bf",
+  "card_url": "https://app.notion.com/p/3e8d77b26398819b9119ebc2e252e3bf",
+  "title": "M2.1-S02 · Detección y reducción real de paleta",
+  "stack": "Python (cuantizacion/tolerancia, ataca explosion por antialiasing), Frontend (toggle incluir/excluir), Vector",
+  "branch": "sprint/3e8d77b2-paleta-real",
+  "column": "Doing",
+  "phase": "implementation",
+  "fix_rounds": 0,
+  "preview_url": null,
+  "pr_url": null,
+  "started_at": "2026-09-27T00:00:00Z",
+  "exceptions": [
+    "Corrida en modo autonomo dentro del backlog MVP2.1 (autorizado, mismo criterio de MVP2).",
+    "Endurece/completa la deteccion de paleta ya construida en M2-S01 de MVP2, no la reescribe desde cero. El cuerpo permite explicitamente mantener el algoritmo ya existente."
+  ]
+}
