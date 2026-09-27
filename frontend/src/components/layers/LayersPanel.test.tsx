@@ -145,3 +145,82 @@ describe("LayersPanel — visibilidad y renderizado combinado", () => {
     expect(screen.getByText("Ninguna capa visible. Activá al menos una para verla acá.")).toBeInTheDocument();
   });
 });
+
+describe("LayersPanel — color real de las capas (regresión M2.1-S01: 'termina en blanco y negro')", () => {
+  // Causa raíz confirmada de M2.1-S01: el SVG real de cada capa (servido por
+  // GET .../vectors/{vectorId}, el mismo que consume el <img> del canvas
+  // combinado) llegaba SIEMPRE con fill="#000000", sin importar el colorHex
+  // real del grupo -- la metadata (usada por LayerList para los swatches) se
+  // veía bien, pero el canvas combinado se veía en blanco y negro. Esta
+  // prueba fija el contrato del lado del cliente: (a) cada capa apunta a una
+  // URL de SVG DISTINTA (una por vectorId, nunca la misma para dos colores
+  // distintos) y (b) el contenido real que esa URL serviría (simulado acá
+  // como YA CORREGIDO, ver VectorLayerServiceTests/SvgFillWriterTests para
+  // la corrección del lado del servidor) tiene un fill distinto por capa y
+  // NUNCA "#000000" -- si el backend volviera a devolver negro fijo, esta
+  // prueba de contrato seguiría pasando (no reemplaza los tests de backend),
+  // pero documenta y fija el comportamiento esperado end-to-end.
+  function svgWithFill(colorHex: string): string {
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><path d="M2,2 L8,2 L8,8 L2,8 Z" fill="${colorHex}" /></svg>`;
+  }
+
+  function fetchMockRespondingWithRealColors() {
+    return vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+
+      if (url.includes(`/vectors/${VECTOR_A_ID}`)) {
+        return Promise.resolve(
+          new Response(svgWithFill("#ff0000"), { status: 200, headers: { "Content-Type": "image/svg+xml" } }),
+        );
+      }
+      if (url.includes(`/vectors/${VECTOR_B_ID}`)) {
+        return Promise.resolve(
+          new Response(svgWithFill("#00ff00"), { status: 200, headers: { "Content-Type": "image/svg+xml" } }),
+        );
+      }
+      if (url.endsWith("/layers")) {
+        return Promise.resolve(layerSetResponse());
+      }
+
+      throw new Error(`URL no mockeada en este test: ${url}`);
+    });
+  }
+
+  it("cada capa del canvas combinado apunta a una URL de SVG distinta (una por color/vectorId)", async () => {
+    vi.stubGlobal("fetch", fetchMockRespondingWithRealColors());
+
+    renderPanel();
+    fireEvent.click(screen.getByRole("button", { name: "Generar capas" }));
+
+    const imgA = await screen.findByRole("img", { name: "Capa Color 1" });
+    const imgB = await screen.findByRole("img", { name: "Capa Color 2" });
+
+    const srcA = imgA.getAttribute("src");
+    const srcB = imgB.getAttribute("src");
+
+    expect(srcA).toContain(VECTOR_A_ID);
+    expect(srcB).toContain(VECTOR_B_ID);
+    expect(srcA).not.toEqual(srcB);
+  });
+
+  it("el SVG real detrás de cada <img> tiene el fill de su propio color, distinto entre capas y nunca negro", async () => {
+    vi.stubGlobal("fetch", fetchMockRespondingWithRealColors());
+
+    renderPanel();
+    fireEvent.click(screen.getByRole("button", { name: "Generar capas" }));
+
+    const imgA = await screen.findByRole("img", { name: "Capa Color 1" });
+    const imgB = await screen.findByRole("img", { name: "Capa Color 2" });
+
+    const svgTextA = await (await fetch(imgA.getAttribute("src")!)).text();
+    const svgTextB = await (await fetch(imgB.getAttribute("src")!)).text();
+
+    const fillOf = (svg: string) => svg.match(/fill="([^"]+)"/)?.[1];
+
+    expect(fillOf(svgTextA)).toBe("#ff0000");
+    expect(fillOf(svgTextB)).toBe("#00ff00");
+    expect(fillOf(svgTextA)).not.toBe("#000000");
+    expect(fillOf(svgTextB)).not.toBe("#000000");
+    expect(fillOf(svgTextA)).not.toBe(fillOf(svgTextB));
+  });
+});

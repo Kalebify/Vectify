@@ -1,3 +1,5 @@
+using System.Text;
+using System.Xml.Linq;
 using Microsoft.Extensions.Logging.Abstractions;
 using Vectorify.Api.Clients;
 using Vectorify.Api.ColorPalette;
@@ -6,6 +8,7 @@ using Vectorify.Api.Options;
 using Vectorify.Api.Projects;
 using Vectorify.Api.Tests.ColorPalette;
 using Vectorify.Api.Tests.Projects;
+using Vectorify.Api.Tests.TestSupport;
 using Vectorify.Api.VectorLayers;
 using Vectorify.Api.Vectorization;
 
@@ -30,7 +33,7 @@ public sealed class VectorLayerServiceTests
         FakeFileStorage Storage,
         InMemoryVectorLayerSetRegistry LayerSetRegistry,
         InMemoryVectorVersionRegistry VectorRegistry,
-        FakePythonVectorLayerClient PythonClient) CreateService()
+        FakePythonVectorLayerClient PythonClient) CreateService(FakePythonColorPaletteClient? paletteClientOverride = null)
     {
         var projectRegistry = new InMemoryProjectRegistry();
         projectRegistry.Save(new ProjectRecord(
@@ -41,7 +44,7 @@ public sealed class VectorLayerServiceTests
 
         var paletteRegistry = new InMemoryColorPaletteVersionRegistry();
         var paletteValidator = new ColorPaletteParameterValidator(Microsoft.Extensions.Options.Options.Create(new ColorPaletteOptions()));
-        var paletteClient = new FakePythonColorPaletteClient();
+        var paletteClient = paletteClientOverride ?? new FakePythonColorPaletteClient();
         var paletteService = new ColorPaletteService(
             projectRegistry, paletteRegistry, paletteValidator, paletteClient, storage, NullLogger<ColorPaletteService>.Instance);
 
@@ -121,6 +124,159 @@ public sealed class VectorLayerServiceTests
         // Cada capa persistió su propio SVG bajo una clave distinta.
         var svgKeys = storage.Saved.Keys.Where(k => k.Contains("/vector-layers/")).ToList();
         Assert.Equal(confirmed.Groups.Count, svgKeys.Count);
+    }
+
+    // ---- Regresión M2.1-S01: el SVG persistido de cada capa tiene el color REAL, no negro ----
+
+    /// <summary>
+    /// Paleta de EXACTAMENTE 4 colores no solapados (cuadrantes 2x2) -- replica
+    /// el fixture RGBY usado en la reproducción manual de spec.md M2.1-S01 y
+    /// el "Definition of Done verificable": "un fixture de 4 colores (ej.
+    /// RGBY) debe devolver AL MENOS 4 grupos/capas coherentes, cada una con
+    /// su color real aplicado al SVG (no solo en la metadata JSON)".
+    /// </summary>
+    private static readonly (string ColorHex, int Quadrant)[] FourColorPalette =
+    {
+        ("#ff0000", 0), // rojo, top-left
+        ("#00c800", 1), // verde, top-right
+        ("#0000ff", 2), // azul, bottom-left
+        ("#ffdc00", 3), // amarillo, bottom-right
+    };
+
+    private static FakePythonColorPaletteClient CreateFourColorPaletteClient()
+    {
+        const int size = 8;
+        return new FakePythonColorPaletteClient
+        {
+            Respond = () => new PythonColorPaletteResult(
+                PythonColorPaletteState.Success,
+                Width: size,
+                Height: size,
+                ContentType: "image/png",
+                Groups: FourColorPalette
+                    .Select((entry, index) => new PythonColorGroupResult(
+                        index, entry.ColorHex, 16, 25.0, false, ColorPalettePngs.QuadrantMask(size, size, entry.Quadrant)))
+                    .ToArray(),
+                TransparentPercent: 0.0,
+                QuantizedPreviewBytes: ColorPalettePngs.TransparentPreview(size, size),
+                Message: null),
+        };
+    }
+
+    [Fact]
+    public async Task GenerateLayersAsync_WhenPaletteHasFourColors_ReturnsAtLeastFourLayersEachWithItsRealColorAppliedToTheSvg()
+    {
+        var (service, paletteService, storage, _, _, _) = CreateService(CreateFourColorPaletteClient());
+        var confirmed = await DetectAndConfirmPaletteAsync(paletteService);
+
+        // Precondición del propio DoD: el fixture de 4 colores debe haber
+        // producido efectivamente 4 grupos coherentes en la paleta.
+        Assert.Equal(4, confirmed.Groups.Count);
+
+        var result = await service.GenerateLayersAsync(ProjectId, ImageId, confirmed.PaletteId, CancellationToken.None);
+        var ready = Assert.IsType<VectorLayerSetResult.Ready>(result);
+
+        Assert.True(ready.Record.Layers.Count >= 4);
+
+        foreach (var layer in ready.Record.Layers)
+        {
+            var svgKey = storage.Saved.Keys.Single(k => k.Contains("/vector-layers/") && k.Contains(layer.VectorId.ToString("N")));
+            var persistedSvg = Encoding.UTF8.GetString(storage.Saved[svgKey]);
+            var paths = XDocument.Parse(persistedSvg).Descendants().Where(el => el.Name.LocalName == "path").ToList();
+
+            Assert.NotEmpty(paths);
+            foreach (var path in paths)
+            {
+                // El corazón de la regresión: el fill real del ColorGroup, NUNCA
+                // el fill fijo negro que devuelve VtracerEngine.trace en
+                // colormode="binary" (causa raíz confirmada de M2.1-S01).
+                Assert.Equal(layer.ColorHex, path.Attribute("fill")?.Value);
+                Assert.NotEqual("#000000", path.Attribute("fill")?.Value);
+            }
+        }
+
+        // Cada capa tiene un fill DISTINTO entre sí (4 colores distintos, no
+        // los 4 colapsados al mismo negro).
+        var distinctFills = ready.Record.Layers.Select(l => l.ColorHex).Distinct().Count();
+        Assert.Equal(ready.Record.Layers.Count, distinctFills);
+    }
+
+    [Fact]
+    public async Task GenerateLayersAsync_WhenSuccessful_TheDefaultTwoColorPaletteAlsoGetsItsRealFillNotTheEnginesFixedBlack()
+    {
+        // Mismo caso "feliz" default (2 colores: #ff0000/#00ff00) que el resto
+        // de esta clase, pero verificando explícitamente el contenido del SVG
+        // persistido -- FakePythonVectorLayerClient.DefaultSuccess devuelve
+        // fill="#000000" hardcodeado (igual que el VtracerEngine real), así
+        // que esta prueba falla si VectorLayerService alguna vez deja de
+        // sobreescribirlo.
+        var (service, paletteService, storage, _, _, _) = CreateService();
+        var confirmed = await DetectAndConfirmPaletteAsync(paletteService);
+
+        var result = await service.GenerateLayersAsync(ProjectId, ImageId, confirmed.PaletteId, CancellationToken.None);
+        var ready = Assert.IsType<VectorLayerSetResult.Ready>(result);
+
+        foreach (var layer in ready.Record.Layers)
+        {
+            var svgKey = storage.Saved.Keys.Single(k => k.Contains("/vector-layers/") && k.Contains(layer.VectorId.ToString("N")));
+            var persistedSvg = Encoding.UTF8.GetString(storage.Saved[svgKey]);
+            var path = XDocument.Parse(persistedSvg).Descendants().Single(el => el.Name.LocalName == "path");
+
+            Assert.Equal(layer.ColorHex, path.Attribute("fill")?.Value);
+        }
+    }
+
+    [Fact]
+    public async Task GenerateLayersAsync_NeverMutatesThePathsDCommand()
+    {
+        // El fix pinta SOLO el atributo `fill` -- la geometría (`d`) del SVG
+        // devuelto por Python debe llegar a storage BYTE A BYTE igual, sin
+        // ninguna transformación de coordenadas/comandos.
+        var (service, paletteService, storage, _, _, _) = CreateService();
+        var confirmed = await DetectAndConfirmPaletteAsync(paletteService);
+
+        var result = await service.GenerateLayersAsync(ProjectId, ImageId, confirmed.PaletteId, CancellationToken.None);
+        var ready = Assert.IsType<VectorLayerSetResult.Ready>(result);
+
+        foreach (var layer in ready.Record.Layers)
+        {
+            var svgKey = storage.Saved.Keys.Single(k => k.Contains("/vector-layers/") && k.Contains(layer.VectorId.ToString("N")));
+            var persistedSvg = Encoding.UTF8.GetString(storage.Saved[svgKey]);
+            var path = XDocument.Parse(persistedSvg).Descendants().Single(el => el.Name.LocalName == "path");
+
+            Assert.Equal("M2,2 L8,2 L8,8 L2,8 Z", path.Attribute("d")?.Value);
+        }
+    }
+
+    [Fact]
+    public async Task GenerateLayersAsync_WhenSuccessful_EachLayerLogsWhichFillWasApplied()
+    {
+        // Telemetría pedida por spec.md M2.1-S01: "capa {GroupId} pintada
+        // con fill {ColorHex}", sin loggear contenido de imágenes.
+        var recordingLogger = new RecordingLogger<VectorLayerService>();
+        var projectRegistry = new InMemoryProjectRegistry();
+        projectRegistry.Save(new ProjectRecord(
+            ProjectId, ImageId, "original.png", "image/png", 1024, 4, 4, "ready", SourceStorageKey, null, DateTimeOffset.UtcNow));
+        var storage = new FakeFileStorage();
+        storage.Saved[SourceStorageKey] = Encoding.UTF8.GetBytes("fake-original-bytes");
+        var paletteRegistry = new InMemoryColorPaletteVersionRegistry();
+        var paletteValidator = new ColorPaletteParameterValidator(Microsoft.Extensions.Options.Options.Create(new ColorPaletteOptions()));
+        var paletteClient = new FakePythonColorPaletteClient();
+        var paletteService = new ColorPaletteService(
+            projectRegistry, paletteRegistry, paletteValidator, paletteClient, storage, NullLogger<ColorPaletteService>.Instance);
+        var layerSetRegistry = new InMemoryVectorLayerSetRegistry();
+        var vectorRegistry = new InMemoryVectorVersionRegistry();
+        var pythonLayerClient = new FakePythonVectorLayerClient();
+        var service = new VectorLayerService(
+            paletteService, layerSetRegistry, vectorRegistry, pythonLayerClient, storage, recordingLogger);
+
+        var confirmed = await DetectAndConfirmPaletteAsync(paletteService);
+        await service.GenerateLayersAsync(ProjectId, ImageId, confirmed.PaletteId, CancellationToken.None);
+
+        foreach (var group in confirmed.Groups)
+        {
+            Assert.Contains(recordingLogger.Messages, m => m.Contains(group.GroupId.ToString()) && m.Contains(group.ColorHex));
+        }
     }
 
     [Fact]
