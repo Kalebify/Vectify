@@ -518,6 +518,20 @@ class ColorPaletteParams(BaseModel):
         le=64,
         description="Límite superior opcional de colores en la paleta resultante (null = sin límite explícito).",
     )
+    tiny_area_ratio: float = Field(
+        0.001,
+        ge=0,
+        le=0.5,
+        description=(
+            "Umbral de 'grupo diminuto' (M2.1-S02, mismo estilo relativo que "
+            "ComponentAnalysisParams.tiny_area_ratio): cualquier grupo cuya área sea menor a esta fracción "
+            "de los píxeles relevantes (no completamente transparentes) se fusiona automáticamente con su "
+            "vecino de color más cercano ANTES de aplicar max_colors -- ataca la explosión de grupos por "
+            "antialiasing documentada en la auditoría M2.1-S01 (17 grupos en vez de ~5 lógicos). 0 = "
+            "deshabilitado (ver app.core.color_palette_pipeline, 'el implementador decide y documenta'; "
+            "valor default con evidencia empírica antes/después en el reporte del sprint)."
+        ),
+    )
 
 
 class ColorGroupPayload(BaseModel):
@@ -532,6 +546,14 @@ class ColorGroupPayload(BaseModel):
     area_percent: float = Field(ge=0, le=100, description="Porcentaje del ÁREA TOTAL de la imagen (incluye píxeles transparentes en el denominador).")
     has_partial_alpha: bool = Field(
         description="True si parte de los píxeles de este grupo tenían alpha parcial (0 < alpha < 255)."
+    )
+    touches_border: bool = Field(
+        description=(
+            "M2.1-S02: True si este grupo cubre al menos la mitad del perímetro de la imagen -- ver "
+            "app.core.color_palette_pipeline._BACKGROUND_BORDER_TOUCH_RATIO. Vectorify.Api combina esto con "
+            "que el grupo sea el de mayor área para PRE-marcarlo como excluido/fondo por default (el "
+            "usuario puede cambiarlo manualmente en cualquier momento)."
+        )
     )
     mask_base64: str = Field(description="Máscara binaria (0/255) de este grupo, codificada como PNG en base64.")
 

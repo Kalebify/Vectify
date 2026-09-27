@@ -6,13 +6,28 @@
  * ColorGroupPayload/*Request del backend.
  */
 
+export interface RgbColor {
+  r: number;
+  g: number;
+  b: number;
+}
+
 export interface ColorGroupPayload {
   groupId: string;
   name: string;
   colorHex: string;
+  /** M2.1-S02: mismo color que colorHex, ya descompuesto en componentes RGB (aditivo). */
+  rgb: RgbColor;
   pixelCount: number;
   areaPercent: number;
   hasPartialAlpha: boolean;
+  /**
+   * M2.1-S02 (NUEVO): incluido (false)/excluido (true), independiente de un merge. El fondo
+   * dominante detectado automáticamente viene pre-marcado en true en la primera detección, pero
+   * es solo una sugerencia -- el usuario puede cambiarlo en cualquier momento (ver
+   * ColorSwatchList, toggle "Incluir en el corte"/"Excluir del corte").
+   */
+  isExcluded: boolean;
   maskUrl: string;
   /** true si este grupo proviene de un merge (habilita "deshacer fusión" en el panel). */
   isMerged: boolean;
@@ -26,6 +41,8 @@ export interface ColorPaletteResponse {
   version: number;
   tolerance: number;
   maxColors: number | null;
+  /** M2.1-S02: umbral de "grupo diminuto" que atacó la explosión de colores por antialiasing. */
+  tinyAreaRatio: number;
   sourceWidthPx: number;
   sourceHeightPx: number;
   transparentPercent: number;

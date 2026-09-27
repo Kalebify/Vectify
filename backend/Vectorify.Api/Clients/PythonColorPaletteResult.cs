@@ -40,8 +40,15 @@ public enum PythonColorPaletteState
     HttpError,
 }
 
+/// <summary>
+/// <see cref="TouchesBorder"/> (M2.1-S02): eco de
+/// app.core.color_palette_pipeline.ColorGroup.touches_border -- true si este
+/// grupo cubre al menos la mitad del perímetro de la imagen. ColorPaletteService
+/// lo combina con la posición del grupo (ya vienen ordenados por área
+/// descendente) para PRE-marcar un fondo dominante como excluido por default.
+/// </summary>
 public sealed record PythonColorGroupResult(
-    int Id, string ColorHex, long PixelCount, double AreaPercent, bool HasPartialAlpha, byte[] MaskBytes);
+    int Id, string ColorHex, long PixelCount, double AreaPercent, bool HasPartialAlpha, bool TouchesBorder, byte[] MaskBytes);
 
 public sealed record PythonColorPaletteResult(
     PythonColorPaletteState State,

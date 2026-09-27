@@ -70,6 +70,22 @@ export function renameColorPaletteGroup(
   );
 }
 
+/** Marca un grupo como incluido/excluido (M2.1-S02), independiente de un merge. */
+export function setColorPaletteGroupExclusion(
+  projectId: string,
+  imageId: string,
+  paletteId: string,
+  groupId: string,
+  isExcluded: boolean,
+  signal?: AbortSignal,
+): Promise<ColorPaletteResponse> {
+  return httpClient.postJson<ColorPaletteResponse>(
+    `${baseUrl(projectId, imageId)}/${paletteId}/exclude`,
+    { groupId, isExcluded },
+    { signal },
+  );
+}
+
 /** Confirma la paleta final: queda como entrada declarada de M2-S02. */
 export function confirmColorPalette(
   projectId: string,

@@ -18,6 +18,9 @@ from app.services.color_palette_service import ColorPaletteService, ColorPalette
 from tests.support import (
     NOT_AN_IMAGE,
     make_antialiased_edge_png_bytes,
+    make_antialiased_illustration_png_bytes,
+    make_bw_two_color_png_bytes,
+    make_dominant_background_png_bytes,
     make_gradient_png_bytes,
     make_half_transparent_rgba_png_bytes,
     make_near_identical_colors_png_bytes,
@@ -165,6 +168,55 @@ def test_process_raises_dimensions_exceeded_for_oversized_image():
 
     with pytest.raises(DimensionsExceededError):
         tiny_limits_service.process(data, ColorPaletteParams())
+
+
+def test_process_default_tiny_area_ratio_merges_antialiasing_noise_into_logical_colors(service):
+    # M2.1-S02, extremo a extremo (route -> service -> pipeline): con el
+    # default de ColorPaletteParams.tiny_area_ratio (0.001) los 12 grupos
+    # "ruido" del fixture de reproducción se absorben, quedan los 6 colores
+    # lógicos (ver test_color_palette_pipeline.py, misma medición a nivel
+    # unitario, con evidencia detallada en el reporte del sprint).
+    data = make_antialiased_illustration_png_bytes()
+
+    result = service.process(data, ColorPaletteParams(tolerance=12.0, max_colors=None))
+
+    assert result.metrics.color_count == 6
+    assert sum(g.pixel_count for g in result.groups) == result.width * result.height
+
+
+def test_process_tiny_area_ratio_explicit_zero_disables_the_fix(service):
+    data = make_antialiased_illustration_png_bytes()
+
+    result = service.process(data, ColorPaletteParams(tolerance=12.0, max_colors=None, tiny_area_ratio=0.0))
+
+    assert result.metrics.color_count == 18
+
+
+def test_process_dominant_background_group_is_flagged_touches_border(service):
+    data = make_dominant_background_png_bytes()
+
+    result = service.process(data, ColorPaletteParams(tolerance=5.0, max_colors=None))
+
+    groups_by_area = sorted(result.groups, key=lambda g: -g.pixel_count)
+    assert groups_by_area[0].touches_border is True
+    assert groups_by_area[1].touches_border is False
+
+
+def test_process_black_and_white_two_colors_regression(service):
+    data = make_bw_two_color_png_bytes()
+
+    result = service.process(data, ColorPaletteParams(tolerance=5.0, max_colors=None))
+
+    assert result.metrics.color_count == 2
+    assert {g.pixel_count for g in result.groups} == {72}
+
+
+def test_process_max_colors_greater_than_actual_colors_returns_actual_count(service):
+    data = make_solid_colors_png_bytes()  # 3 colores reales
+
+    result = service.process(data, ColorPaletteParams(tolerance=5.0, max_colors=64))
+
+    assert result.metrics.color_count == 3
 
 
 def test_process_raises_timeout_error_when_detection_exceeds_budget():

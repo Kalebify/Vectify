@@ -4,6 +4,7 @@ import {
   detectColorPalette,
   mergeColorPaletteGroups,
   renameColorPaletteGroup,
+  setColorPaletteGroupExclusion,
   unmergeColorPaletteGroup,
 } from "../api/colorPaletteApi";
 import { ApiClientError } from "../api/httpClient";
@@ -62,6 +63,8 @@ export interface UseColorPaletteState {
   mergeSelected: (name?: string) => void;
   unmerge: (groupId: string) => void;
   rename: (groupId: string, name: string) => void;
+  /** Marca un grupo como incluido/excluido (M2.1-S02), independiente de un merge. */
+  setExclusion: (groupId: string, isExcluded: boolean) => void;
   confirm: () => void;
 }
 
@@ -187,6 +190,19 @@ export function useColorPalette(projectId: string, imageId: string): UseColorPal
     [runRequest, projectId, imageId, palette],
   );
 
+  const setExclusion = useCallback(
+    (groupId: string, isExcluded: boolean) => {
+      if (!palette) {
+        return;
+      }
+
+      runRequest("mutating", (signal) =>
+        setColorPaletteGroupExclusion(projectId, imageId, palette.paletteId, groupId, isExcluded, signal),
+      );
+    },
+    [runRequest, projectId, imageId, palette],
+  );
+
   const confirm = useCallback(() => {
     if (!palette) {
       return;
@@ -211,6 +227,7 @@ export function useColorPalette(projectId: string, imageId: string): UseColorPal
     mergeSelected,
     unmerge,
     rename,
+    setExclusion,
     confirm,
   };
 }

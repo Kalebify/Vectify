@@ -41,6 +41,16 @@ public sealed class ColorPaletteParameterValidator : IColorPaletteParameterValid
                 $"maxColors debe estar en el rango [{_options.MinColors}, {_options.MaxColorsUpperBound}], o null para sin límite.");
         }
 
-        return ColorPaletteParameterValidationResult.Success(new ColorPaletteParameters(tolerance, request.MaxColors));
+        var tinyAreaRatio = request.TinyAreaRatio ?? _options.DefaultTinyAreaRatio;
+
+        if (double.IsNaN(tinyAreaRatio) || double.IsInfinity(tinyAreaRatio)
+            || tinyAreaRatio < _options.MinTinyAreaRatio || tinyAreaRatio > _options.MaxTinyAreaRatio)
+        {
+            return ColorPaletteParameterValidationResult.Failure(
+                "invalid_parameters",
+                $"tinyAreaRatio debe estar en el rango [{_options.MinTinyAreaRatio}, {_options.MaxTinyAreaRatio}].");
+        }
+
+        return ColorPaletteParameterValidationResult.Success(new ColorPaletteParameters(tolerance, request.MaxColors, tinyAreaRatio));
     }
 }

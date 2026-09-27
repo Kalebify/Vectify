@@ -8,7 +8,10 @@ namespace Vectorify.Api.Contracts;
 /// el MISMO PaletteId (descartando cualquier merge/rename previo: vuelve a
 /// los grupos crudos que detecta Python), mismo criterio de "un ID de
 /// recurso de origen en el body" que el resto del pipeline.
-/// Tolerance/MaxColors son opcionales: si se omiten, se usan los defaults
-/// configurados (Vectorify.Api.Options.ColorPaletteOptions).
+/// Tolerance/MaxColors/TinyAreaRatio son opcionales: si se omiten, se usan
+/// los defaults configurados (Vectorify.Api.Options.ColorPaletteOptions).
+/// TinyAreaRatio (M2.1-S02) es el umbral de "grupo diminuto" que ataca la
+/// explosión de colores por antialiasing (ver ColorPaletteParameters) -- la
+/// mayoría de los usuarios nunca necesita tocarlo, el default ya lo resuelve.
 /// </summary>
-public sealed record ColorPaletteDetectRequest(Guid? PaletteId, double? Tolerance, int? MaxColors);
+public sealed record ColorPaletteDetectRequest(Guid? PaletteId, double? Tolerance, int? MaxColors, double? TinyAreaRatio = null);

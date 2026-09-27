@@ -43,7 +43,8 @@ public sealed class PythonColorPaletteClient : IPythonColorPaletteClient
         form.Add(fileContent, "file", fileName);
 
         var paramsJson = JsonSerializer.Serialize(
-            new { tolerance = parameters.Tolerance, max_colors = parameters.MaxColors }, JsonOptions);
+            new { tolerance = parameters.Tolerance, max_colors = parameters.MaxColors, tiny_area_ratio = parameters.TinyAreaRatio },
+            JsonOptions);
         form.Add(new StringContent(paramsJson), "params");
 
         HttpResponseMessage response;
@@ -205,7 +206,7 @@ public sealed class PythonColorPaletteClient : IPythonColorPaletteClient
             }
 
             converted.Add(new PythonColorGroupResult(
-                group.Id, group.ColorHex!, group.PixelCount, group.AreaPercent, group.HasPartialAlpha, maskBytes));
+                group.Id, group.ColorHex!, group.PixelCount, group.AreaPercent, group.HasPartialAlpha, group.TouchesBorder, maskBytes));
         }
 
         groups = converted;

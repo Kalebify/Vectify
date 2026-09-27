@@ -37,6 +37,37 @@ poder distinguirlo de un color sólido de fondo real). Un píxel con alpha
 parcial (0 < alpha < 255) SÍ participa del clustering por su color RGB
 compuesto, pero cada cluster resultante expone `has_partial_alpha` para que
 el caller sepa que parte de su área no es completamente opaca.
+
+M2.1-S02 -- endurecimiento de la detección (ver spec.md, "Ambigüedades
+detectadas", este archivo mantiene el algoritmo de clustering Lab ya
+existente, sin migrar a k-means/median-cut: el cuerpo de la tarjeta permite
+explícitamente conservarlo si ya cumple, y el clustering aglomerativo
+determinista de arriba ya lo hace):
+
+1. `tiny_area_ratio` (nuevo parámetro opcional de `detect_palette`, default
+   0.0 = deshabilitado a este nivel -- ver app.services.color_palette_service,
+   que SÍ pasa un default no-cero real en producción, resuelto por
+   Vectorify.Api.Options.ColorPaletteOptions): antes de aplicar `max_colors`,
+   cualquier cluster cuya área (relativa a la cantidad de píxeles
+   "relevantes", es decir no completamente transparentes) sea menor que este
+   umbral se fusiona con su vecino de color más cercano en Lab, SIN importar
+   `tolerance` -- ataca la causa raíz ya documentada en la auditoría
+   M2.1-S01 ("con antialiasing, 17 grupos en vez de ~5 lógicos"): los bordes
+   suavizados generan clusters minúsculos de "colores casi iguales" que
+   sobreviven al primer paso de clustering porque cada uno, tomado solo,
+   puede estar a más de `tolerance` de distancia del cluster vecino más
+   cercano (aunque sea un color visualmente irrelevante por su área). Ver
+   `_merge_tiny_groups_into_nearest` para el detalle, y el reporte del
+   sprint (`IMPL.md`) para la evidencia empírica antes/después que motivó el
+   valor default elegido.
+2. `touches_border` (nuevo campo de `ColorGroup`): fracción del perímetro de
+   la imagen (fila superior/inferior + columna izquierda/derecha, sin
+   contar dos veces las esquinas) que pertenece a este grupo, comparada
+   contra `_BACKGROUND_BORDER_TOUCH_RATIO` -- ver `_border_touch_ratio`.
+   Vectorify.Api usa este flag (junto con que el grupo sea el de mayor área,
+   ya garantizado por el orden de `groups` de abajo) para PRE-marcar un
+   fondo dominante como excluido por default, sin que eso le impida al
+   usuario cambiarlo manualmente después (ver ColorPaletteService.DetectAsync).
 """
 
 from __future__ import annotations
@@ -48,17 +79,32 @@ import numpy as np
 
 __all__ = ["ColorGroup", "PaletteDetectionResult", "detect_palette"]
 
+# Umbral de "toca el borde" (M2.1-S02): fracción del perímetro total de la
+# imagen que debe pertenecer a un grupo para considerarlo "candidato a fondo"
+# por tocar los bordes -- spec.md no lo cuantifica ("el implementador decide
+# y documenta", ver "Ambigüedades detectadas"). 0.5 (mayoría absoluta del
+# perímetro) se eligió porque un fondo real típicamente rodea la imagen casi
+# por completo, mientras que una forma en primer plano que apenas roza una
+# esquina o un borde (ej. un elemento decorativo cortado por el encuadre)
+# normalmente cubre una fracción bastante menor del perímetro total.
+_BACKGROUND_BORDER_TOUCH_RATIO = 0.5
+
 
 @dataclass(frozen=True)
 class ColorGroup:
     """Un color/grupo detectado: color representativo (promedio ponderado
     por cantidad de píxeles de los colores únicos que lo integran), cuántos
     píxeles ocupa, y una máscara binaria (0/255, mismas dimensiones que la
-    imagen de origen) con los píxeles que pertenecen a este grupo."""
+    imagen de origen) con los píxeles que pertenecen a este grupo.
+
+    `touches_border` (M2.1-S02): True si este grupo cubre al menos
+    `_BACKGROUND_BORDER_TOUCH_RATIO` del perímetro de la imagen -- ver
+    `_border_touch_ratio` y el docstring del módulo."""
 
     color_bgr: tuple[int, int, int]
     pixel_count: int
     has_partial_alpha: bool
+    touches_border: bool
     mask: np.ndarray
 
 
@@ -181,21 +227,90 @@ def _cluster_unique_colors(
     return centroids_lab, pixel_counts, bgr_sums, has_partial, unique_to_cluster
 
 
+def _merge_tiny_groups_into_nearest(
+    centroids_lab: list[np.ndarray],
+    pixel_counts: list[int],
+    bgr_sums: list[np.ndarray],
+    has_partial: list[bool],
+    tiny_area_ratio: float,
+    total_relevant_pixel_count: int,
+) -> tuple[list[int], _UnionFind]:
+    """Paso de limpieza (M2.1-S02, se aplica ANTES de `_merge_down_to_max_colors`):
+    mientras quede más de un cluster "vivo" y el más chico de todos siga por
+    debajo de `tiny_area_ratio` (relativo a `total_relevant_pixel_count`, NO
+    al área total del lienzo -- así una imagen con mucho margen transparente
+    no hace que colores opacos legítimos parezcan "diminutos"), lo fusiona
+    con su vecino de color más cercano en Lab -- SIN mirar `tolerance`, a
+    diferencia de `_cluster_unique_colors`: un cluster de 3 píxeles a
+    distancia 40 en Lab de su vecino más cercano sigue siendo ruido de
+    antialiasing que hay que absorber, no un color legítimo que preservar
+    separado solo porque nadie más quedó tan cerca.
+
+    Determinista: ante empate de tamaño, se elige el índice de cluster más
+    bajo (`min` con clave `(pixel_counts[i], i)`); el vecino más cercano se
+    resuelve con `np.argmin` sobre la lista de candidatos en el mismo orden
+    en que aparecen en `live` (primera ocurrencia en caso de empate de
+    distancia). `tiny_area_ratio <= 0` (o un único cluster) es un no-op
+    explícito -- ver ColorPaletteOptions/color_palette_pipeline docstring
+    del módulo: este paso es opcional/configurable, nunca obligatorio.
+    """
+    union_find = _UnionFind(len(pixel_counts))
+    live = list(range(len(pixel_counts)))
+
+    if tiny_area_ratio <= 0 or total_relevant_pixel_count <= 0:
+        return live, union_find
+
+    threshold = tiny_area_ratio * total_relevant_pixel_count
+
+    while len(live) > 1:
+        smallest = min(live, key=lambda i: (pixel_counts[i], i))
+        if pixel_counts[smallest] >= threshold:
+            break
+
+        candidates = [i for i in live if i != smallest]
+        centroids_arr = np.stack([centroids_lab[i] for i in candidates])
+        dists = np.linalg.norm(centroids_arr - centroids_lab[smallest], axis=1)
+        nearest = candidates[int(np.argmin(dists))]
+
+        total = pixel_counts[smallest] + pixel_counts[nearest]
+        centroids_lab[nearest] = (
+            centroids_lab[nearest] * pixel_counts[nearest] + centroids_lab[smallest] * pixel_counts[smallest]
+        ) / total
+        bgr_sums[nearest] = bgr_sums[nearest] + bgr_sums[smallest]
+        pixel_counts[nearest] = total
+        has_partial[nearest] = has_partial[nearest] or has_partial[smallest]
+
+        union_find.union(keep=nearest, absorb=smallest)
+        live.remove(smallest)
+
+    return live, union_find
+
+
 def _merge_down_to_max_colors(
     centroids_lab: list[np.ndarray],
     pixel_counts: list[int],
     bgr_sums: list[np.ndarray],
     has_partial: list[bool],
     max_colors: int,
+    live: list[int] | None = None,
+    union_find: _UnionFind | None = None,
 ) -> tuple[list[int], _UnionFind]:
     """Segundo paso (opcional): mientras haya más clusters que `max_colors`,
     fusiona repetidamente el par de clusters "vivos" más parecido entre sí
     (menor distancia Lab entre centroides), determinista (ante empates, el
     primero encontrado en orden de `live` ascendente, ya que np.argmin sobre
     una matriz aplanada devuelve la primera ocurrencia en orden row-major).
+
+    `live`/`union_find`, si se pasan (ver `detect_palette`: se les pasa el
+    resultado de `_merge_tiny_groups_into_nearest`), continúan ese mismo
+    union-find en vez de arrancar de cero -- el presupuesto `max_colors` se
+    aplica sobre los clusters que quedaron VIVOS después de la limpieza de
+    grupos diminutos, no sobre los originales (algunos de esos índices ya
+    fueron absorbidos y no deberían volver a contarse).
     """
-    union_find = _UnionFind(len(pixel_counts))
-    live = list(range(len(pixel_counts)))
+    if union_find is None:
+        union_find = _UnionFind(len(pixel_counts))
+    live = list(range(len(pixel_counts))) if live is None else list(live)
 
     while len(live) > max_colors:
         centroids_arr = np.stack([centroids_lab[i] for i in live])
@@ -222,18 +337,48 @@ def _merge_down_to_max_colors(
     return live, union_find
 
 
+def _border_touch_ratio(mask: np.ndarray) -> float:
+    """Fracción del perímetro de la imagen (fila superior + fila inferior +
+    columna izquierda + columna derecha, sin contar dos veces las cuatro
+    esquinas) que pertenece a este grupo (`mask == 255`) -- ver
+    `_BACKGROUND_BORDER_TOUCH_RATIO` y el docstring del módulo. Imágenes de
+    1 fila o 1 columna siguen siendo válidas: cada borde colapsa a la
+    fila/columna única existente, sin dividir por cero."""
+    height, width = mask.shape[:2]
+    if height == 0 or width == 0:
+        return 0.0
+
+    border = np.zeros((height, width), dtype=bool)
+    border[0, :] = True
+    border[height - 1, :] = True
+    border[:, 0] = True
+    border[:, width - 1] = True
+
+    total_border = int(np.count_nonzero(border))
+    if total_border == 0:
+        return 0.0
+
+    touched = int(np.count_nonzero((mask == 255) & border))
+    return touched / total_border
+
+
 def detect_palette(
     bgr: np.ndarray,
     alpha: np.ndarray | None,
     tolerance: float,
     max_colors: int | None,
     max_unique_colors: int,
+    tiny_area_ratio: float = 0.0,
 ) -> PaletteDetectionResult:
     """Punto de entrada: agrupa los píxeles de `bgr` (imagen decodificada,
     3 canales) en como máximo `max_colors` grupos de color (si se especifica),
     fusionando automáticamente los que estén a distancia Lab <= `tolerance`.
     `alpha`, si no es None, marca como excluidos (ni color ni fusión) los
-    píxeles con alpha=0 -- ver docstring del módulo.
+    píxeles con alpha=0 -- ver docstring del módulo. `tiny_area_ratio`
+    (default 0.0 = deshabilitado a este nivel, ver docstring del módulo)
+    fusiona hacia su vecino más cercano cualquier grupo cuya área sea menor
+    a esa fracción del total de píxeles relevantes, ANTES de aplicar
+    `max_colors` -- ver `_merge_tiny_groups_into_nearest`.
     """
     height, width = bgr.shape[:2]
     total_pixel_count = height * width
@@ -271,11 +416,14 @@ def detect_palette(
         colors, counts, partial_any, tolerance
     )
 
-    if max_colors is not None and len(pixel_counts) > max_colors:
-        live, union_find = _merge_down_to_max_colors(centroids_lab, pixel_counts, bgr_sums, has_partial, max_colors)
-    else:
-        live = list(range(len(pixel_counts)))
-        union_find = _UnionFind(len(pixel_counts))
+    live, union_find = _merge_tiny_groups_into_nearest(
+        centroids_lab, pixel_counts, bgr_sums, has_partial, tiny_area_ratio, int(relevant_indices.size)
+    )
+
+    if max_colors is not None and len(live) > max_colors:
+        live, union_find = _merge_down_to_max_colors(
+            centroids_lab, pixel_counts, bgr_sums, has_partial, max_colors, live=live, union_find=union_find
+        )
 
     # Orden de presentación final: por cantidad de píxeles descendente,
     # empate por índice de cluster "vivo" ascendente (determinista).
@@ -302,6 +450,7 @@ def detect_palette(
                 color_bgr=color_bgr,  # type: ignore[arg-type]
                 pixel_count=int(count),
                 has_partial_alpha=bool(has_partial[live_index]),
+                touches_border=_border_touch_ratio(mask) >= _BACKGROUND_BORDER_TOUCH_RATIO,
                 mask=mask,
             )
         )

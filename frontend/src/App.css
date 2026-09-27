@@ -1470,6 +1470,16 @@ main {
   padding: 6px 10px;
 }
 
+.color-swatch__exclusion {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
 .color-palette-panel__actions {
   display: flex;
   align-items: center;

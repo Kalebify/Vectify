@@ -19,7 +19,7 @@ namespace Vectorify.Api.Tests.Clients;
 /// </summary>
 public sealed class PythonColorPaletteClientTests
 {
-    private static readonly ColorPaletteParameters SampleParameters = new(12.0, 8);
+    private static readonly ColorPaletteParameters SampleParameters = new(12.0, 8, 0.001);
 
     private static PythonColorPaletteClient CreateClient(
         Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> handlerFunc,
@@ -56,6 +56,35 @@ public sealed class PythonColorPaletteClientTests
         Assert.NotEmpty(result.Groups![0].MaskBytes);
         Assert.NotNull(result.QuantizedPreviewBytes);
         Assert.NotEmpty(result.QuantizedPreviewBytes!);
+    }
+
+    [Fact]
+    public async Task DetectAsync_WhenResponseHasTouchesBorderTrue_PropagatesItOnTheGroup()
+    {
+        var client = CreateClient((_, _) => Task.FromResult(JsonResponse(
+            HttpStatusCode.OK, ColorPalettePayloads.SuccessBody(touchesBorder: true))));
+
+        var result = await InvokeAsync(client);
+
+        Assert.Equal(PythonColorPaletteState.Success, result.State);
+        Assert.True(result.Groups![0].TouchesBorder);
+    }
+
+    [Fact]
+    public async Task DetectAsync_SendsTinyAreaRatioAsPartOfTheParamsField()
+    {
+        string? capturedBody = null;
+        var client = CreateClient(async (request, _) =>
+        {
+            capturedBody = await request.Content!.ReadAsStringAsync();
+            return JsonResponse(HttpStatusCode.OK, ColorPalettePayloads.SuccessBody());
+        });
+
+        await client.DetectAsync(
+            new MemoryStream([1, 2, 3]), "image/png", "original.png", new ColorPaletteParameters(12.0, 8, 0.0025));
+
+        Assert.NotNull(capturedBody);
+        Assert.Contains("\"tiny_area_ratio\":0.0025", capturedBody, StringComparison.Ordinal);
     }
 
     [Fact]

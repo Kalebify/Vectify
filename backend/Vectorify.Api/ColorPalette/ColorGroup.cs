@@ -17,6 +17,21 @@ namespace Vectorify.Api.ColorPalette;
 /// restaurando esos grupos sin tener que recalcular nada, y encadenar varios
 /// niveles de unmerge si hubo merges sucesivos (ver
 /// Vectorify.Api.ColorPalette.ColorPaletteService.UnmergeAsync).
+///
+/// <see cref="IsExcluded"/> (M2.1-S02, NUEVO): estado incluido/excluido del
+/// grupo, INDEPENDIENTE de un merge -- un color puede excluirse sin
+/// fusionarlo a otro grupo. En la primera detección, se PRE-marca en true
+/// para el grupo de mayor área que además toque la mayoría del perímetro de
+/// la imagen (heurística de "fondo dominante", ver
+/// Vectorify.Api.ColorPalette.ColorPaletteService.DetectAsync y
+/// app.core.color_palette_pipeline.ColorGroup.touches_border) -- pero es
+/// solo una sugerencia inicial: el usuario puede cambiarlo en cualquier
+/// momento vía <see cref="Vectorify.Api.ColorPalette.ColorPaletteService.SetExclusionAsync"/>,
+/// y esa elección se preserva versión a versión (rename/exclude no generan
+/// un GroupId nuevo). Para ESTA tarjeta alcanza con persistir y exponer el
+/// flag correctamente -- la exclusión EFECTIVA aguas abajo (que M2-S03 no
+/// tenga en cuenta un grupo excluido al generar capas) es responsabilidad de
+/// esa tarjeta, no de esta.
 /// </summary>
 public sealed record ColorGroup(
     Guid GroupId,
@@ -25,6 +40,7 @@ public sealed record ColorGroup(
     long PixelCount,
     double AreaPercent,
     bool HasPartialAlpha,
+    bool IsExcluded,
     IReadOnlyList<int> RawGroupIds,
     string MaskStorageKey,
     IReadOnlyList<ColorGroup>? MergedFrom);
