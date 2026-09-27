@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Vectorify.Api.ManufacturingOperations;
+using Vectorify.Api.Tests.VectorLayers;
 using Vectorify.Api.VectorLayers;
 
 namespace Vectorify.Api.Tests.ManufacturingOperations;
@@ -34,8 +35,8 @@ public sealed class ManufacturingOperationServiceTests
             PaletteVersion: paletteVersion,
             Layers: new List<VectorLayer>
             {
-                new(GroupRedId, "Rojo", "#ff0000", 60.0, false, Guid.NewGuid()),
-                new(GroupGreenId, "Verde", "#00ff00", 40.0, false, Guid.NewGuid()),
+                new(GroupRedId, "Rojo", "#ff0000", 60.0, false, Guid.NewGuid(), FakePythonVectorLayerClient.DefaultRasterValidation()),
+                new(GroupGreenId, "Verde", "#00ff00", 40.0, false, Guid.NewGuid(), FakePythonVectorLayerClient.DefaultRasterValidation()),
             },
             SourceWidthPx: 100,
             SourceHeightPx: 100,
@@ -233,8 +234,8 @@ public sealed class ManufacturingOperationServiceTests
             ProjectId, ImageId, Version: 2, LayerSetId: Guid.NewGuid(), PaletteId, PaletteVersion: 2,
             Layers: new List<VectorLayer>
             {
-                new(GroupRedId, "Rojo", "#ff0000", 60.0, false, Guid.NewGuid()),
-                new(GroupGreenId, "Verde", "#00ff00", 40.0, false, Guid.NewGuid()),
+                new(GroupRedId, "Rojo", "#ff0000", 60.0, false, Guid.NewGuid(), FakePythonVectorLayerClient.DefaultRasterValidation()),
+                new(GroupGreenId, "Verde", "#00ff00", 40.0, false, Guid.NewGuid(), FakePythonVectorLayerClient.DefaultRasterValidation()),
             },
             SourceWidthPx: 100, SourceHeightPx: 100, CreatedAt: DateTimeOffset.UtcNow);
         vectorLayerService.AddLayerSet(regenerated);

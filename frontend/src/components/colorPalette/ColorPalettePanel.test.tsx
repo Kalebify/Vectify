@@ -236,7 +236,7 @@ describe("ColorPalettePanel — incluir/excluir (M2.1-S02)", () => {
   });
 
   it("tildar el toggle de un color llama a exclude y el color queda marcado como excluido", async () => {
-    const fetch = vi.fn((input: RequestInfo | URL) => {
+    const fetch = vi.fn((input: RequestInfo | URL, _init?: RequestInit) => {
       const url = input.toString();
       if (url.includes("/exclude")) {
         return Promise.resolve(paletteResponse({ version: 2, groups: [group({ isExcluded: true }), group({ groupId: GROUP_B_ID, name: "Color 2" })] }));
@@ -261,7 +261,7 @@ describe("ColorPalettePanel — incluir/excluir (M2.1-S02)", () => {
   });
 
   it("destildar un color previamente excluido llama a exclude con isExcluded=false", async () => {
-    const fetch = vi.fn((input: RequestInfo | URL) => {
+    const fetch = vi.fn((input: RequestInfo | URL, _init?: RequestInit) => {
       const url = input.toString();
       if (url.includes("/exclude")) {
         return Promise.resolve(paletteResponse({ version: 2 }));

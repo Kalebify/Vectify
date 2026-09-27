@@ -557,6 +557,7 @@ app.MapDimensionEndpoints();
 app.MapExportEndpoints();
 app.MapColorPaletteEndpoints();
 app.MapVectorLayerEndpoints();
+app.MapConsolidatedVectorLayerEndpoints();
 app.MapComponentEndpoints();
 app.MapComponentGroupEndpoints();
 app.MapPhysicalUnionEndpoints();

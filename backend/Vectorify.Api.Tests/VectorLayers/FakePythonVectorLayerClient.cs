@@ -1,4 +1,5 @@
 using Vectorify.Api.Clients;
+using Vectorify.Api.VectorLayers;
 using Vectorify.Api.Vectorization;
 
 namespace Vectorify.Api.Tests.VectorLayers;
@@ -48,6 +49,17 @@ internal sealed class FakePythonVectorLayerClient : IPythonVectorLayerClient
             "image/svg+xml",
             10,
             10,
-            new VectorMetrics(1, 4, new VectorBounds(2, 2, 8, 8, 6, 6)))).ToList(),
+            new VectorMetrics(1, 4, new VectorBounds(2, 2, 8, 8, 6, 6)),
+            DefaultRasterValidation())).ToList(),
         Message: null);
+
+    /// <summary>Validación raster-vs-vector "feliz" por defecto (dentro de tolerancia, sin advertencias) -- mismo criterio que el resto del fake, no representa ningún caso de contaminación.</summary>
+    public static LayerRasterValidation DefaultRasterValidation() => new(
+        OwnMismatchRatio: 0.0,
+        OwnMismatchTolerance: 0.15,
+        OwnMismatchWithinTolerance: true,
+        ContaminationRatio: 0.0,
+        ContaminationTolerance: 0.01,
+        ContaminationWithinTolerance: true,
+        Warnings: Array.Empty<string>());
 }

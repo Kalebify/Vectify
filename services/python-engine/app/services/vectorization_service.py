@@ -44,6 +44,16 @@ class VectorizationService:
         el motor de trazado subyacente (ver reporte del sprint,
         "Determinismo").
         """
+        response, _mask = self.process_with_mask(data)
+        return response
+
+    def process_with_mask(self, data: bytes) -> tuple[VectorizeResponse, np.ndarray]:
+        """Igual que `process`, pero además devuelve la máscara binaria (0/255)
+        REALMENTE usada para trazar (ya rebinarizada defensivamente) -- M2.1-S03
+        la reutiliza para la validación raster-vs-vector de
+        app.api.routes.vectorize.vectorize_layers (comparar el SVG resultante
+        contra la MISMA máscara que lo generó, no una re-decodificada aparte
+        que podría divergir sutilmente del binarizado real)."""
         self._reject_if_header_dimensions_exceed_limits(data)
 
         image = pipeline.read_image_safely(data)
@@ -81,7 +91,7 @@ class VectorizationService:
         stats = compute_svg_stats(sanitized_svg)
         height, width = mask.shape[:2]
 
-        return VectorizeResponse(
+        response = VectorizeResponse(
             svg=sanitized_svg,
             content_type="image/svg+xml",
             width=width,
@@ -92,6 +102,7 @@ class VectorizationService:
                 bounds=VectorBounds(**stats["bounds"]),
             ),
         )
+        return response, mask
 
     def _trace_with_timeout(self, mask: np.ndarray) -> str:
         """Aplica Vectorize:TimeoutSeconds (vectorize_timeout_seconds) al

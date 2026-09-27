@@ -29,7 +29,8 @@ public sealed class PersistentVectorLayerSetRegistryTests : IDisposable
         ColorHex: "#a1b2c3",
         AreaPercent: 50.0,
         HasPartialAlpha: false,
-        VectorId: Guid.NewGuid());
+        VectorId: Guid.NewGuid(),
+        RasterValidation: FakePythonVectorLayerClient.DefaultRasterValidation());
 
     private static VectorLayerSetVersion SampleRecord(
         Guid projectId, Guid imageId, Guid paletteId, int version = 1) => new(

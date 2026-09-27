@@ -144,6 +144,40 @@ class VectorizeResponse(BaseModel):
     metrics: VectorMetrics
 
 
+class RasterValidationResult(BaseModel):
+    """Resultado de comparar, para UNA capa, la geometría vectorial
+    resultante contra su máscara raster de origen (M2.1-S03) -- ver
+    app.core.raster_validation.compare_layer_raster. Análisis de SOLO
+    LECTURA: nunca bloquea la generación de la capa (ver spec.md,
+    "Ambigüedades detectadas": "advertir, no bloquear" -- decisión
+    documentada en el reporte del sprint), solo la reporta."""
+
+    own_mismatch_ratio: float = Field(
+        ge=0,
+        description=(
+            "Fracción de píxeles donde el SVG rasterizado de vuelta difiere de su propia "
+            "máscara de origen, relativa al área de foreground de esa máscara."
+        ),
+    )
+    own_mismatch_tolerance: float = Field(ge=0, description="Tolerancia aplicada -- ver Settings.raster_validation_own_mismatch_tolerance.")
+    own_mismatch_within_tolerance: bool
+    contamination_ratio: float = Field(
+        ge=0,
+        description=(
+            "Fracción del área rasterizada de ESTA capa que cae dentro de la unión de las "
+            "máscaras de las DEMÁS capas de la misma paleta -- señal de contaminación cruzada "
+            "entre colores (spec.md, 'Validación': 'evitar que regiones de otro color aparezcan "
+            "dentro del layer seleccionado')."
+        ),
+    )
+    contamination_tolerance: float = Field(ge=0, description="Tolerancia aplicada -- ver Settings.raster_validation_contamination_tolerance.")
+    contamination_within_tolerance: bool
+    warnings: list[str] = Field(
+        default_factory=list,
+        description="Mensajes legibles, uno por métrica fuera de tolerancia (vacío si ambas están dentro).",
+    )
+
+
 class VectorLayerItem(BaseModel):
     """Un color/grupo vectorizado de forma INDEPENDIENTE (M2-S02): mismo
     contrato que VectorizeResponse (svg/content_type/width/height/metrics) --
@@ -153,7 +187,9 @@ class VectorLayerItem(BaseModel):
     ya administra Vectorify.Api del lado de ColorPalette/M2-S01): se echoa tal
     cual se recibió, únicamente para que Vectorify.Api pueda emparejar cada SVG
     con su ColorGroup de origen sin depender de que el orden de la lista se
-    preserve en el transporte."""
+    preserve en el transporte. `raster_validation` (M2.1-S03, NUEVO): resultado
+    de comparar esta capa contra su máscara de origen y contra las demás
+    máscaras de la paleta -- ver RasterValidationResult."""
 
     group_id: str = Field(description="Identificador del ColorGroup de origen, echoado tal cual se recibió.")
     svg: str = Field(description="Marcado SVG YA sanitizado de esta capa (ver app.core.svg_processing.sanitize_svg)")
@@ -161,6 +197,7 @@ class VectorLayerItem(BaseModel):
     width: int
     height: int
     metrics: VectorMetrics
+    raster_validation: RasterValidationResult
 
 
 class VectorizeLayersResponse(BaseModel):

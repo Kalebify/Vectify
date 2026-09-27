@@ -155,6 +155,43 @@ class Settings(BaseSettings):
     physical_union_min_bridge_width_ratio: float = 0.001
     physical_union_max_bridge_width_ratio: float = 0.5
 
+    # Validación raster-vs-vector por capa (M2.1-S03): después de vectorizar
+    # la máscara de una capa, se rasteriza el SVG resultante de vuelta (ver
+    # app.core.raster_validation.rasterize_svg_mask) y se compara contra (a)
+    # la propia máscara de origen (`own_mismatch_ratio`) y (b) la unión de las
+    # máscaras de las DEMÁS capas de la misma paleta (`contamination_ratio`,
+    # la señal "crucial" pedida por spec.md: contaminación cruzada entre
+    # colores). spec.md no cuantifica ninguno de los dos umbrales
+    # ("Ambigüedades detectadas": "el implementador decide y documenta");
+    # valores elegidos con evidencia empírica documentada en el reporte del
+    # sprint (script de reproducción, mismo criterio que
+    # color_palette_default_tiny_area_ratio):
+    #
+    # raster_validation_own_mismatch_tolerance = 0.15 (15%): el peor caso
+    # observado NO es un bug sino aproximación geométrica genuina de formas
+    # curvas chicas (VtracerEngine mode="polygon" aproxima círculos con un
+    # número finito de vértices) -- un círculo de radio 5px midió 9.88% de
+    # mismatch, uno de radio 8px 5.58%, ninguna forma con bordes rectos midió
+    # más de 0% (una vez corregido el sesgo de rasterización de +1 fila/
+    # columna de cv2.fillPoly, ver raster_validation.py). 15% deja ~1.5x de
+    # margen sobre el peor caso observado (círculo de 5px) sin dejar de ser
+    # sensible a errores reales (una capa vectorizada a partir de la máscara
+    # EQUIVOCADA mide un mismatch mucho más alto, típicamente >50-90%).
+    #
+    # raster_validation_contamination_tolerance = 0.01 (1%): el peor caso
+    # observado de DOS colores CONTIGUOS (que se tocan en un borde recto,
+    # sin solaparse -- el caso de "falso positivo" que spec.md pide evitar
+    # explícitamente) midió como máximo 0.2% de contaminación (lienzos
+    # grandes, donde el presupuesto de supermuestreo cae a escala 1x); la
+    # mayoría de los casos (lienzos chicos/medianos, escala 8x) midieron
+    # exactamente 0%. 1% deja ~5x de margen sobre el peor caso observado,
+    # mientras sigue siendo un umbral mucho más estricto que
+    # own_mismatch_tolerance a propósito: contaminación cruzada es la señal
+    # de mayor impacto (geometría de un color invadiendo el territorio de
+    # otro) que esta tarjeta pide priorizar.
+    raster_validation_own_mismatch_tolerance: float = 0.15
+    raster_validation_contamination_tolerance: float = 0.01
+
     # Salvaguarda de rendimiento: si la imagen tiene más colores únicos que
     # esto (fotografías/degradés de tono continuo, no el caso de uso
     # principal de esta herramienta -- logos/diseños gráficos para corte

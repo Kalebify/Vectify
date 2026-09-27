@@ -34,4 +34,36 @@ public sealed class PythonVectorLayerItemPayload
 
     [JsonPropertyName("metrics")]
     public PythonVectorMetricsPayload? Metrics { get; set; }
+
+    [JsonPropertyName("raster_validation")]
+    public PythonRasterValidationPayload? RasterValidation { get; set; }
+}
+
+/// <summary>
+/// Forma cruda (snake_case) de `RasterValidationResult` (M2.1-S03, Python) --
+/// ver Vectorify.Api.VectorLayers.LayerRasterValidation, la forma tipada
+/// ya validada a la que se convierte.
+/// </summary>
+public sealed class PythonRasterValidationPayload
+{
+    [JsonPropertyName("own_mismatch_ratio")]
+    public double OwnMismatchRatio { get; set; }
+
+    [JsonPropertyName("own_mismatch_tolerance")]
+    public double OwnMismatchTolerance { get; set; }
+
+    [JsonPropertyName("own_mismatch_within_tolerance")]
+    public bool OwnMismatchWithinTolerance { get; set; }
+
+    [JsonPropertyName("contamination_ratio")]
+    public double ContaminationRatio { get; set; }
+
+    [JsonPropertyName("contamination_tolerance")]
+    public double ContaminationTolerance { get; set; }
+
+    [JsonPropertyName("contamination_within_tolerance")]
+    public bool ContaminationWithinTolerance { get; set; }
+
+    [JsonPropertyName("warnings")]
+    public List<string>? Warnings { get; set; }
 }

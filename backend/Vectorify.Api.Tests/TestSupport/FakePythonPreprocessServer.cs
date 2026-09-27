@@ -27,6 +27,9 @@ public sealed class FakePythonPreprocessServer : IAsyncDisposable
     private int _vectorizeRequestCount;
     private int _simplifyRequestCount;
     private int _checkRequestCount;
+    private int _colorPaletteRequestCount;
+    private int _vectorizeLayersRequestCount;
+    private int _componentsRequestCount;
 
     public string BaseUrl { get; private set; } = string.Empty;
     public int RequestCount => _requestCount;
@@ -34,6 +37,9 @@ public sealed class FakePythonPreprocessServer : IAsyncDisposable
     public int VectorizeRequestCount => _vectorizeRequestCount;
     public int SimplifyRequestCount => _simplifyRequestCount;
     public int CheckRequestCount => _checkRequestCount;
+    public int ColorPaletteRequestCount => _colorPaletteRequestCount;
+    public int VectorizeLayersRequestCount => _vectorizeLayersRequestCount;
+    public int ComponentsRequestCount => _componentsRequestCount;
 
     private FakePythonPreprocessServer(WebApplication app)
     {
@@ -45,7 +51,10 @@ public sealed class FakePythonPreprocessServer : IAsyncDisposable
         Func<int, (int StatusCode, string Body)>? respondThreshold = null,
         Func<int, (int StatusCode, string Body)>? respondVectorize = null,
         Func<int, (int StatusCode, string Body)>? respondSimplify = null,
-        Func<int, (int StatusCode, string Body)>? respondCheck = null)
+        Func<int, (int StatusCode, string Body)>? respondCheck = null,
+        Func<int, (int StatusCode, string Body)>? respondColorPalette = null,
+        Func<int, IReadOnlyList<string>, (int StatusCode, string Body)>? respondVectorizeLayers = null,
+        Func<int, (int StatusCode, string Body)>? respondComponents = null)
     {
         var builder = WebApplication.CreateBuilder();
         builder.Logging.ClearProviders();
@@ -90,6 +99,42 @@ public sealed class FakePythonPreprocessServer : IAsyncDisposable
             await context.Response.WriteAsync(body, context.RequestAborted);
         });
 
+        app.MapPost("/api/v1/color-palette", async context =>
+        {
+            var count = Interlocked.Increment(ref server._colorPaletteRequestCount);
+            var (statusCode, body) = (respondColorPalette ?? (_ => (200, ColorPalettePayloads.SuccessBody())))(count);
+            context.Response.StatusCode = statusCode;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(body, context.RequestAborted);
+        });
+
+        app.MapPost("/api/v1/vectorize-layers", async context =>
+        {
+            var count = Interlocked.Increment(ref server._vectorizeLayersRequestCount);
+            var form = await context.Request.ReadFormAsync(context.RequestAborted);
+            var groupIdsJson = form["group_ids"].ToString();
+            var groupIds = string.IsNullOrEmpty(groupIdsJson)
+                ? new List<string>()
+                : System.Text.Json.JsonSerializer.Deserialize<List<string>>(groupIdsJson) ?? new List<string>();
+
+            var (statusCode, body) = respondVectorizeLayers is not null
+                ? respondVectorizeLayers(count, groupIds)
+                : (200, DefaultVectorizeLayersSuccessBody(groupIds));
+
+            context.Response.StatusCode = statusCode;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(body, context.RequestAborted);
+        });
+
+        app.MapPost("/api/v1/components", async context =>
+        {
+            var count = Interlocked.Increment(ref server._componentsRequestCount);
+            var (statusCode, body) = (respondComponents ?? (_ => (200, ComponentPayloads.SuccessBody())))(count);
+            context.Response.StatusCode = statusCode;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(body, context.RequestAborted);
+        });
+
         app.MapPost("/api/v1/check", async context =>
         {
             var count = Interlocked.Increment(ref server._checkRequestCount);
@@ -112,6 +157,10 @@ public sealed class FakePythonPreprocessServer : IAsyncDisposable
             throw;
         }
     }
+
+    /// <summary>Un layer por cada group_id RECIBIDO (mismo criterio "eco" que el motor Python real) -- necesario porque PythonVectorLayerClient valida que los group_id devueltos coincidan exactamente con los enviados (GUIDs generados server-side, no predecibles de antemano por el test).</summary>
+    private static string DefaultVectorizeLayersSuccessBody(IReadOnlyList<string> groupIds) =>
+        $$"""{"layers": [{{string.Join(",", groupIds.Select(id => VectorizeLayersPayloads.LayerJson(id)))}}]}""";
 
     public async ValueTask DisposeAsync()
     {
