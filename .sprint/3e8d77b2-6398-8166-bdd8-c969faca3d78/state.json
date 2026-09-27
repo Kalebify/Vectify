@@ -1,0 +1,17 @@
+{
+  "card_id": "3e8d77b2-6398-8166-bdd8-c969faca3d78",
+  "card_url": "https://app.notion.com/p/3e8d77b263988166bdd8c969faca3d78",
+  "title": "M2.1-S01 · Auditoría y corrección del pipeline multicolor",
+  "stack": "Python (VtracerEngine/vectorize_layers), ASP.NET Core (VectorLayerService), Frontend (verificacion), Vector",
+  "branch": "sprint/3e8d77b2-auditoria-multicolor",
+  "column": "Doing",
+  "phase": "implementation",
+  "fix_rounds": 0,
+  "preview_url": null,
+  "pr_url": null,
+  "started_at": "2026-09-27T00:00:00Z",
+  "exceptions": [
+    "Primera tarjeta de MVP 2.1 (sub-sprint insertado entre MVP2 y MVP3). Corrida en modo autonomo asumiendo continuidad del criterio ya establecido para MVP2 (sin pedir confirmacion por paso, incluido merge de PRs) -- documentado explicitamente por si no era la intencion.",
+    "Tarjeta de auditoria: el orquestador reprodujo y confirmo la causa raiz personalmente ANTES de delegar (ver spec.md) -- VtracerEngine (colormode=binary) nunca aplica el ColorHex real como fill del SVG resultante; la metadata de color es correcta pero la geometria vectorial siempre sale negra."
+  ]
+}
