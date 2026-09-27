@@ -17,7 +17,7 @@ public sealed class ColorPaletteParameterValidatorTests
     [Fact]
     public void Validate_WhenParametersAreOmitted_ResolvesToDefaults()
     {
-        var options = new ColorPaletteOptions { DefaultTolerance = 15.0 };
+        var options = new ColorPaletteOptions { DefaultTolerance = 15.0, DefaultTinyAreaRatio = 0.002 };
         var validator = CreateValidator(options);
 
         var result = validator.Validate(new ColorPaletteDetectRequest(null, null, null));
@@ -25,6 +25,45 @@ public sealed class ColorPaletteParameterValidatorTests
         Assert.True(result.IsValid);
         Assert.Equal(15.0, result.Parameters!.Tolerance);
         Assert.Null(result.Parameters.MaxColors);
+        Assert.Equal(0.002, result.Parameters.TinyAreaRatio);
+    }
+
+    [Fact]
+    public void Validate_WithExplicitTinyAreaRatioWithinRange_ReturnsSuccess()
+    {
+        var validator = CreateValidator(new ColorPaletteOptions { MinTinyAreaRatio = 0.0, MaxTinyAreaRatio = 0.5 });
+
+        var result = validator.Validate(new ColorPaletteDetectRequest(null, 10.0, null, 0.02));
+
+        Assert.True(result.IsValid);
+        Assert.Equal(0.02, result.Parameters!.TinyAreaRatio);
+    }
+
+    [Theory]
+    [InlineData(-0.001)]
+    [InlineData(0.51)]
+    public void Validate_WithTinyAreaRatioOutOfRange_ReturnsInvalidParameters(double tinyAreaRatio)
+    {
+        var validator = CreateValidator(new ColorPaletteOptions { MinTinyAreaRatio = 0.0, MaxTinyAreaRatio = 0.5 });
+
+        var result = validator.Validate(new ColorPaletteDetectRequest(null, 10.0, null, tinyAreaRatio));
+
+        Assert.False(result.IsValid);
+        Assert.Equal("invalid_parameters", result.ErrorCode);
+    }
+
+    [Theory]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    [InlineData(double.NegativeInfinity)]
+    public void Validate_WithNonFiniteTinyAreaRatio_ReturnsInvalidParameters(double tinyAreaRatio)
+    {
+        var validator = CreateValidator();
+
+        var result = validator.Validate(new ColorPaletteDetectRequest(null, 10.0, null, tinyAreaRatio));
+
+        Assert.False(result.IsValid);
+        Assert.Equal("invalid_parameters", result.ErrorCode);
     }
 
     [Fact]

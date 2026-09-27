@@ -155,7 +155,7 @@ public sealed class VectorLayerServiceTests
                 ContentType: "image/png",
                 Groups: FourColorPalette
                     .Select((entry, index) => new PythonColorGroupResult(
-                        index, entry.ColorHex, 16, 25.0, false, ColorPalettePngs.QuadrantMask(size, size, entry.Quadrant)))
+                        index, entry.ColorHex, 16, 25.0, false, TouchesBorder: false, MaskBytes: ColorPalettePngs.QuadrantMask(size, size, entry.Quadrant)))
                     .ToArray(),
                 TransparentPercent: 0.0,
                 QuantizedPreviewBytes: ColorPalettePngs.TransparentPreview(size, size),

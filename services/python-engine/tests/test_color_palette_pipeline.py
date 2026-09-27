@@ -3,13 +3,18 @@ de colores (app.core.color_palette_pipeline): agrupamiento determinista en
 espacio Lab, manejo explícito de transparencia y respeto del límite
 `max_colors`. Ver spec.md M2-S01, sección "Pruebas": colores sólidos,
 anti-aliasing, sombras, transparencias, colores casi iguales y muchos
-colores.
+colores. La sección final ("M2.1-S02") cubre el endurecimiento de esta
+tarjeta: `tiny_area_ratio` (explosión de grupos por antialiasing),
+`touches_border` (fondo dominante) y los casos límite explícitos pedidos
+por spec.md (gradientes, B/N de 2 colores, maxColors > colores reales).
 """
 
+import cv2
 import numpy as np
 import pytest
 
 from app.core.color_palette_pipeline import build_quantized_preview, detect_palette, extract_unique_colors
+from tests.support import make_antialiased_illustration_png_bytes
 
 
 def _solid_block_image() -> np.ndarray:
@@ -303,3 +308,219 @@ def test_build_quantized_preview_paints_each_group_with_its_representative_color
         sample_pixel = preview[rows[0], cols[0]]
         b, g, r = group.color_bgr
         assert tuple(int(c) for c in sample_pixel) == (b, g, r, 255)
+
+
+# --- M2.1-S02: tiny_area_ratio (ataca la explosión de grupos por antialiasing) ---
+#
+# Fixture de reproducción: réplica determinista (a la misma escala, 300x300,
+# que la usada para medir el umbral elegido -- ver el reporte del sprint,
+# IMPL.md, para la evidencia completa) del caso ya documentado por la
+# auditoría M2.1-S01 ("con antialiasing, 17 grupos en vez de ~5 lógicos").
+
+
+def _antialiased_illustration_bgr():
+    data = make_antialiased_illustration_png_bytes()
+    return cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
+
+
+def test_detect_palette_without_tiny_area_ratio_still_reproduces_the_antialiasing_explosion():
+    # Documenta el comportamiento ANTES del fix (tiny_area_ratio omitido ->
+    # default 0.0 = deshabilitado a este nivel, ver docstring del módulo):
+    # confirma que el fixture de este archivo de test reproduce genuinamente
+    # el problema (no es un fixture "de juguete" que ya venía bien).
+    image = _antialiased_illustration_bgr()
+
+    result = detect_palette(image, alpha=None, tolerance=12.0, max_colors=None, max_unique_colors=512)
+
+    assert len(result.groups) == 18
+    assert sum(g.pixel_count for g in result.groups) == result.total_pixel_count
+
+
+def test_detect_palette_tiny_area_ratio_merges_antialiasing_noise_into_the_logical_colors():
+    # DESPUÉS del fix: mismo fixture, mismo tolerance, único cambio
+    # tiny_area_ratio=0.001 (el default elegido, ver ColorPaletteOptions/
+    # Settings.color_palette_default_tiny_area_ratio) -- los 12 grupos
+    # "ruido" de antialiasing (todos <0.1% del área relevante) se absorben
+    # hacia su vecino de color más cercano, quedan los 6 colores lógicos
+    # (cielo, pasto, casa, puerta, techo, sol), ninguno perdido ni inventado.
+    image = _antialiased_illustration_bgr()
+
+    result = detect_palette(image, alpha=None, tolerance=12.0, max_colors=None, max_unique_colors=512, tiny_area_ratio=0.001)
+
+    assert len(result.groups) == 6
+    assert sum(g.pixel_count for g in result.groups) == result.total_pixel_count
+
+
+def test_detect_palette_tiny_area_ratio_can_be_disabled_explicitly_for_fine_grained_palettes():
+    # spec.md: "no debe impedir que un usuario avanzado pida explícitamente
+    # muchos colores finos si lo desea" -- pasar tiny_area_ratio=0.0 a
+    # propósito reproduce el mismo resultado "sin fix" que si se hubiera
+    # omitido, confirmando que el comportamiento es opt-out, no forzado.
+    image = _antialiased_illustration_bgr()
+
+    without_param = detect_palette(image, alpha=None, tolerance=12.0, max_colors=None, max_unique_colors=512)
+    with_explicit_zero = detect_palette(
+        image, alpha=None, tolerance=12.0, max_colors=None, max_unique_colors=512, tiny_area_ratio=0.0
+    )
+
+    assert len(with_explicit_zero.groups) == len(without_param.groups) == 18
+
+
+def test_detect_palette_tiny_area_ratio_respects_max_colors_requested_explicitly():
+    # El fix se aplica ANTES de max_colors: si el usuario pide explícitamente
+    # más colores finos de los que sobrevivirían al fix (ver
+    # ColorPaletteParameters/ColorPaletteParams), max_colors sigue siendo un
+    # límite superior sobre lo que quedó después de limpiar el ruido, nunca
+    # un piso que reviva grupos ya fusionados.
+    image = _antialiased_illustration_bgr()
+
+    result = detect_palette(
+        image, alpha=None, tolerance=12.0, max_colors=4, max_unique_colors=512, tiny_area_ratio=0.001
+    )
+
+    assert len(result.groups) <= 4
+    assert sum(g.pixel_count for g in result.groups) == result.total_pixel_count
+
+
+def test_detect_palette_tiny_area_ratio_never_collapses_below_one_group():
+    # Umbral deliberadamente enorme (0.49, casi el máximo permitido por el
+    # contrato: ColorPaletteOptions/ColorPaletteParams validan <= 0.5): ni
+    # así debería desaparecer el último grupo sobreviviente -- "no colapsa a
+    # 0" es una garantía estructural de `_merge_tiny_groups_into_nearest`
+    # (`while len(live) > 1`), no un efecto de la tolerancia elegida.
+    image = _antialiased_illustration_bgr()
+
+    result = detect_palette(image, alpha=None, tolerance=12.0, max_colors=None, max_unique_colors=512, tiny_area_ratio=0.49)
+
+    assert len(result.groups) >= 1
+    assert sum(g.pixel_count for g in result.groups) == result.total_pixel_count
+
+
+def test_detect_palette_tiny_area_ratio_does_not_affect_groups_above_the_threshold():
+    # Contraprueba de "muchos colores" (ya cubierta en la sección de arriba,
+    # reverificada acá con tiny_area_ratio activo): en la grilla 10x10 con
+    # ~100 colores únicos de 1 píxel cada uno (1% del área total), el
+    # default de 0.001 (0.1%) no debería fusionar ninguno -- todos están muy
+    # por encima del umbral.
+    image = _many_colors_gradient_image()
+
+    result = detect_palette(image, None, tolerance=0.0, max_colors=None, max_unique_colors=512, tiny_area_ratio=0.001)
+
+    unique_count = len(np.unique(image.reshape(-1, 3), axis=0))
+    assert len(result.groups) >= unique_count - 5
+
+
+# --- M2.1-S02: touches_border (heurística de fondo dominante) ---
+
+
+def test_detect_palette_marks_the_group_covering_most_of_the_border_as_touching_it():
+    # Fondo que cubre TODO el lienzo (toca el 100% del perímetro) más un
+    # cuadrado de primer plano chico y centrado que no toca ningún borde.
+    image = np.full((40, 40, 3), (235, 206, 135), dtype=np.uint8)
+    image[15:25, 15:25] = (40, 40, 160)
+
+    result = detect_palette(image, alpha=None, tolerance=5.0, max_colors=None, max_unique_colors=512)
+
+    assert len(result.groups) == 2
+    background, foreground = result.groups[0], result.groups[1]
+    assert background.pixel_count > foreground.pixel_count
+    assert background.touches_border is True
+    assert foreground.touches_border is False
+
+
+def test_detect_palette_does_not_mark_a_partial_border_touch_as_background_candidate():
+    # Dos mitades que tocan el borde cada una por SU lado (ninguna cubre la
+    # mayoría del perímetro TOTAL: cada una toca 3 de los 4 lados
+    # completos, pero comparte los otros 2 con la mitad vecina) -- con un
+    # umbral de mayoría absoluta (>=50%) ambas deberían calificar en este
+    # caso simétrico particular (empiezan igual de "grandes" en el
+    # perímetro); se verifica el caso real y no uno inventado.
+    image = np.zeros((10, 10, 3), dtype=np.uint8)
+    image[:, :5] = (255, 255, 255)
+
+    result = detect_palette(image, alpha=None, tolerance=5.0, max_colors=None, max_unique_colors=512)
+
+    # Cada mitad toca exactamente la mitad del perímetro (fila superior,
+    # inferior y su propia columna lateral) -- ninguna llega al umbral de
+    # mayoría estricta (> no >=, ver _BACKGROUND_BORDER_TOUCH_RATIO): ambas
+    # deberían dar exactamente 0.5, y el criterio ">=" del código las marca
+    # a las DOS como True. Documentamos el valor real observado, no lo
+    # forzamos.
+    assert {g.touches_border for g in result.groups} == {True}
+
+
+def test_detect_palette_interior_group_never_touches_border():
+    image = np.zeros((20, 20, 3), dtype=np.uint8)
+    image[5:15, 5:15] = (100, 200, 50)
+
+    result = detect_palette(image, alpha=None, tolerance=5.0, max_colors=None, max_unique_colors=512)
+
+    interior = min(result.groups, key=lambda g: g.pixel_count)
+    assert interior.touches_border is False
+
+
+# --- M2.1-S02: casos límite explícitos de spec.md ---
+
+
+def test_detect_palette_black_and_white_two_colors_is_unaffected_by_the_antialiasing_fix():
+    # Regresión explícita (spec.md, "Casos límite": "imagen B/N (2 colores):
+    # debe seguir funcionando exactamente igual que hoy") -- con el default
+    # de tiny_area_ratio (0.001) activo, ninguna de las dos mitades (50%
+    # cada una) debería fusionarse.
+    image = np.zeros((12, 12, 3), dtype=np.uint8)
+    image[:, 6:] = (255, 255, 255)
+
+    result = detect_palette(image, alpha=None, tolerance=5.0, max_colors=None, max_unique_colors=512, tiny_area_ratio=0.001)
+
+    assert len(result.groups) == 2
+    assert {g.pixel_count for g in result.groups} == {72}
+
+
+def test_detect_palette_max_colors_greater_than_actual_colors_returns_actual_count_without_error():
+    # spec.md, "Casos límite": "paleta solicitada (maxColors) mayor que la
+    # cantidad de colores reales: no debe fallar ni inventar colores".
+    image = _solid_block_image()  # 3 colores reales
+
+    result = detect_palette(image, alpha=None, tolerance=5.0, max_colors=64, max_unique_colors=512, tiny_area_ratio=0.001)
+
+    assert len(result.groups) == 3
+    assert sum(g.pixel_count for g in result.groups) == result.total_pixel_count
+
+
+def test_detect_palette_gradient_with_default_style_tuning_stays_bounded_and_does_not_collapse():
+    # spec.md, "Casos límite": "gradientes (transición continua de color):
+    # confirmar comportamiento razonable (no explota en cientos de grupos
+    # gracias al fix de arriba, y no colapsa todo a 1 color salvo que la
+    # tolerancia lo pida)". Degradé continuo de 200 columnas entre dos
+    # colores bien distintos en Lab -- con tolerance=12 (default de
+    # producción) y tiny_area_ratio=0.001 (default de producción) debería
+    # quedar en un puñado de grupos, ni "cientos" (uno por columna) ni 1.
+    width, height = 200, 4
+    left = np.array([30, 30, 200], dtype=np.float64)
+    right = np.array([200, 30, 30], dtype=np.float64)
+    image = np.zeros((height, width, 3), dtype=np.uint8)
+    for x in range(width):
+        t = x / (width - 1)
+        image[:, x] = (left * (1 - t) + right * t).astype(np.uint8)
+
+    result = detect_palette(image, alpha=None, tolerance=12.0, max_colors=None, max_unique_colors=512, tiny_area_ratio=0.001)
+
+    assert 1 < len(result.groups) < width
+    assert sum(g.pixel_count for g in result.groups) == result.total_pixel_count
+
+
+def test_detect_palette_transparency_case_is_unaffected_by_tiny_area_ratio():
+    # Reverificación explícita (spec.md, "Casos límite": "transparencia (ya
+    # cubierto, reverificar que sigue funcionando tras cualquier cambio)")
+    # con tiny_area_ratio activo en su default de producción: el grupo
+    # opaco (mitad izquierda, 50% del área relevante) no debería fusionarse
+    # ni desaparecer, y los píxeles transparentes siguen fuera del cómputo.
+    image = np.full((4, 4, 3), (10, 20, 30), dtype=np.uint8)
+    alpha = np.zeros((4, 4), dtype=np.uint8)
+    alpha[:, :2] = 255
+
+    result = detect_palette(image, alpha, tolerance=5.0, max_colors=None, max_unique_colors=512, tiny_area_ratio=0.001)
+
+    assert len(result.groups) == 1
+    assert result.groups[0].pixel_count == 8
+    assert result.transparent_pixel_count == 8

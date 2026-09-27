@@ -83,6 +83,28 @@ class Settings(BaseSettings):
     color_palette_min_colors: int = 1
     color_palette_max_colors_upper_bound: int = 64
 
+    # M2.1-S02: umbral de "grupo diminuto" (relativo a los píxeles
+    # relevantes, ver app.core.color_palette_pipeline._merge_tiny_groups_into_nearest)
+    # para fusionar automáticamente hacia el vecino más cercano los grupos
+    # que la explosión de colores por antialiasing genera (auditoría
+    # M2.1-S01: 17 grupos en vez de ~5 lógicos). 0.001 (0.1%) es un supuesto
+    # documentado con evidencia empírica en el reporte del sprint: en el
+    # fixture de reproducción (ilustración con antialiasing en sol/techo),
+    # los 11 grupos "ruido" miden como máximo 0.0756% del área relevante y
+    # los 6 colores lógicos miden como mínimo 1.1844% -- 0.001 separa ambos
+    # grupos con margen de ~10x hacia cada lado. Mismo estilo relativo que
+    # component_default_tiny_area_ratio (ver más abajo), valor distinto
+    # porque el dominio es otro (área de un grupo de color vs. área de un
+    # componente físico de corte) y la evidencia empírica de este caso
+    # concreto lo respalda. Espejado 1:1 en
+    # Vectorify.Api.Options.ColorPaletteOptions (DefaultTinyAreaRatio, etc.),
+    # mismo criterio que color_palette_default_tolerance -- Vectorify.Api
+    # siempre envía el valor ya resuelto explícitamente, este default de acá
+    # solo aplica cuando se llama a Python directamente (tests/uso manual).
+    color_palette_default_tiny_area_ratio: float = 0.001
+    color_palette_min_tiny_area_ratio: float = 0.0
+    color_palette_max_tiny_area_ratio: float = 0.5
+
     # Componentes físicos independientes por capa (M2-S03). spec.md no
     # cuantifica el criterio exacto de "tocarse" ni el umbral de "componente
     # diminuto" ("el implementador decide y documenta"); supuestos

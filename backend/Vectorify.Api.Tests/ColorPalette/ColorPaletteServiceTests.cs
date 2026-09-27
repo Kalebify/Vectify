@@ -451,6 +451,160 @@ public sealed class ColorPaletteServiceTests
         Assert.IsType<ColorPaletteResult.NotFound>(result);
     }
 
+    // ---- Heurística de fondo dominante (M2.1-S02) ----
+
+    [Fact]
+    public async Task DetectAsync_PreMarksTheLargestGroupThatTouchesTheBorderAsExcluded()
+    {
+        // FakePythonColorPaletteClient.DefaultSuccess: groups[0] (#ff0000) tiene TouchesBorder=true,
+        // groups[1] (#00ff00) TouchesBorder=false -- groups[0] es el único candidato a fondo dominante.
+        var (service, _, _, _) = CreateService();
+
+        var detected = await DetectAndGetRecordAsync(service);
+
+        Assert.True(detected.Groups[0].IsExcluded);
+        Assert.False(detected.Groups[1].IsExcluded);
+    }
+
+    // ---- SetExclusionAsync ----
+
+    [Fact]
+    public async Task SetExclusionAsync_MarksTheTargetGroupWithoutAffectingOthers()
+    {
+        var (service, _, _, _) = CreateService();
+        var detected = await DetectAndGetRecordAsync(service);
+        var target = detected.Groups.First(g => !g.IsExcluded);
+        var other = detected.Groups.First(g => g.GroupId != target.GroupId);
+
+        var result = await service.SetExclusionAsync(
+            ProjectId, ImageId, detected.PaletteId, new ColorPaletteSetExclusionRequest(target.GroupId, true), CancellationToken.None);
+
+        var ready = Assert.IsType<ColorPaletteResult.Ready>(result);
+        Assert.True(ready.Record.Groups.Single(g => g.GroupId == target.GroupId).IsExcluded);
+        Assert.Equal(other.IsExcluded, ready.Record.Groups.Single(g => g.GroupId == other.GroupId).IsExcluded);
+        Assert.Equal(detected.Version + 1, ready.Record.Version);
+    }
+
+    [Fact]
+    public async Task SetExclusionAsync_CanRevertTheAutomaticBackgroundSuggestion()
+    {
+        // El usuario SIEMPRE puede cambiar la sugerencia automática -- ver spec.md, "el usuario manda".
+        var (service, _, _, _) = CreateService();
+        var detected = await DetectAndGetRecordAsync(service);
+        var autoExcludedGroup = detected.Groups.Single(g => g.IsExcluded);
+
+        var result = await service.SetExclusionAsync(
+            ProjectId, ImageId, detected.PaletteId, new ColorPaletteSetExclusionRequest(autoExcludedGroup.GroupId, false), CancellationToken.None);
+
+        var ready = Assert.IsType<ColorPaletteResult.Ready>(result);
+        Assert.False(ready.Record.Groups.Single(g => g.GroupId == autoExcludedGroup.GroupId).IsExcluded);
+    }
+
+    [Fact]
+    public async Task SetExclusionAsync_WithUnknownGroupId_ReturnsNotFound()
+    {
+        var (service, _, _, _) = CreateService();
+        var detected = await DetectAndGetRecordAsync(service);
+
+        var result = await service.SetExclusionAsync(
+            ProjectId, ImageId, detected.PaletteId, new ColorPaletteSetExclusionRequest(Guid.NewGuid(), true), CancellationToken.None);
+
+        var notFound = Assert.IsType<ColorPaletteResult.NotFound>(result);
+        Assert.Equal("group_not_found", notFound.Code);
+    }
+
+    [Fact]
+    public async Task SetExclusionAsync_WithUnknownPaletteId_ReturnsNotFound()
+    {
+        var (service, _, _, _) = CreateService();
+
+        var result = await service.SetExclusionAsync(
+            ProjectId, ImageId, Guid.NewGuid(), new ColorPaletteSetExclusionRequest(Guid.NewGuid(), true), CancellationToken.None);
+
+        Assert.IsType<ColorPaletteResult.NotFound>(result);
+    }
+
+    [Fact]
+    public async Task SetExclusionAsync_OnAConfirmedPalette_ReturnsConflict()
+    {
+        var (service, _, _, _) = CreateService();
+        var detected = await DetectAndGetRecordAsync(service);
+        await service.ConfirmAsync(ProjectId, ImageId, detected.PaletteId, CancellationToken.None);
+
+        var result = await service.SetExclusionAsync(
+            ProjectId, ImageId, detected.PaletteId, new ColorPaletteSetExclusionRequest(detected.Groups[0].GroupId, true), CancellationToken.None);
+
+        var conflict = Assert.IsType<ColorPaletteResult.Conflict>(result);
+        Assert.Equal("palette_confirmed", conflict.Code);
+    }
+
+    // ---- MergeAsync: herencia de IsExcluded ----
+
+    [Fact]
+    public async Task MergeAsync_WhenAllSelectedGroupsAreExcluded_MergedGroupIsAlsoExcluded()
+    {
+        var (service, _, _, _) = CreateService();
+        var detected = await DetectAndGetRecordAsync(service);
+        var groupIds = detected.Groups.Select(g => g.GroupId).ToList();
+        // Excluir el segundo grupo también (el primero ya viene excluido por la heurística de fondo).
+        var bothExcluded = await service.SetExclusionAsync(
+            ProjectId, ImageId, detected.PaletteId, new ColorPaletteSetExclusionRequest(detected.Groups[1].GroupId, true), CancellationToken.None);
+        var latest = Assert.IsType<ColorPaletteResult.Ready>(bothExcluded).Record;
+        Assert.All(latest.Groups, g => Assert.True(g.IsExcluded));
+
+        var result = await service.MergeAsync(
+            ProjectId, ImageId, detected.PaletteId, new ColorPaletteMergeRequest(groupIds, null), CancellationToken.None);
+
+        var ready = Assert.IsType<ColorPaletteResult.Ready>(result);
+        Assert.True(ready.Record.Groups[0].IsExcluded);
+    }
+
+    [Fact]
+    public async Task MergeAsync_WhenOnlySomeSelectedGroupsAreExcluded_MergedGroupIsNotExcluded()
+    {
+        // groups[0] viene excluido (fondo dominante), groups[1] no -- fusionar ambos NO debería
+        // "esconder" el resultado combinado sin que el usuario lo note explícitamente.
+        var (service, _, _, _) = CreateService();
+        var detected = await DetectAndGetRecordAsync(service);
+        Assert.True(detected.Groups[0].IsExcluded);
+        Assert.False(detected.Groups[1].IsExcluded);
+        var groupIds = detected.Groups.Select(g => g.GroupId).ToList();
+
+        var result = await service.MergeAsync(
+            ProjectId, ImageId, detected.PaletteId, new ColorPaletteMergeRequest(groupIds, null), CancellationToken.None);
+
+        var ready = Assert.IsType<ColorPaletteResult.Ready>(result);
+        Assert.False(ready.Record.Groups[0].IsExcluded);
+    }
+
+    // ---- Estabilidad de IDs durante la edición (spec.md, criterio explícito) ----
+
+    [Fact]
+    public async Task GroupId_OfAnUntouchedGroup_RemainsStableAcrossSuccessiveRenameAndExclusionEdits()
+    {
+        var (service, _, _, _) = CreateService();
+        var detected = await DetectAndGetRecordAsync(service);
+        var untouched = detected.Groups[1];
+        var other = detected.Groups[0];
+
+        var afterRename = Assert.IsType<ColorPaletteResult.Ready>(
+            await service.RenameAsync(
+                ProjectId, ImageId, detected.PaletteId, new ColorPaletteRenameRequest(other.GroupId, "Fondo renombrado"), CancellationToken.None))
+            .Record;
+        Assert.Contains(afterRename.Groups, g => g.GroupId == untouched.GroupId);
+
+        var afterExclude = Assert.IsType<ColorPaletteResult.Ready>(
+            await service.SetExclusionAsync(
+                ProjectId, ImageId, detected.PaletteId, new ColorPaletteSetExclusionRequest(other.GroupId, false), CancellationToken.None))
+            .Record;
+        Assert.Contains(afterExclude.Groups, g => g.GroupId == untouched.GroupId);
+
+        var stillUntouched = afterExclude.Groups.Single(g => g.GroupId == untouched.GroupId);
+        Assert.Equal(untouched.Name, stillUntouched.Name);
+        Assert.Equal(untouched.IsExcluded, stillUntouched.IsExcluded);
+        Assert.Equal(untouched.ColorHex, stillUntouched.ColorHex);
+    }
+
     // ---- FindLatest ----
 
     [Fact]

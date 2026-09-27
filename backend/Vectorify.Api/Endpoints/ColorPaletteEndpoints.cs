@@ -94,6 +94,25 @@ public static class ColorPaletteEndpoints
         .Produces<ApiErrorResponse>(StatusCodes.Status409Conflict)
         .WithSummary("Renombra un grupo de color (crea una nueva versión de la paleta).");
 
+        app.MapPost("/api/v1/projects/{projectId:guid}/images/{imageId:guid}/color-palette/{paletteId:guid}/exclude", async (
+            Guid projectId,
+            Guid imageId,
+            Guid paletteId,
+            ColorPaletteSetExclusionRequest request,
+            IColorPaletteService service,
+            CancellationToken cancellationToken) =>
+        {
+            var result = await service.SetExclusionAsync(projectId, imageId, paletteId, request, cancellationToken);
+            return ToHttpResult(result, created: false);
+        })
+        .WithName("SetColorPaletteGroupExclusion")
+        .WithTags("ColorPalette")
+        .Produces<ColorPaletteResponse>(StatusCodes.Status200OK)
+        .Produces<ApiErrorResponse>(StatusCodes.Status400BadRequest)
+        .Produces<ApiErrorResponse>(StatusCodes.Status404NotFound)
+        .Produces<ApiErrorResponse>(StatusCodes.Status409Conflict)
+        .WithSummary("Marca un grupo como incluido/excluido (M2.1-S02), independiente de un merge.");
+
         app.MapPost("/api/v1/projects/{projectId:guid}/images/{imageId:guid}/color-palette/{paletteId:guid}/confirm", async (
             Guid projectId,
             Guid imageId,
@@ -214,6 +233,7 @@ public static class ColorPaletteEndpoints
         record.Version,
         record.DetectionParameters.Tolerance,
         record.DetectionParameters.MaxColors,
+        record.DetectionParameters.TinyAreaRatio,
         record.SourceWidthPx,
         record.SourceHeightPx,
         record.TransparentPercent,
@@ -226,11 +246,24 @@ public static class ColorPaletteEndpoints
         group.GroupId,
         group.Name,
         group.ColorHex,
+        ToRgb(group.ColorHex),
         group.PixelCount,
         group.AreaPercent,
         group.HasPartialAlpha,
+        group.IsExcluded,
         MaskUrl: $"{ColorPaletteUrl(record.ProjectId, record.ImageId, record.PaletteId)}/groups/{group.GroupId}/mask",
         IsMerged: group.MergedFrom is { Count: > 0 });
+
+    /// <summary>
+    /// Parsea "#rrggbb" (formato ya validado aguas arriba por
+    /// PythonColorPaletteClient.IsValidHexColor -- nunca llega acá un
+    /// ColorHex mal formado) a sus tres componentes RGB explícitos -- ver
+    /// RgbColor, contrato aditivo de M2.1-S02.
+    /// </summary>
+    private static RgbColor ToRgb(string colorHex) => new(
+        Convert.ToInt32(colorHex.Substring(1, 2), 16),
+        Convert.ToInt32(colorHex.Substring(3, 2), 16),
+        Convert.ToInt32(colorHex.Substring(5, 2), 16));
 
     private static string ColorPaletteUrl(Guid projectId, Guid imageId, Guid paletteId) =>
         $"/api/v1/projects/{projectId}/images/{imageId}/color-palette/{paletteId}";

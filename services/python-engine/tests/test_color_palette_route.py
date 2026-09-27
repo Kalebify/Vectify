@@ -48,7 +48,7 @@ def test_color_palette_returns_expected_contract(client):
     assert body["content_type"] == "image/png"
     assert body["metrics"]["color_count"] == len(body["groups"]) == 3
     assert set(body["groups"][0].keys()) == {
-        "id", "color_hex", "pixel_count", "area_percent", "has_partial_alpha", "mask_base64",
+        "id", "color_hex", "pixel_count", "area_percent", "has_partial_alpha", "touches_border", "mask_base64",
     }
     for group in body["groups"]:
         assert group["color_hex"].startswith("#") and len(group["color_hex"]) == 7
@@ -201,3 +201,23 @@ def test_color_palette_default_params_are_applied_when_omitted(client):
 
     assert response.status_code == 200
     assert response.json()["effective_params"]["max_colors"] is None
+    assert response.json()["effective_params"]["tiny_area_ratio"] == 0.001
+
+
+def test_color_palette_rejects_out_of_range_tiny_area_ratio(client):
+    image_bytes = make_png_bytes(4, 4)
+
+    response = _post_color_palette(client, image_bytes, {"tolerance": 5.0, "tiny_area_ratio": 0.9})
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "invalid_parameters"
+
+
+def test_color_palette_touches_border_field_is_present_on_every_group(client):
+    image_bytes = make_solid_colors_png_bytes(width=12, height=12)
+
+    response = _post_color_palette(client, image_bytes, {"tolerance": 5.0, "max_colors": None})
+
+    assert response.status_code == 200
+    for group in response.json()["groups"]:
+        assert isinstance(group["touches_border"], bool)

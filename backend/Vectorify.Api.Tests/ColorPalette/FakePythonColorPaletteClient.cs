@@ -42,8 +42,11 @@ internal sealed class FakePythonColorPaletteClient : IPythonColorPaletteClient
         ContentType: "image/png",
         Groups: new[]
         {
-            new PythonColorGroupResult(0, "#ff0000", 8, 50.0, false, ColorPalettePngs.LeftHalfMask(4, 4)),
-            new PythonColorGroupResult(1, "#00ff00", 8, 50.0, false, ColorPalettePngs.RightHalfMask(4, 4)),
+            // TouchesBorder=true para el grupo 0 (área más grande, empatada con el grupo 1 en este
+            // fixture) -- ejercita el caso más común de la heurística de fondo dominante
+            // (ColorPaletteService.DetectAsync: IsExcluded solo se pre-marca en groups[0]).
+            new PythonColorGroupResult(0, "#ff0000", 8, 50.0, false, TouchesBorder: true, MaskBytes: ColorPalettePngs.LeftHalfMask(4, 4)),
+            new PythonColorGroupResult(1, "#00ff00", 8, 50.0, false, TouchesBorder: false, MaskBytes: ColorPalettePngs.RightHalfMask(4, 4)),
         },
         TransparentPercent: 0.0,
         QuantizedPreviewBytes: ColorPalettePngs.TransparentPreview(4, 4),

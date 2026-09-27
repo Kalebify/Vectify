@@ -23,4 +23,17 @@ public sealed class ColorPaletteOptions
 
     public int MinColors { get; set; } = 1;
     public int MaxColorsUpperBound { get; set; } = 64;
+
+    // M2.1-S02: umbral de "grupo diminuto" (relativo a los píxeles
+    // relevantes de la imagen, ver services/python-engine/app/core/
+    // color_palette_pipeline.py._merge_tiny_groups_into_nearest) para
+    // fusionar automáticamente hacia el vecino más cercano los grupos que
+    // la explosión de colores por antialiasing genera (auditoría M2.1-S01:
+    // 17 grupos en vez de ~5 lógicos). 0.001 (0.1%) es un supuesto
+    // documentado con evidencia empírica en el reporte del sprint --
+    // espejado 1:1 con Settings.color_palette_default_tiny_area_ratio del
+    // motor Python (mismo criterio que DefaultTolerance).
+    public double DefaultTinyAreaRatio { get; set; } = 0.001;
+    public double MinTinyAreaRatio { get; set; } = 0.0;
+    public double MaxTinyAreaRatio { get; set; } = 0.5;
 }

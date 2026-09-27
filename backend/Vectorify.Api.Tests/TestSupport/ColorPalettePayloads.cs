@@ -12,9 +12,11 @@ internal static class ColorPalettePayloads
         int height = 1,
         double tolerance = 12.0,
         int? maxColors = null,
-        double transparentPercent = 0.0)
+        double transparentPercent = 0.0,
+        bool touchesBorder = false)
     {
         var maxColorsJson = maxColors.HasValue ? maxColors.Value.ToString() : "null";
+        var touchesBorderJson = touchesBorder ? "true" : "false";
 
         return string.Create(
             System.Globalization.CultureInfo.InvariantCulture,
@@ -25,7 +27,8 @@ internal static class ColorPalettePayloads
               "content_type": "image/png",
               "effective_params": {
                 "tolerance": {{tolerance}},
-                "max_colors": {{maxColorsJson}}
+                "max_colors": {{maxColorsJson}},
+                "tiny_area_ratio": 0.001
               },
               "metrics": {
                 "color_count": 1,
@@ -38,6 +41,7 @@ internal static class ColorPalettePayloads
                   "pixel_count": 4,
                   "area_percent": 100.0,
                   "has_partial_alpha": false,
+                  "touches_border": {{touchesBorderJson}},
                   "mask_base64": "{{TinyPngBase64}}"
                 }
               ],

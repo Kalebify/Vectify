@@ -8,6 +8,7 @@ interface ColorSwatchListProps {
   onToggleSelection: (groupId: string) => void;
   onRename: (groupId: string, name: string) => void;
   onUnmerge: (groupId: string) => void;
+  onSetExclusion: (groupId: string, isExcluded: boolean) => void;
 }
 
 /**
@@ -15,6 +16,8 @@ interface ColorSwatchListProps {
  * editable, porcentaje de área aproximada, selección múltiple (checkbox)
  * para fusionar, y acción de deshacer fusión por grupo. Cada swatch es
  * independiente: renombrar uno no afecta la selección de los demás.
+ * M2.1-S02: cada swatch suma un toggle incluir/excluir, independiente de la
+ * selección para fusionar -- un color puede excluirse sin fusionarlo a otro.
  */
 export function ColorSwatchList({
   groups,
@@ -23,6 +26,7 @@ export function ColorSwatchList({
   onToggleSelection,
   onRename,
   onUnmerge,
+  onSetExclusion,
 }: ColorSwatchListProps) {
   return (
     <ul className="color-swatch-list" aria-label="Colores detectados">
@@ -35,6 +39,7 @@ export function ColorSwatchList({
           onToggleSelection={onToggleSelection}
           onRename={onRename}
           onUnmerge={onUnmerge}
+          onSetExclusion={onSetExclusion}
         />
       ))}
     </ul>
@@ -48,9 +53,18 @@ interface ColorSwatchRowProps {
   onToggleSelection: (groupId: string) => void;
   onRename: (groupId: string, name: string) => void;
   onUnmerge: (groupId: string) => void;
+  onSetExclusion: (groupId: string, isExcluded: boolean) => void;
 }
 
-function ColorSwatchRow({ group, selected, disabled, onToggleSelection, onRename, onUnmerge }: ColorSwatchRowProps) {
+function ColorSwatchRow({
+  group,
+  selected,
+  disabled,
+  onToggleSelection,
+  onRename,
+  onUnmerge,
+  onSetExclusion,
+}: ColorSwatchRowProps) {
   const [draftName, setDraftName] = useState(group.name);
 
   // El nombre del grupo puede cambiar por fuera (otra edición trajo una
@@ -108,6 +122,17 @@ function ColorSwatchRow({ group, selected, disabled, onToggleSelection, onRename
       />
 
       <span className="color-swatch__area">{group.areaPercent.toFixed(1)}%</span>
+
+      <label className="color-swatch__exclusion">
+        <input
+          type="checkbox"
+          checked={group.isExcluded}
+          disabled={disabled}
+          onChange={(event) => onSetExclusion(group.groupId, event.target.checked)}
+          aria-label={`Excluir ${group.name} del corte`}
+        />
+        {group.isExcluded ? "Excluido" : "Incluido"}
+      </label>
 
       {group.hasPartialAlpha && (
         <span className="color-swatch__badge" title="Parte de este grupo tiene transparencia parcial">

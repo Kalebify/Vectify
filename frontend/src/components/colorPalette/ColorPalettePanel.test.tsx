@@ -14,9 +14,11 @@ function group(overrides: Record<string, unknown> = {}) {
     groupId: GROUP_A_ID,
     name: "Color 1",
     colorHex: "#ff0000",
+    rgb: { r: 255, g: 0, b: 0 },
     pixelCount: 100,
     areaPercent: 50.0,
     hasPartialAlpha: false,
+    isExcluded: false,
     maskUrl: `/api/v1/projects/${PROJECT_ID}/images/${IMAGE_ID}/color-palette/${PALETTE_ID}/groups/${GROUP_A_ID}/mask`,
     isMerged: false,
     ...overrides,
@@ -32,12 +34,13 @@ function paletteResponse(overrides: Record<string, unknown> = {}): Response {
       version: 1,
       tolerance: 12,
       maxColors: null,
+      tinyAreaRatio: 0.001,
       sourceWidthPx: 10,
       sourceHeightPx: 10,
       transparentPercent: 0,
       groups: [
         group(),
-        group({ groupId: GROUP_B_ID, name: "Color 2", colorHex: "#00ff00", areaPercent: 50.0 }),
+        group({ groupId: GROUP_B_ID, name: "Color 2", colorHex: "#00ff00", rgb: { r: 0, g: 255, b: 0 }, areaPercent: 50.0 }),
       ],
       previewUrl: `/api/v1/projects/${PROJECT_ID}/images/${IMAGE_ID}/color-palette/${PALETTE_ID}/preview`,
       isConfirmed: false,
@@ -214,6 +217,69 @@ describe("ColorPalettePanel — renombrar", () => {
     expect(await screen.findByDisplayValue("Rojo principal")).toBeInTheDocument();
     const init = fetch.mock.calls[fetch.mock.calls.length - 1][1] as RequestInit;
     expect(JSON.parse(init.body as string)).toEqual({ groupId: GROUP_A_ID, name: "Rojo principal" });
+  });
+});
+
+describe("ColorPalettePanel — incluir/excluir (M2.1-S02)", () => {
+  it("el fondo dominante detectado automáticamente aparece marcado como excluido", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(paletteResponse({ groups: [group({ isExcluded: true }), group({ groupId: GROUP_B_ID, name: "Color 2" })] }))),
+    );
+
+    renderPanel();
+    fireEvent.click(screen.getByRole("button", { name: "Detectar paleta" }));
+    await screen.findByText("Colores detectados");
+
+    expect(screen.getByRole("checkbox", { name: "Excluir Color 1 del corte" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Excluir Color 2 del corte" })).not.toBeChecked();
+  });
+
+  it("tildar el toggle de un color llama a exclude y el color queda marcado como excluido", async () => {
+    const fetch = vi.fn((input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url.includes("/exclude")) {
+        return Promise.resolve(paletteResponse({ version: 2, groups: [group({ isExcluded: true }), group({ groupId: GROUP_B_ID, name: "Color 2" })] }));
+      }
+      return Promise.resolve(paletteResponse());
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    renderPanel();
+    fireEvent.click(screen.getByRole("button", { name: "Detectar paleta" }));
+    await screen.findByText("Colores detectados");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Excluir Color 1 del corte" }));
+
+    await waitFor(() => expect(screen.getByRole("checkbox", { name: "Excluir Color 1 del corte" })).toBeChecked());
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringMatching(new RegExp(`/color-palette/${PALETTE_ID}/exclude$`)),
+      expect.objectContaining({ method: "POST" }),
+    );
+    const init = fetch.mock.calls[fetch.mock.calls.length - 1][1] as RequestInit;
+    expect(JSON.parse(init.body as string)).toEqual({ groupId: GROUP_A_ID, isExcluded: true });
+  });
+
+  it("destildar un color previamente excluido llama a exclude con isExcluded=false", async () => {
+    const fetch = vi.fn((input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url.includes("/exclude")) {
+        return Promise.resolve(paletteResponse({ version: 2 }));
+      }
+      return Promise.resolve(paletteResponse({ groups: [group({ isExcluded: true }), group({ groupId: GROUP_B_ID, name: "Color 2" })] }));
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    renderPanel();
+    fireEvent.click(screen.getByRole("button", { name: "Detectar paleta" }));
+    await screen.findByText("Colores detectados");
+    expect(screen.getByRole("checkbox", { name: "Excluir Color 1 del corte" })).toBeChecked();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Excluir Color 1 del corte" }));
+
+    await waitFor(() => expect(screen.getByRole("checkbox", { name: "Excluir Color 1 del corte" })).not.toBeChecked());
+    const init = fetch.mock.calls[fetch.mock.calls.length - 1][1] as RequestInit;
+    expect(JSON.parse(init.body as string)).toEqual({ groupId: GROUP_A_ID, isExcluded: false });
   });
 });
 

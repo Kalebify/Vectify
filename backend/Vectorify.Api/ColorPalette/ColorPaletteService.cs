@@ -161,6 +161,13 @@ public sealed class ColorPaletteService : IColorPaletteService
                     PixelCount: pythonGroup.PixelCount,
                     AreaPercent: pythonGroup.AreaPercent,
                     HasPartialAlpha: pythonGroup.HasPartialAlpha,
+                    // Heurística de fondo dominante (M2.1-S02, "el implementador decide y documenta"): SOLO el
+                    // grupo de MAYOR área (índice 0 -- pythonResult.Groups ya viene ordenado por área
+                    // descendente, ver app.core.color_palette_pipeline.detect_palette) se PRE-marca como
+                    // excluido, y únicamente si además toca la mayoría de su perímetro (TouchesBorder, ver
+                    // ColorGroup.cs). Es solo una sugerencia inicial: SetExclusionAsync permite cambiarla en
+                    // cualquier momento sin afectar el GroupId ni ningún otro grupo.
+                    IsExcluded: groups.Count == 0 && pythonGroup.TouchesBorder,
                     RawGroupIds: new[] { pythonGroup.Id },
                     MaskStorageKey: maskStorageKey,
                     MergedFrom: null));
@@ -267,6 +274,11 @@ public sealed class ColorPaletteService : IColorPaletteService
                 PixelCount: totalPixelCount,
                 AreaPercent: totalAreaPercent,
                 HasPartialAlpha: selected.Any(g => g.HasPartialAlpha),
+                // Un grupo fusionado solo hereda IsExcluded si TODOS los grupos que lo integran ya
+                // estaban excluidos -- fusionar un fondo excluido con un color en primer plano no
+                // debería "esconder" el resultado combinado sin que el usuario lo note explícitamente
+                // (supuesto documentado, spec.md no lo cuantifica: "el implementador decide y documenta").
+                IsExcluded: selected.All(g => g.IsExcluded),
                 RawGroupIds: selected.SelectMany(g => g.RawGroupIds).ToList(),
                 MaskStorageKey: mergedMaskKey,
                 MergedFrom: selected);
@@ -365,6 +377,51 @@ public sealed class ColorPaletteService : IColorPaletteService
             var version = _paletteRegistry.NextVersion(projectId, imageId, paletteId);
             var record = latest with { Version = version, Groups = newGroups, CreatedAt = DateTimeOffset.UtcNow };
             _paletteRegistry.Save(record);
+
+            return new ColorPaletteResult.Ready(record, FromCache: false);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    public async Task<ColorPaletteResult> SetExclusionAsync(
+        Guid projectId, Guid imageId, Guid paletteId, ColorPaletteSetExclusionRequest request, CancellationToken cancellationToken)
+    {
+        var gate = SessionGate(projectId, imageId, paletteId);
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            var latest = _paletteRegistry.FindLatest(projectId, imageId, paletteId);
+            if (latest is null)
+            {
+                return new ColorPaletteResult.NotFound("not_found", "No existe una sesión de paleta de colores con ese ID para esta imagen.");
+            }
+
+            if (latest.IsConfirmed)
+            {
+                return new ColorPaletteResult.Conflict("palette_confirmed", "La paleta ya está confirmada; no admite ediciones.");
+            }
+
+            if (latest.Groups.All(g => g.GroupId != request.GroupId))
+            {
+                return new ColorPaletteResult.NotFound("group_not_found", "No existe ese grupo en la última versión de la paleta.");
+            }
+
+            // Edición de metadata pura (mismo criterio que RenameAsync): NUNCA toca el GroupId, la
+            // máscara ni el preview de ningún grupo -- ni el propio ni los demás (ver spec.md,
+            // "Estabilidad de IDs durante la edición").
+            var newGroups = SortGroups(
+                latest.Groups.Select(g => g.GroupId == request.GroupId ? g with { IsExcluded = request.IsExcluded } : g));
+
+            var version = _paletteRegistry.NextVersion(projectId, imageId, paletteId);
+            var record = latest with { Version = version, Groups = newGroups, CreatedAt = DateTimeOffset.UtcNow };
+            _paletteRegistry.Save(record);
+
+            _logger.LogInformation(
+                "Grupo {GroupId} marcado IsExcluded={IsExcluded} para paleta {PaletteId} (v{Version}) de {ProjectId}/{ImageId}",
+                request.GroupId, request.IsExcluded, paletteId, version, projectId, imageId);
 
             return new ColorPaletteResult.Ready(record, FromCache: false);
         }

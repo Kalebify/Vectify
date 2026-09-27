@@ -30,6 +30,7 @@ public sealed class PersistentColorPaletteVersionRegistryTests : IDisposable
         PixelCount: 100,
         AreaPercent: 50.0,
         HasPartialAlpha: false,
+        IsExcluded: false,
         RawGroupIds: new[] { 0 },
         MaskStorageKey: "project/image/color-palette/palette/masks/group.png",
         MergedFrom: null);
@@ -40,7 +41,7 @@ public sealed class PersistentColorPaletteVersionRegistryTests : IDisposable
         ImageId: imageId,
         Version: version,
         PaletteId: paletteId,
-        DetectionParameters: new ColorPaletteParameters(12.0, 8),
+        DetectionParameters: new ColorPaletteParameters(12.0, 8, 0.001),
         Groups: new[] { SampleGroup() },
         TransparentPercent: 0.0,
         SourceWidthPx: 100,
@@ -128,7 +129,7 @@ public sealed class PersistentColorPaletteVersionRegistryTests : IDisposable
     {
         var registry = CreateRegistry();
 
-        Assert.Null(registry.FindByParams(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), new ColorPaletteParameters(12.0, null)));
+        Assert.Null(registry.FindByParams(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), new ColorPaletteParameters(12.0, null, 0.001)));
     }
 
     [Fact]

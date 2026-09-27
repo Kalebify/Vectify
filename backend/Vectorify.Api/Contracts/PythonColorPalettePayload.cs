@@ -37,6 +37,9 @@ public sealed class PythonColorPaletteParamsPayload
 
     [JsonPropertyName("max_colors")]
     public int? MaxColors { get; set; }
+
+    [JsonPropertyName("tiny_area_ratio")]
+    public double TinyAreaRatio { get; set; }
 }
 
 public sealed class PythonColorPaletteMetricsPayload
@@ -64,6 +67,9 @@ public sealed class PythonColorGroupPayload
 
     [JsonPropertyName("has_partial_alpha")]
     public bool HasPartialAlpha { get; set; }
+
+    [JsonPropertyName("touches_border")]
+    public bool TouchesBorder { get; set; }
 
     [JsonPropertyName("mask_base64")]
     public string? MaskBase64 { get; set; }

@@ -233,4 +233,70 @@ def make_sparse_mask_png_bytes(size: int = 40, block: int = 4, gap: int = 4) -> 
     return buffer.tobytes()
 
 
+def make_bw_two_color_png_bytes(width: int = 12, height: int = 12) -> bytes:
+    """PNG BGR determinista, blanco y negro puro (2 colores, sin
+    antialiasing) -- caso de regresión explícito de M2.1-S02 (spec.md,
+    "Casos límite": "imagen B/N (2 colores): debe seguir funcionando
+    exactamente igual que hoy"). Mitad izquierda negra, mitad derecha
+    blanca, ambas mitades tocan los cuatro bordes de su lado -- ninguna de
+    las dos debería fusionarse ni desaparecer con el fix de M2.1-S02."""
+    image = np.zeros((height, width, 3), dtype=np.uint8)
+    half = width // 2
+    image[:, half:] = (255, 255, 255)
+    success, buffer = cv2.imencode(".png", image)
+    assert success
+    return buffer.tobytes()
+
+
+def make_dominant_background_png_bytes(
+    size: int = 40, foreground_size: int = 10, background_color: tuple[int, int, int] = (235, 206, 135)
+) -> bytes:
+    """PNG BGR determinista con un fondo sólido que cubre TODO el lienzo
+    (toca los 4 bordes por completo) y un cuadrado de primer plano chico,
+    centrado, que NO toca ningún borde -- ver spec.md M2.1-S02, "fondo
+    dominante": el grupo de fondo debe ser el de mayor área Y tocar la
+    mayoría del perímetro; el de primer plano no debe marcarse como fondo
+    aunque también sea un color sólido."""
+    image = np.full((size, size, 3), background_color, dtype=np.uint8)
+    offset = (size - foreground_size) // 2
+    image[offset : offset + foreground_size, offset : offset + foreground_size] = (40, 40, 160)
+    success, buffer = cv2.imencode(".png", image)
+    assert success
+    return buffer.tobytes()
+
+
+def make_antialiased_illustration_png_bytes(width: int = 300, height: int = 300) -> bytes:
+    """PNG BGR determinista que replica -- a menor escala, para que los
+    tests corran rápido -- el fixture con el que se reprodujo y midió la
+    explosión de grupos por antialiasing documentada en la auditoría
+    M2.1-S01 (17 grupos en vez de ~5/6 lógicos): un "paisaje" de 6 colores
+    sólidos (cielo, pasto, casa, puerta, sol, techo) con `cv2.LINE_AA` en el
+    sol (círculo) y el techo (triángulo) -- ver spec.md M2.1-S02, "Casos
+    límite": "gradientes"/explosión de antialiasing, y el reporte del
+    sprint (IMPL.md) para la evidencia numérica antes/después a esta misma
+    escala."""
+    image = np.full((height, width, 3), (235, 206, 135), dtype=np.uint8)  # cielo
+    ground_y = int(height * 0.73)
+    image[ground_y:, :] = (60, 140, 60)  # pasto
+
+    house_x0, house_x1 = int(width * 0.3), int(width * 0.7)
+    house_y0, house_y1 = int(height * 0.5), int(height * 0.73)
+    cv2.rectangle(image, (house_x0, house_y0), (house_x1, house_y1), (60, 90, 140), thickness=-1)  # casa
+
+    door_x0, door_x1 = int(width * 0.467), int(width * 0.55)
+    cv2.rectangle(image, (door_x0, house_y0 + int(height * 0.1)), (door_x1, house_y1), (30, 45, 90), thickness=-1)  # puerta
+
+    roof_pts = np.array(
+        [[int(width * 0.267), house_y0], [int(width * 0.733), house_y0], [width // 2, int(height * 0.3)]],
+        dtype=np.int32,
+    )
+    cv2.fillConvexPoly(image, roof_pts, (40, 40, 160), lineType=cv2.LINE_AA)  # techo, con antialiasing
+
+    cv2.circle(image, (int(width * 0.833), int(height * 0.167)), int(width * 0.1), (0, 220, 250), thickness=-1, lineType=cv2.LINE_AA)  # sol, con antialiasing
+
+    success, buffer = cv2.imencode(".png", image)
+    assert success
+    return buffer.tobytes()
+
+
 NOT_AN_IMAGE = b"esto no es una imagen"

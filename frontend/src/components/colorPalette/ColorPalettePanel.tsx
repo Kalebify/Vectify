@@ -62,6 +62,7 @@ export function ColorPalettePanel({
     mergeSelected,
     unmerge,
     rename,
+    setExclusion,
     confirm,
   } = useColorPalette(projectId, imageId);
 
@@ -184,6 +185,7 @@ export function ColorPalettePanel({
             onToggleSelection={toggleGroupSelection}
             onRename={rename}
             onUnmerge={unmerge}
+            onSetExclusion={setExclusion}
           />
 
           <div className="color-palette-panel__actions">

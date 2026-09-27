@@ -34,6 +34,13 @@ public interface IColorPaletteService
     Task<ColorPaletteResult> RenameAsync(
         Guid projectId, Guid imageId, Guid paletteId, ColorPaletteRenameRequest request, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Marca un grupo como incluido/excluido (M2.1-S02), INDEPENDIENTE de un merge -- edición de
+    /// metadata pura, nunca cambia el GroupId de ningún grupo (ni el propio ni los demás).
+    /// </summary>
+    Task<ColorPaletteResult> SetExclusionAsync(
+        Guid projectId, Guid imageId, Guid paletteId, ColorPaletteSetExclusionRequest request, CancellationToken cancellationToken);
+
     /// <summary>Confirma la paleta: a partir de acá, la sesión ya no admite merge/unmerge/rename/re-detección.</summary>
     Task<ColorPaletteResult> ConfirmAsync(Guid projectId, Guid imageId, Guid paletteId, CancellationToken cancellationToken);
 

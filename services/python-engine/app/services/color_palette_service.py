@@ -64,6 +64,7 @@ class ColorPaletteService:
                 pixel_count=group.pixel_count,
                 area_percent=(group.pixel_count / result.total_pixel_count * 100.0) if result.total_pixel_count else 0.0,
                 has_partial_alpha=group.has_partial_alpha,
+                touches_border=group.touches_border,
                 mask_base64=base64.b64encode(pipeline.encode_png(group.mask)).decode("ascii"),
             )
             for index, group in enumerate(result.groups)
@@ -116,6 +117,7 @@ class ColorPaletteService:
             params.tolerance,
             params.max_colors,
             self._settings.max_palette_unique_colors,
+            params.tiny_area_ratio,
         )
         try:
             result = future.result(timeout=self._settings.color_palette_timeout_seconds)
