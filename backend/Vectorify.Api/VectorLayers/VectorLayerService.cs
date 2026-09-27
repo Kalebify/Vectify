@@ -149,9 +149,33 @@ public sealed class VectorLayerService : IVectorLayerService
                 var vectorId = Guid.NewGuid();
                 var storageKey = $"{projectId:N}/{imageId:N}/vector-layers/{paletteId:N}/{vectorId:N}.svg";
 
+                // Causa raíz confirmada de M2.1-S01: VtracerEngine.trace (colormode="binary",
+                // compartido con el pipeline B/N) siempre devuelve fill="#000000" -- el color
+                // real del grupo nunca se aplicaba a la geometría SVG, solo sobrevivía en la
+                // metadata JSON. Se pinta acá, justo antes de persistir, con el ColorHex real
+                // del ColorGroup -- ver SvgFillWriter para el detalle de por qué en .NET y no
+                // en Python/VtracerEngine.
+                string filledSvg;
                 try
                 {
-                    var svgBytes = Encoding.UTF8.GetBytes(layerResult.Svg);
+                    filledSvg = SvgFillWriter.Apply(layerResult.Svg, group.ColorHex);
+                }
+                catch (InvalidLayerSvgException ex)
+                {
+                    _logger.LogError(
+                        ex, "El SVG devuelto por Python para el grupo {GroupId} de {ProjectId}/{ImageId} no se pudo pintar con su color real",
+                        group.GroupId, projectId, imageId);
+                    return new VectorLayerSetResult.UpstreamError(
+                        "invalid_response", "El SVG devuelto por el motor Python para una de las capas no es válido.");
+                }
+
+                _logger.LogInformation(
+                    "Capa {GroupId} pintada con fill {ColorHex} para paleta {PaletteId} de {ProjectId}/{ImageId}",
+                    group.GroupId, group.ColorHex, paletteId, projectId, imageId);
+
+                try
+                {
+                    var svgBytes = Encoding.UTF8.GetBytes(filledSvg);
                     await using var svgContent = new MemoryStream(svgBytes);
                     await _fileStorage.SaveAsync(storageKey, svgContent, layerResult.ContentType, cancellationToken);
                 }

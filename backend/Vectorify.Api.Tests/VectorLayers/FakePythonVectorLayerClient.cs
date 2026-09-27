@@ -29,13 +29,22 @@ internal sealed class FakePythonVectorLayerClient : IPythonVectorLayerClient
         return Respond?.Invoke(masks) ?? DefaultSuccess(masks);
     }
 
-    /// <summary>Una capa por cada máscara recibida, con el mismo GroupId -- mismo criterio "eco" que el motor Python real.</summary>
+    /// <summary>
+    /// Una capa por cada máscara recibida, con el mismo GroupId -- mismo
+    /// criterio "eco" que el motor Python real. El SVG trae
+    /// `fill="#000000"` hardcodeado deliberadamente -- replica el
+    /// comportamiento REAL de VtracerEngine.trace en `colormode="binary"`
+    /// (causa raíz de M2.1-S01: siempre negro, sin importar el color de
+    /// entrada), así que cualquier test que verifique el fill final
+    /// necesita que VectorLayerService lo sobreescriba con el color real del
+    /// grupo -- no que "ya viniera bien" por casualidad del fixture.
+    /// </summary>
     public static PythonVectorLayerBatchResult DefaultSuccess(
         IReadOnlyList<(Guid GroupId, Stream Content, string ContentType)> masks) => new(
         PythonVectorLayerState.Success,
         masks.Select(mask => new PythonVectorLayerItemResult(
             mask.GroupId,
-            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\"><path d=\"M2,2 L8,2 L8,8 L2,8 Z\"/></svg>",
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\"><path d=\"M2,2 L8,2 L8,8 L2,8 Z\" fill=\"#000000\"/></svg>",
             "image/svg+xml",
             10,
             10,
