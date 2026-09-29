@@ -96,6 +96,22 @@ export function confirmColorPalette(
   return httpClient.postJson<ColorPaletteResponse>(`${baseUrl(projectId, imageId)}/${paletteId}/confirm`, {}, { signal });
 }
 
+/**
+ * Recupera la última versión vigente de una sesión de paleta ya existente
+ * (M2.1-S06, Workspace del Editor General: abrir un proyecto existente
+ * necesita leer su paleta CONFIRMADA sin volver a detectarla/mutarla) --
+ * usa el endpoint GET ya expuesto por ColorPaletteEndpoints
+ * (`GetColorPalette`), no uno nuevo.
+ */
+export function getColorPalette(
+  projectId: string,
+  imageId: string,
+  paletteId: string,
+  signal?: AbortSignal,
+): Promise<ColorPaletteResponse> {
+  return httpClient.get<ColorPaletteResponse>(`${baseUrl(projectId, imageId)}/${paletteId}`, { signal });
+}
+
 /** URL para mostrar (en un <img>) el preview cuantizado en vivo de la última versión de una sesión. */
 export function getColorPalettePreviewUrl(projectId: string, imageId: string, paletteId: string): string {
   return `${API_BASE_URL}${baseUrl(projectId, imageId)}/${paletteId}/preview`;
