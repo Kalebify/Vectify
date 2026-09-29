@@ -1,0 +1,18 @@
+{
+  "card_id": "3e8d77b2-6398-81ef-a146-d260857d0aaf",
+  "card_url": "https://app.notion.com/p/3e8d77b2639881efa146d260857d0aaf",
+  "title": "M2.1-S04 · Validación visual de Layers y componentes",
+  "stack": "Frontend, Vector, Laser -- sin ASP.NET Core nuevo salvo lectura trivial",
+  "branch": "sprint/3e8d77b2-validacion-visual-layers",
+  "column": "Done",
+  "phase": "review",
+  "fix_rounds": 0,
+  "preview_url": null,
+  "pr_url": "https://github.com/Kalebify/Vectorify/pull/26",
+  "started_at": "2026-09-29T00:00:00Z",
+  "exceptions": [
+    "Corrida en modo autonomo dentro del backlog MVP2.1 (mismo criterio de MVP2).",
+    "Tarjeta sin seccion 'Fuera de alcance' explicita en Notion -- alcance inferido y documentado en spec.md.",
+    "No confundir con M2-S04 de MVP2 (Vista explotada por colores), tarjeta distinta de un sprint anterior."
+  ]
+}

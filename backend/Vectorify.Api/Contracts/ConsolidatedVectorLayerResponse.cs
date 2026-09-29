@@ -38,6 +38,13 @@ public sealed record RasterValidationPayload(
 ///   `VectorLayerPayload.SvgUrl` (servir la geometría completa vía el
 ///   endpoint GET .../vectors/{vectorId} ya existente) en vez de duplicar/
 ///   re-serializar la geometría del `<path>` a JSON.
+/// - `PathCount` (M2.1-S04, NUEVO): número de `&lt;path&gt;` del SVG de esta
+///   capa -- lectura trivial de la MISMA `VectorVersion.Metrics` que ya
+///   calculó/persistió M1-S05 al vectorizar (ver
+///   <see cref="Vectorify.Api.Vectorization.IVectorizationService.FindVector"/>,
+///   reutilizado tal cual, sin recalcular nada), expuesto acá porque
+///   spec.md M2.1-S04 ("Información visible por layer") lo pide y hoy no
+///   existe ningún otro lugar del frontend que lo muestre por capa.
 /// - `ComponentCount` es `int?` (null si M2-S03 todavía no se calculó para
 ///   este VectorId -- es una operación separada, bajo demanda) en vez de
 ///   forzar un 0 engañoso.
@@ -57,6 +64,7 @@ public sealed record ConsolidatedVectorLayerPayload(
     string Fill,
     Guid VectorId,
     string SvgUrl,
+    int PathCount,
     int? ComponentCount,
     string ManufacturingOperation,
     bool Visible,

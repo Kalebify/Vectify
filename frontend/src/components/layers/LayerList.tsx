@@ -13,6 +13,9 @@ interface LayerListProps {
   mutatingGroupId: string | null;
   /** Filtro vigente (M2-S07, "mostrar solo Corte"): "all" muestra todas las capas. */
   operationFilter: ManufacturingOperationValue | "all";
+  /** Selección COMPARTIDA con la paleta (M2.1-S04) -- ver ColorSwatchList.selectedLayerGroupId. Opcionales: sin ellos, la lista funciona igual que antes de esta tarjeta. */
+  selectedGroupId?: string | null;
+  onSelectGroup?: (groupId: string) => void;
 }
 
 const OPERATION_BADGE_CLASS: Record<ManufacturingOperationValue, string> = {
@@ -37,6 +40,14 @@ function operationOf(operations: Record<string, ManufacturingOperationPayload>, 
  * una leyenda visual (badge con texto + color distintivo, consistente con
  * `.color-swatch__badge`) de la operación vigente. `operationFilter` oculta
  * (sin desmontar del todo el resto del panel: solo esta lista) las filas que
+ *
+ * M2.1-S04: el swatch de color se convierte en un `<button>` (en vez de un
+ * `<span>` decorativo) cuando se provee `onSelectGroup` -- click selecciona
+ * esa capa en la selección COMPARTIDA con la paleta (mismo groupId que
+ * ColorSwatchList), resaltando la fila y su swatch correspondiente. Sin
+ * `onSelectGroup` (ej. tests que no la necesitan) el swatch sigue siendo el
+ * `<span>` puramente decorativo de siempre.
+ *
  * no matchean, para "mostrar solo Corte" sin tocar visibilidad/canvas.
  */
 export function LayerList({
@@ -47,6 +58,8 @@ export function LayerList({
   onChangeOperation,
   mutatingGroupId,
   operationFilter,
+  selectedGroupId,
+  onSelectGroup,
 }: LayerListProps) {
   const visibleLayers =
     operationFilter === "all" ? layers : layers.filter((layer) => operationOf(operations, layer.groupId) === operationFilter);
@@ -61,15 +74,31 @@ export function LayerList({
         const isVisible = visibility[layer.groupId] ?? true;
         const operation = operationOf(operations, layer.groupId);
         const isMutating = mutatingGroupId === layer.groupId;
+        const isSelected = selectedGroupId === layer.groupId;
 
         return (
-          <li key={layer.groupId} className="layer-row" aria-label={`Capa ${layer.name}`}>
-            <span
-              className="layer-row__color"
-              style={{ backgroundColor: layer.colorHex }}
-              aria-hidden="true"
-              title={layer.colorHex}
-            />
+          <li
+            key={layer.groupId}
+            className={`layer-row${isSelected ? " layer-row--selected" : ""}`}
+            aria-label={`Capa ${layer.name}`}
+          >
+            {onSelectGroup ? (
+              <button
+                type="button"
+                className="layer-row__color layer-row__color--pick"
+                style={{ backgroundColor: layer.colorHex }}
+                aria-pressed={isSelected}
+                aria-label={`Seleccionar la capa ${layer.name} (la resalta en la paleta de colores)`}
+                onClick={() => onSelectGroup(layer.groupId)}
+              />
+            ) : (
+              <span
+                className="layer-row__color"
+                style={{ backgroundColor: layer.colorHex }}
+                aria-hidden="true"
+                title={layer.colorHex}
+              />
+            )}
             <span className="layer-row__name">{layer.name}</span>
             <span className="layer-row__area">{layer.areaPercent.toFixed(1)}%</span>
 

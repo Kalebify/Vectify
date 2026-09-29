@@ -283,6 +283,70 @@ describe("ColorPalettePanel — incluir/excluir (M2.1-S02)", () => {
   });
 });
 
+describe("ColorPalettePanel — sincronización con Layers (M2.1-S04)", () => {
+  it("sin selectedLayerGroupId/onSelectLayerGroup no se agrega ningún botón de selección cruzada", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(paletteResponse())));
+
+    renderPanel();
+    fireEvent.click(screen.getByRole("button", { name: "Detectar paleta" }));
+    await screen.findByText("Colores detectados");
+
+    expect(screen.queryByRole("button", { name: /Seleccionar la capa de Color 1/ })).not.toBeInTheDocument();
+  });
+
+  it("click en el swatch de selección cruzada llama a onSelectLayerGroup con el groupId del color", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(paletteResponse())));
+    const onSelectLayerGroup = vi.fn();
+
+    render(
+      <ColorPalettePanel
+        projectId={PROJECT_ID}
+        imageId={IMAGE_ID}
+        fileName="logo.png"
+        originalUrl={`/api/v1/projects/${PROJECT_ID}/images/${IMAGE_ID}/original`}
+        originalWidth={10}
+        originalHeight={10}
+        selectedLayerGroupId={null}
+        onSelectLayerGroup={onSelectLayerGroup}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Detectar paleta" }));
+    await screen.findByText("Colores detectados");
+
+    fireEvent.click(screen.getByRole("button", { name: /Seleccionar la capa de Color 2/ }));
+
+    expect(onSelectLayerGroup).toHaveBeenCalledWith(GROUP_B_ID);
+  });
+
+  it("el swatch cuyo groupId coincide con selectedLayerGroupId queda marcado como resaltado", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(paletteResponse())));
+
+    render(
+      <ColorPalettePanel
+        projectId={PROJECT_ID}
+        imageId={IMAGE_ID}
+        fileName="logo.png"
+        originalUrl={`/api/v1/projects/${PROJECT_ID}/images/${IMAGE_ID}/original`}
+        originalWidth={10}
+        originalHeight={10}
+        selectedLayerGroupId={GROUP_A_ID}
+        onSelectLayerGroup={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Detectar paleta" }));
+    await screen.findByText("Colores detectados");
+
+    expect(screen.getByRole("button", { name: /Seleccionar la capa de Color 1/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: /Seleccionar la capa de Color 2/ })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+  });
+});
+
 describe("ColorPalettePanel — confirmar", () => {
   it("confirmar llama a confirm y deshabilita la edición", async () => {
     const fetch = vi.fn((input: RequestInfo | URL) => {

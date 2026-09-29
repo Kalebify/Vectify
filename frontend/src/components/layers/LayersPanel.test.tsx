@@ -224,3 +224,164 @@ describe("LayersPanel — color real de las capas (regresión M2.1-S01: 'termina
     expect(fillOf(svgTextA)).not.toBe(fillOf(svgTextB));
   });
 });
+
+describe("LayersPanel — sincronización, Isolate/Show All y comparación (M2.1-S04)", () => {
+  it("click en el swatch de una fila de LayerList la selecciona y la resalta en LayerInfoPanel", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(layerSetResponse())));
+
+    renderPanel();
+    fireEvent.click(screen.getByRole("button", { name: "Generar capas" }));
+    await screen.findByRole("img", { name: "Capa Color 1" });
+
+    expect(screen.getByText("Seleccioná un color en la paleta o una capa en la lista para ver su información y aislarla.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Seleccionar la capa Color 2/ }));
+
+    expect(screen.getByRole("button", { name: /Seleccionar la capa Color 2/ })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("group", { name: "Información de la capa Color 2" })).toBeInTheDocument();
+  });
+
+  it("en modo controlado (selectedGroupId/onSelectGroup provistos), click en una fila llama al callback del padre en vez de manejar estado propio", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(layerSetResponse())));
+    const onSelectGroup = vi.fn();
+
+    render(
+      <LayersPanel
+        projectId={PROJECT_ID}
+        imageId={IMAGE_ID}
+        paletteId={PALETTE_ID}
+        selectedGroupId={null}
+        onSelectGroup={onSelectGroup}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Generar capas" }));
+    await screen.findByRole("img", { name: "Capa Color 1" });
+
+    fireEvent.click(screen.getByRole("button", { name: /Seleccionar la capa Color 1/ }));
+
+    expect(onSelectGroup).toHaveBeenCalledWith(GROUP_A_ID);
+    // Controlado: como el padre no re-renderiza con el nuevo valor (es un mock), la fila NO queda marcada sola.
+    expect(screen.getByRole("button", { name: /Seleccionar la capa Color 1/ })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("Aislar muestra únicamente la capa seleccionada en el canvas combinado", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(layerSetResponse())));
+
+    renderPanel();
+    fireEvent.click(screen.getByRole("button", { name: "Generar capas" }));
+    await screen.findByRole("img", { name: "Capa Color 1" });
+
+    fireEvent.click(screen.getByRole("button", { name: /Seleccionar la capa Color 2/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Aislar" }));
+
+    const combined = screen.getByRole("group", { name: /Composición combinada de 1 de 2 capas visibles/ });
+    expect(combined.querySelectorAll("img")).toHaveLength(1);
+    expect(screen.getByRole("img", { name: "Capa Color 2" })).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "Capa Color 1" })).not.toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Mostrar la capa Color 1" })).not.toBeChecked();
+  });
+
+  it("Mostrar todas deshace un Isolate previo", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(layerSetResponse())));
+
+    renderPanel();
+    fireEvent.click(screen.getByRole("button", { name: "Generar capas" }));
+    await screen.findByRole("img", { name: "Capa Color 1" });
+
+    fireEvent.click(screen.getByRole("button", { name: /Seleccionar la capa Color 2/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Aislar" }));
+    expect(screen.queryByRole("img", { name: "Capa Color 1" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Mostrar todas" }));
+
+    const combined = screen.getByRole("group", { name: /Composición combinada de 2 de 2 capas visibles/ });
+    expect(combined.querySelectorAll("img")).toHaveLength(2);
+  });
+
+  it("Eye individual sigue funcionando después de un Isolate: togglear otra capa la suma a las visibles", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(layerSetResponse())));
+
+    renderPanel();
+    fireEvent.click(screen.getByRole("button", { name: "Generar capas" }));
+    await screen.findByRole("img", { name: "Capa Color 1" });
+
+    fireEvent.click(screen.getByRole("button", { name: /Seleccionar la capa Color 2/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Aislar" }));
+    expect(screen.queryByRole("img", { name: "Capa Color 1" })).not.toBeInTheDocument();
+
+    // Ambigüedad resuelta (spec.md): togglear el Eye de la otra capa mientras
+    // una está "aislada" simplemente la suma a las visibles -- mismo
+    // mecanismo, sin un modo especial separado.
+    fireEvent.click(screen.getByRole("checkbox", { name: "Mostrar la capa Color 1" }));
+
+    const combined = screen.getByRole("group", { name: /Composición combinada de 2 de 2 capas visibles/ });
+    expect(combined.querySelectorAll("img")).toHaveLength(2);
+  });
+
+  it("el modo de comparación 'Original' muestra la imagen raster y oculta el canvas combinado", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(layerSetResponse())));
+
+    render(
+      <LayersPanel
+        projectId={PROJECT_ID}
+        imageId={IMAGE_ID}
+        paletteId={PALETTE_ID}
+        originalUrl={`/api/v1/projects/${PROJECT_ID}/images/${IMAGE_ID}/original`}
+        originalWidth={10}
+        originalHeight={10}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Generar capas" }));
+    await screen.findByRole("img", { name: "Capa Color 1" });
+
+    fireEvent.click(screen.getByRole("radio", { name: "Original" }));
+
+    expect(screen.getByRole("img", { name: "Imagen original subida, sin ninguna capa aplicada" })).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: /Composición combinada/ })).not.toBeInTheDocument();
+  });
+
+  it("volver de 'Original' a 'Compuesto' no pierde la visibilidad/selección vigente (persistencia de estado en sesión)", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(layerSetResponse())));
+
+    render(
+      <LayersPanel
+        projectId={PROJECT_ID}
+        imageId={IMAGE_ID}
+        paletteId={PALETTE_ID}
+        originalUrl={`/api/v1/projects/${PROJECT_ID}/images/${IMAGE_ID}/original`}
+        originalWidth={10}
+        originalHeight={10}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Generar capas" }));
+    await screen.findByRole("img", { name: "Capa Color 1" });
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Ocultar la capa Color 1" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Original" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Compuesto" }));
+
+    const combined = screen.getByRole("group", { name: /Composición combinada de 1 de 2 capas visibles/ });
+    expect(combined.querySelectorAll("img")).toHaveLength(1);
+    expect(screen.queryByRole("img", { name: "Capa Color 1" })).not.toBeInTheDocument();
+  });
+
+  it("el modo 'Layer aislado' muestra solo la capa seleccionada sin tocar la visibilidad real (Compuesto la recupera intacta)", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(layerSetResponse())));
+
+    renderPanel();
+    fireEvent.click(screen.getByRole("button", { name: "Generar capas" }));
+    await screen.findByRole("img", { name: "Capa Color 1" });
+
+    fireEvent.click(screen.getByRole("button", { name: /Seleccionar la capa Color 1/ }));
+    fireEvent.click(screen.getByRole("radio", { name: "Layer aislado" }));
+
+    let combined = screen.getByRole("group", { name: /Composición combinada de 1 de 2 capas visibles/ });
+    expect(screen.getByRole("img", { name: "Capa Color 1" })).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "Capa Color 2" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Compuesto" }));
+
+    combined = screen.getByRole("group", { name: /Composición combinada de 2 de 2 capas visibles/ });
+    expect(combined.querySelectorAll("img")).toHaveLength(2);
+  });
+});

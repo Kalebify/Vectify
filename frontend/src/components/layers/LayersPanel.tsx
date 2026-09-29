@@ -1,16 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getVectorLayerSvgUrl } from "../../api/vectorLayersApi";
+import { useComparisonMode } from "../../hooks/useComparisonMode";
 import { useComponentGroups } from "../../hooks/useComponentGroups";
+import { useConsolidatedVectorLayers } from "../../hooks/useConsolidatedVectorLayers";
 import { useExplodedView } from "../../hooks/useExplodedView";
 import { useLayerComponents } from "../../hooks/useLayerComponents";
 import { useManufacturingOperations } from "../../hooks/useManufacturingOperations";
 import { usePhysicalUnion } from "../../hooks/usePhysicalUnion";
 import { useVectorLayers } from "../../hooks/useVectorLayers";
 import type { ManufacturingOperationValue } from "../../types/manufacturingOperations";
+import { ComparisonModeControls } from "./ComparisonModeControls";
 import { ComponentTree } from "./ComponentTree";
 import { ExplodedLegend } from "./ExplodedLegend";
 import { ExplodedViewControls } from "./ExplodedViewControls";
 import { LayerCanvas } from "./LayerCanvas";
+import { LayerInfoPanel } from "./LayerInfoPanel";
 import { LayerList } from "./LayerList";
 import { ManufacturingOperationSummary } from "./ManufacturingOperationSummary";
 
@@ -19,6 +23,20 @@ interface LayersPanelProps {
   imageId: string;
   /** Sesión de paleta YA CONFIRMADA (M2-S01) -- precondición de esta tarjeta. */
   paletteId: string;
+  /**
+   * Sincronización paleta<->Layers (M2.1-S04): selección COMPARTIDA de "qué
+   * layer se está inspeccionando ahora", la misma que vive en
+   * ColorPalettePanel. Si no se proveen (ej. tests que montan LayersPanel
+   * aislado), el panel gestiona su propia selección local -- controlado si
+   * se proveen ambos, no controlado si no (mismo criterio que un `<input>`
+   * de React).
+   */
+  selectedGroupId?: string | null;
+  onSelectGroup?: (groupId: string) => void;
+  /** Imagen raster original (M1-S02) -- fuente del modo de comparación "Original" (M2.1-S04). Sin ella, esa opción queda deshabilitada. */
+  originalUrl?: string;
+  originalWidth?: number;
+  originalHeight?: number;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -52,13 +70,41 @@ function formatUnits(value: number): string {
  * (M2-S03) son exactamente los mismos objetos en ambos modos, así que
  * aislar/ocultar un color y la selección de un componente ya son
  * consistentes entre las dos vistas sin ningún código adicional.
+ *
+ * M2.1-S04 ("Validación visual de Layers y componentes") suma, sin
+ * reescribir nada de lo anterior: (a) selección de LAYER compartida con
+ * ColorPalettePanel (`selectedGroupId`/`onSelectGroup`, controlada u
+ * no-controlada), (b) Isolate/Show All reutilizando el MISMO `visibility` de
+ * M2-S02 (ver `useVectorLayers.isolate`/`showAll`), (c) `LayerInfoPanel` con
+ * la info consolidada de M2.1-S03 (nombre/HEX/paths/componentes/operación)
+ * de la capa seleccionada, y (d) el modo de comparación Original/Compuesto/
+ * Layer aislado (`useComparisonMode`, puramente visual -- nunca toca
+ * `visibility` ni ningún otro estado real, mismo espíritu que
+ * `useExplodedView`).
  */
-export function LayersPanel({ projectId, imageId, paletteId }: LayersPanelProps) {
-  const { status, layerSet, visibility, errorMessage, generate, toggleVisibility } = useVectorLayers(
+export function LayersPanel({
+  projectId,
+  imageId,
+  paletteId,
+  selectedGroupId: selectedGroupIdProp,
+  onSelectGroup: onSelectGroupProp,
+  originalUrl,
+  originalWidth,
+  originalHeight,
+}: LayersPanelProps) {
+  const { status, layerSet, visibility, errorMessage, generate, toggleVisibility, isolate, showAll } = useVectorLayers(
     projectId,
     imageId,
     paletteId,
   );
+
+  // Controlado si App (u otro padre) provee selectedGroupId/onSelectGroup
+  // (`selectedGroupIdProp !== undefined`, distingue de `null` = "controlado,
+  // pero nada seleccionado"), no controlado si no -- ver docstring de
+  // LayersPanelProps.
+  const [uncontrolledSelectedGroupId, setUncontrolledSelectedGroupId] = useState<string | null>(null);
+  const selectedGroupId = selectedGroupIdProp !== undefined ? selectedGroupIdProp : uncontrolledSelectedGroupId;
+  const handleSelectGroup = onSelectGroupProp ?? setUncontrolledSelectedGroupId;
 
   // Unión física CONFIRMADA (M2-S06): la capa de origen pasa a apuntar al
   // VectorId NUEVO resultante (el anterior sigue existiendo intacto, solo
@@ -167,6 +213,50 @@ export function LayersPanel({ projectId, imageId, paletteId }: LayersPanelProps)
   } = useManufacturingOperations(projectId, imageId, paletteId, layerSet?.layerSetId ?? null);
   const [manufacturingFilter, setManufacturingFilter] = useState<ManufacturingOperationValue | "all">("all");
 
+  // Información consolidada por capa (M2.1-S03/M2.1-S04): fuente de
+  // nombre/HEX/pathCount/componentCount/manufacturingOperation para
+  // LayerInfoPanel -- ver useConsolidatedVectorLayers.
+  const consolidatedLayers = useConsolidatedVectorLayers(projectId, imageId, paletteId, layerSet?.layerSetId ?? null);
+
+  // Se refresca automáticamente después de un cálculo de componentes exitoso
+  // (el componentCount consolidado quedó desactualizado apenas se resuelve):
+  // además del refresh manual ("Actualizar info" en LayerInfoPanel), este es
+  // el único refetch automático -- evita loops por cambios de identidad de
+  // `componentsByGroup`/`manufacturingOperations` que no siempre son un
+  // cambio real.
+  useEffect(() => {
+    if (componentsStatus === "ready") {
+      consolidatedLayers.refetch();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [componentsStatus]);
+
+  // Selección COMPARTIDA con la paleta (M2.1-S04, distinta de
+  // `selectedComponent`/`groupSelection` de arriba, que son selección de
+  // PIEZAS dentro de una capa): qué LAYER completa se está inspeccionando.
+  const selectedLayerGroup = effectiveLayers.find((layer) => layer.groupId === selectedGroupId) ?? null;
+  const selectedLayerConsolidated = selectedGroupId ? (consolidatedLayers.layersById[selectedGroupId] ?? null) : null;
+  const isSelectedLayerVisible = selectedGroupId ? (visibility[selectedGroupId] ?? true) : false;
+
+  const handleIsolateSelected = useCallback(() => {
+    if (selectedGroupId) {
+      isolate(selectedGroupId);
+    }
+  }, [selectedGroupId, isolate]);
+
+  const { mode: comparisonMode, setMode: setComparisonMode } = useComparisonMode();
+
+  // Modo de comparación "Layer aislado" (M2.1-S04): visibilidad DERIVADA en
+  // el render, nunca escrita en `visibility` -- ver docstring de
+  // useComparisonMode. Alternar a "Compuesto" y volver nunca pierde un
+  // Isolate ni un ocultamiento manual previo, porque esto nunca tocó el
+  // `visibility` real.
+  const isolatedComparisonVisibility = useMemo(
+    () => Object.fromEntries(effectiveLayers.map((layer) => [layer.groupId, layer.groupId === selectedGroupId])),
+    [effectiveLayers, selectedGroupId],
+  );
+  const canvasVisibility = comparisonMode === "isolated" ? isolatedComparisonVisibility : visibility;
+
   const isBusy = status === "generating";
   const isComputingComponents = componentsStatus === "loading";
 
@@ -220,6 +310,19 @@ export function LayersPanel({ projectId, imageId, paletteId }: LayersPanelProps)
               onChangeOperation={assignManufacturingOperation}
               mutatingGroupId={manufacturingMutatingGroupId}
               operationFilter={manufacturingFilter}
+              selectedGroupId={selectedGroupId}
+              onSelectGroup={handleSelectGroup}
+            />
+
+            <LayerInfoPanel
+              selectedLayer={selectedLayerGroup}
+              consolidated={selectedLayerConsolidated}
+              consolidatedStatus={consolidatedLayers.status}
+              consolidatedErrorMessage={consolidatedLayers.errorMessage}
+              onRefresh={consolidatedLayers.refetch}
+              isVisible={isSelectedLayerVisible}
+              onIsolate={handleIsolateSelected}
+              onShowAll={showAll}
             />
 
             <div className="layers-panel__controls">
@@ -292,29 +395,50 @@ export function LayersPanel({ projectId, imageId, paletteId }: LayersPanelProps)
           </div>
 
           <div className="layers-panel__canvas-area">
-            <ExplodedViewControls
-              viewMode={viewMode}
-              onChangeViewMode={setViewMode}
-              separationPercent={separationPercent}
-              onChangeSeparationPercent={setSeparationPercent}
+            <ComparisonModeControls
+              mode={comparisonMode}
+              onChangeMode={setComparisonMode}
+              hasOriginal={Boolean(originalUrl)}
+              hasSelection={selectedGroupId !== null}
             />
 
-            <LayerCanvas
-              layers={effectiveLayers}
-              visibility={visibility}
-              sourceWidthPx={layerSet.sourceWidthPx}
-              sourceHeightPx={layerSet.sourceHeightPx}
-              getSvgUrl={(vectorId) => getVectorLayerSvgUrl(projectId, imageId, vectorId)}
-              componentsByGroup={componentsByGroup}
-              selected={selectedComponent}
-              onSelectComponent={selectComponent}
-              highlightedGroup={highlightedGroup}
-              exploded={viewMode === "exploded"}
-              separationPercent={separationPercent}
-            />
+            {comparisonMode === "original" && originalUrl ? (
+              <figure className="layer-canvas layer-canvas--original">
+                <img
+                  src={originalUrl}
+                  alt="Imagen original subida, sin ninguna capa aplicada"
+                  width={originalWidth ?? layerSet.sourceWidthPx}
+                  height={originalHeight ?? layerSet.sourceHeightPx}
+                  loading="lazy"
+                />
+              </figure>
+            ) : (
+              <>
+                <ExplodedViewControls
+                  viewMode={viewMode}
+                  onChangeViewMode={setViewMode}
+                  separationPercent={separationPercent}
+                  onChangeSeparationPercent={setSeparationPercent}
+                />
 
-            {viewMode === "exploded" && (
-              <ExplodedLegend layers={effectiveLayers} componentsByGroup={componentsByGroup} />
+                <LayerCanvas
+                  layers={effectiveLayers}
+                  visibility={canvasVisibility}
+                  sourceWidthPx={layerSet.sourceWidthPx}
+                  sourceHeightPx={layerSet.sourceHeightPx}
+                  getSvgUrl={(vectorId) => getVectorLayerSvgUrl(projectId, imageId, vectorId)}
+                  componentsByGroup={componentsByGroup}
+                  selected={selectedComponent}
+                  onSelectComponent={selectComponent}
+                  highlightedGroup={highlightedGroup}
+                  exploded={viewMode === "exploded"}
+                  separationPercent={separationPercent}
+                />
+
+                {viewMode === "exploded" && (
+                  <ExplodedLegend layers={effectiveLayers} componentsByGroup={componentsByGroup} />
+                )}
+              </>
             )}
           </div>
         </div>

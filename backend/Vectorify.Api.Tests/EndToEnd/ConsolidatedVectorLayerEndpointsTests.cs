@@ -45,6 +45,9 @@ public sealed class ConsolidatedVectorLayerEndpointsTests : IDisposable
         Assert.NotEqual(Guid.Empty, layer.Id);
         Assert.NotEqual(Guid.Empty, layer.VectorId);
         Assert.Contains($"/vectors/{layer.VectorId}", layer.SvgUrl);
+        // pathCount (M2.1-S04) es una lectura trivial de la VectorVersion ya
+        // persistida por M1-S05 al generar esta capa -- siempre >= 0, nunca null.
+        Assert.True(layer.PathCount >= 0);
         // M2-S03 nunca se calculó para esta capa todavía -> null, no 0.
         Assert.Null(layer.ComponentCount);
         // M2-S07 nunca asignó nada -> "unassigned", nunca un valor por defecto inventado.
@@ -91,6 +94,7 @@ public sealed class ConsolidatedVectorLayerEndpointsTests : IDisposable
         var body = await response.Content.ReadFromJsonAsync<ConsolidatedVectorLayerSetResponse>();
 
         var layer = Assert.Single(body!.Layers);
+        Assert.True(layer.PathCount >= 0);
         Assert.Equal(1, layer.ComponentCount);
         Assert.Equal("cut", layer.ManufacturingOperation);
         // Se leyó lo ya persistido -- no se disparó un segundo cálculo de componentes.
