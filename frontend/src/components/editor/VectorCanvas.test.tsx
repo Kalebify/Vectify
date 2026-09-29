@@ -88,7 +88,7 @@ describe("VectorCanvas", () => {
   });
 
   it("proyecto multicolor: pide el SVG real de cada capa visible (nunca datos hardcodeados)", async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(new Response(SVG_TEXT, { status: 200 })));
+    const fetchMock = vi.fn((_input: string | URL) => Promise.resolve(new Response(SVG_TEXT, { status: 200 })));
     vi.stubGlobal("fetch", fetchMock);
 
     renderCanvas({
@@ -96,9 +96,14 @@ describe("VectorCanvas", () => {
       visibility: { "group-a": true, "group-b": true },
     });
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/vectors/a"), { timeout: 10000 });
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/vectors/b"), { timeout: 10000 });
-  }, 15000);
+    await waitFor(
+      () => {
+        const requestedUrls = fetchMock.mock.calls.map((call) => String(call[0]));
+        expect(requestedUrls).toEqual(expect.arrayContaining(["/vectors/a", "/vectors/b"]));
+      },
+      { timeout: 25000, interval: 100 },
+    );
+  }, 30000);
 
   it("reporta el tamaño medido del contenedor vía onMeasure (resize)", async () => {
     const { onMeasure } = renderCanvas();

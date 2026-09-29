@@ -25,6 +25,6 @@ export default defineConfig({
     // fallar por timeout tests sin relación alguna con Konva (ver
     // comentario de `testTimeout`). Limitar el techo de threads reduce el
     // pico de contención sin serializar toda la suite.
-    poolOptions: { threads: { maxThreads: 8 } },
+    maxWorkers: 8,
   },
 });
