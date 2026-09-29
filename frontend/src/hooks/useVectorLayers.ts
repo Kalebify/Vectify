@@ -43,6 +43,17 @@ export interface UseVectorLayersState {
   /** Genera (o vuelve a pedir, reutilizando desde caché del lado de la Web API si la paleta no cambió) el conjunto completo de capas. */
   generate: () => void;
   toggleVisibility: (groupId: string) => void;
+  /**
+   * Isolate (M2.1-S04): muestra ÚNICAMENTE `groupId` en el canvas combinado,
+   * ocultando el resto -- reutiliza el MISMO `visibility` record que
+   * `toggleVisibility` (ver spec.md, "Ambigüedades detectadas": Isolate no
+   * es un modo separado, es una mutación más de la visibilidad de siempre).
+   * Togglear el Eye de otra capa después de aislar simplemente la suma a las
+   * visibles, sin ningún estado especial que "recordar".
+   */
+  isolate: (groupId: string) => void;
+  /** Show All (M2.1-S04): restaura la visibilidad de TODAS las capas, deshaciendo cualquier Isolate/ocultamiento manual previo. */
+  showAll: () => void;
 }
 
 export function useVectorLayers(projectId: string, imageId: string, paletteId: string | null): UseVectorLayersState {
@@ -112,5 +123,15 @@ export function useVectorLayers(projectId: string, imageId: string, paletteId: s
     setVisibility((current) => ({ ...current, [groupId]: !current[groupId] }));
   }, []);
 
-  return { status, layerSet, visibility, errorCode, errorMessage, generate, toggleVisibility };
+  const isolate = useCallback((groupId: string) => {
+    setVisibility((current) =>
+      Object.fromEntries(Object.keys(current).map((key) => [key, key === groupId])),
+    );
+  }, []);
+
+  const showAll = useCallback(() => {
+    setVisibility((current) => Object.fromEntries(Object.keys(current).map((key) => [key, true])));
+  }, []);
+
+  return { status, layerSet, visibility, errorCode, errorMessage, generate, toggleVisibility, isolate, showAll };
 }

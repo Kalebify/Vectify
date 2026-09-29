@@ -20,6 +20,14 @@ interface ColorPalettePanelProps {
    * quien escuche, no solo la primera vez.
    */
   onConfirmed?: (palette: ColorPaletteResponse) => void;
+  /**
+   * Sincronización paleta<->Layers (M2.1-S04): selección COMPARTIDA de
+   * "qué layer/color se está inspeccionando ahora", la misma que vive en
+   * LayersPanel. Opcionales: sin ellos, la paleta funciona exactamente
+   * igual que antes de esta tarjeta (sin resaltado cruzado).
+   */
+  selectedLayerGroupId?: string | null;
+  onSelectLayerGroup?: (groupId: string) => void;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -46,6 +54,8 @@ export function ColorPalettePanel({
   originalWidth,
   originalHeight,
   onConfirmed,
+  selectedLayerGroupId,
+  onSelectLayerGroup,
 }: ColorPalettePanelProps) {
   const {
     status,
@@ -186,6 +196,8 @@ export function ColorPalettePanel({
             onRename={rename}
             onUnmerge={unmerge}
             onSetExclusion={setExclusion}
+            selectedLayerGroupId={selectedLayerGroupId}
+            onSelectLayerGroup={onSelectLayerGroup}
           />
 
           <div className="color-palette-panel__actions">

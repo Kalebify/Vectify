@@ -2,21 +2,23 @@ using Vectorify.Api.Components;
 using Vectorify.Api.Contracts;
 using Vectorify.Api.ManufacturingOperations;
 using Vectorify.Api.VectorLayers;
+using Vectorify.Api.Vectorization;
 
 namespace Vectorify.Api.Endpoints;
 
 /// <summary>
-/// Endpoint del modelo `VectorLayer` CONSOLIDADO (M2.1-S03): combina, para
-/// cada capa del conjunto vigente de una paleta confirmada (M2-S02), lo que
-/// hoy está disperso en tres servicios separados --
+/// Endpoint del modelo `VectorLayer` CONSOLIDADO (M2.1-S03, extendido en
+/// M2.1-S04 con `PathCount`): combina, para cada capa del conjunto vigente de
+/// una paleta confirmada (M2-S02), lo que hoy está disperso en varios
+/// servicios separados --
 /// <see cref="IVectorLayerService"/> (color/fill/SVG, M2-S02/M2.1-S01),
-/// <see cref="IComponentAnalysisService"/> (componentCount, M2-S03) y
+/// <see cref="IComponentAnalysisService"/> (componentCount, M2-S03),
 /// <see cref="IManufacturingOperationService"/> (operación de fabricación,
-/// M2-S07) -- en una única respuesta, SIN recalcular ninguno de los tres
-/// (solo lectura de lo ya persistido por cada uno, mismo criterio de
-/// composición fina en el endpoint que ya usa
-/// <see cref="ManufacturingOperationEndpoints"/> al combinar
-/// VectorLayerSetVersion + ManufacturingOperationSetVersion).
+/// M2-S07) y <see cref="IVectorizationService"/> (pathCount, M1-S05) -- en
+/// una única respuesta, SIN recalcular ninguno de ellos (solo lectura de lo
+/// ya persistido por cada uno, mismo criterio de composición fina en el
+/// endpoint que ya usa <see cref="ManufacturingOperationEndpoints"/> al
+/// combinar VectorLayerSetVersion + ManufacturingOperationSetVersion).
 ///
 /// Deliberadamente un endpoint NUEVO (no una modificación del contrato ya
 /// existente de <see cref="VectorLayerEndpoints"/>, del que ya dependen otras
@@ -35,7 +37,8 @@ public static class ConsolidatedVectorLayerEndpoints
                 Guid paletteId,
                 IVectorLayerService vectorLayerService,
                 IComponentAnalysisService componentAnalysisService,
-                IManufacturingOperationService manufacturingOperationService) =>
+                IManufacturingOperationService manufacturingOperationService,
+                IVectorizationService vectorizationService) =>
             {
                 var layerSet = vectorLayerService.FindLatest(projectId, imageId, paletteId);
                 if (layerSet is null)
@@ -49,7 +52,8 @@ public static class ConsolidatedVectorLayerEndpoints
                     .ToDictionary(a => a.GroupId, a => a.Operation);
 
                 var layers = layerSet.Layers
-                    .Select((layer, index) => ToPayload(projectId, imageId, layer, index, componentAnalysisService, operationByGroupId))
+                    .Select((layer, index) => ToPayload(
+                        projectId, imageId, layer, index, componentAnalysisService, vectorizationService, operationByGroupId))
                     .ToList();
 
                 return Results.Ok(new ConsolidatedVectorLayerSetResponse(
@@ -69,9 +73,10 @@ public static class ConsolidatedVectorLayerEndpoints
         .Produces<ApiErrorResponse>(StatusCodes.Status404NotFound)
         .WithSummary(
             "Recupera el conjunto de capas vigente de una paleta con el modelo VectorLayer " +
-            "CONSOLIDADO (M2.1-S03): color/fill/geometría, componentCount (si ya se calculó, M2-S03), " +
-            "manufacturingOperation (M2-S07, 'unassigned' si no se asignó), y visible/locked/order " +
-            "(valores default/computados -- la persistencia interactiva de esos 3 campos es de M2.1-S07).")
+            "CONSOLIDADO (M2.1-S03/M2.1-S04): color/fill/geometría, pathCount (M1-S05), componentCount " +
+            "(si ya se calculó, M2-S03), manufacturingOperation (M2-S07, 'unassigned' si no se asignó), " +
+            "y visible/locked/order (valores default/computados -- la persistencia interactiva de esos " +
+            "3 campos es de M2.1-S07).")
         .WithDescription(
             "Precondición: debe existir un conjunto de capas generado para esa paleta (POST " +
             ".../layers de M2-S02); si no, responde 404 sin llamar a ningún servicio adicional. " +
@@ -85,9 +90,16 @@ public static class ConsolidatedVectorLayerEndpoints
         VectorLayer layer,
         int order,
         IComponentAnalysisService componentAnalysisService,
+        IVectorizationService vectorizationService,
         IReadOnlyDictionary<Guid, ManufacturingOperationKind> operationByGroupId)
     {
         var componentCount = componentAnalysisService.FindLatest(projectId, imageId, layer.VectorId)?.Components.Count;
+        // Lectura trivial de la MISMA VectorVersion (M1-S05) que ya sirve el
+        // SVG de esta capa vía SvgUrl -- nunca se recalcula, solo se expone
+        // Metrics.PathCount que M1-S05 ya persistió (ver docstring del
+        // record). 0 en el caso (no esperado en la práctica) de que la
+        // VectorVersion referenciada ya no exista en el registro.
+        var pathCount = vectorizationService.FindVector(projectId, imageId, layer.VectorId)?.Metrics.PathCount ?? 0;
         var operation = operationByGroupId.TryGetValue(layer.GroupId, out var kind)
             ? ManufacturingOperationParser.ToWireValue(kind)
             : ManufacturingOperationParser.UnassignedWireValue;
@@ -99,6 +111,7 @@ public static class ConsolidatedVectorLayerEndpoints
             Fill: layer.ColorHex,
             VectorId: layer.VectorId,
             SvgUrl: $"/api/v1/projects/{projectId}/images/{imageId}/vectors/{layer.VectorId}",
+            PathCount: pathCount,
             ComponentCount: componentCount,
             ManufacturingOperation: operation,
             Visible: true,

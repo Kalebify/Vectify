@@ -9,6 +9,17 @@ interface ColorSwatchListProps {
   onRename: (groupId: string, name: string) => void;
   onUnmerge: (groupId: string) => void;
   onSetExclusion: (groupId: string, isExcluded: boolean) => void;
+  /**
+   * Selección COMPARTIDA con el panel Layers (M2.1-S04) -- explícitamente
+   * DISTINTA de `selectedGroupIds` arriba (esa es la selección múltiple para
+   * "Fusionar seleccionados"). `selectedLayerGroupId` es la selección
+   * ÚNICA de "qué layer estoy inspeccionando ahora mismo", la misma que
+   * resalta la fila correspondiente en LayerList y viceversa. Ambos
+   * opcionales para que ColorSwatchList siga funcionando sin sincronización
+   * cruzada (ej. antes de que exista un LayersPanel para esta paleta).
+   */
+  selectedLayerGroupId?: string | null;
+  onSelectLayerGroup?: (groupId: string) => void;
 }
 
 /**
@@ -27,6 +38,8 @@ export function ColorSwatchList({
   onRename,
   onUnmerge,
   onSetExclusion,
+  selectedLayerGroupId,
+  onSelectLayerGroup,
 }: ColorSwatchListProps) {
   return (
     <ul className="color-swatch-list" aria-label="Colores detectados">
@@ -40,6 +53,8 @@ export function ColorSwatchList({
           onRename={onRename}
           onUnmerge={onUnmerge}
           onSetExclusion={onSetExclusion}
+          isLayerSelected={selectedLayerGroupId === group.groupId}
+          onSelectLayerGroup={onSelectLayerGroup}
         />
       ))}
     </ul>
@@ -54,6 +69,8 @@ interface ColorSwatchRowProps {
   onRename: (groupId: string, name: string) => void;
   onUnmerge: (groupId: string) => void;
   onSetExclusion: (groupId: string, isExcluded: boolean) => void;
+  isLayerSelected: boolean;
+  onSelectLayerGroup?: (groupId: string) => void;
 }
 
 function ColorSwatchRow({
@@ -64,6 +81,8 @@ function ColorSwatchRow({
   onRename,
   onUnmerge,
   onSetExclusion,
+  isLayerSelected,
+  onSelectLayerGroup,
 }: ColorSwatchRowProps) {
   const [draftName, setDraftName] = useState(group.name);
 
@@ -88,7 +107,21 @@ function ColorSwatchRow({
   };
 
   return (
-    <li className="color-swatch" aria-label={`Grupo de color ${group.name}`}>
+    <li
+      className={`color-swatch${isLayerSelected ? " color-swatch--selected" : ""}`}
+      aria-label={`Grupo de color ${group.name}`}
+    >
+      {onSelectLayerGroup && (
+        <button
+          type="button"
+          className="color-swatch__pick"
+          style={{ backgroundColor: group.colorHex }}
+          aria-pressed={isLayerSelected}
+          aria-label={`Seleccionar la capa de ${group.name} (la resalta en el panel Layers)`}
+          onClick={() => onSelectLayerGroup(group.groupId)}
+        />
+      )}
+
       <label className="color-swatch__select">
         <input
           type="checkbox"

@@ -179,6 +179,11 @@ function App() {
   const { status, response, errorMessage, lastCheckedAt } = useSystemHealth();
   const [activeProject, setActiveProject] = useState<UploadImageResponse | null>(null);
   const [confirmedPalette, setConfirmedPalette] = useState<ColorPaletteResponse | null>(null);
+  // Selección COMPARTIDA paleta<->Layers (M2.1-S04): un único groupId
+  // "seleccionado", resaltado a la vez en ColorSwatchList y LayerList --
+  // vive acá (padre común de ambos paneles) en vez de en cualquiera de los
+  // dos, así que un click en cualquiera de los dos lados sincroniza al otro.
+  const [selectedLayerGroupId, setSelectedLayerGroupId] = useState<string | null>(null);
   const [readyPreview, setReadyPreview] = useState<PreprocessResponse | null>(null);
   const [readyMask, setReadyMask] = useState<ThresholdResponse | null>(null);
   const [readyVector, setReadyVector] = useState<VectorizeResponse | null>(null);
@@ -187,6 +192,7 @@ function App() {
 
   const handleProjectCreated = (project: UploadImageResponse | null) => {
     setConfirmedPalette(null);
+    setSelectedLayerGroupId(null);
     setReadyPreview(null);
     setReadyMask(null);
     setReadyVector(null);
@@ -287,6 +293,8 @@ function App() {
               originalWidth={activeProject.width ?? 0}
               originalHeight={activeProject.height ?? 0}
               onConfirmed={handlePaletteConfirmed}
+              selectedLayerGroupId={selectedLayerGroupId}
+              onSelectLayerGroup={setSelectedLayerGroupId}
             />
           </section>
         )}
@@ -304,6 +312,11 @@ function App() {
               projectId={activeProject.projectId}
               imageId={activeProject.imageId}
               paletteId={confirmedPalette.paletteId}
+              selectedGroupId={selectedLayerGroupId}
+              onSelectGroup={setSelectedLayerGroupId}
+              originalUrl={getOriginalImageUrl(activeProject.projectId, activeProject.imageId)}
+              originalWidth={activeProject.width ?? undefined}
+              originalHeight={activeProject.height ?? undefined}
             />
           </section>
         )}
