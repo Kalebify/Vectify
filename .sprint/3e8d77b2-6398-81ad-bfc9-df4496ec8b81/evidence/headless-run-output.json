@@ -1,0 +1,78 @@
+{
+  "Paper.js": {
+    "buttonLabels": [
+      "Zoom +",
+      "Zoom -",
+      "Reset vista",
+      "Pan: off",
+      "Scale +10%",
+      "Scale -10%",
+      "Rotate +15°",
+      "Rotate -15°",
+      "Node-edit: off",
+      "Hit-test @ centro",
+      "Export + round-trip",
+      "Run perf benchmark"
+    ],
+    "perfLine": "[23:41:02] Paper.js: import=42.5ms, 220 paths / ~4952 nodos, pan avg frame=16.32ms (61.3 fps sobre 60 frames).",
+    "totalLogs": 6,
+    "allLogsForThisTab": [
+      "[23:41:00] Vista reseteada (zoom=0.45, centro=documento).",
+      "[23:41:00] hitTest en centro del documento (400,400) -> ninguna capa (zona vacía real, esperado por el layout en grilla)",
+      "[23:41:00] exportSVG(): 9326 bytes, 10 <path> (original: 10, MATCH). IDs de layer recuperables: 4/4 (requiere haber fijado item.name = layer.id explícitamente; metadata de dominio como groupId/vectorId NO se serializa nativamente, solo el id).",
+      "[23:41:00] hitTest(-187,-171) -> sin match",
+      "[23:41:01] Cargando medium-complexity.svg (220 paths, ~4840 nodos)...",
+      "[23:41:02] Paper.js: import=42.5ms, 220 paths / ~4952 nodos, pan avg frame=16.32ms (61.3 fps sobre 60 frames)."
+    ]
+  },
+  "Fabric.js": {
+    "buttonLabels": [
+      "Zoom +",
+      "Zoom -",
+      "Reset vista",
+      "Scale +10%",
+      "Scale -10%",
+      "Rotate +15°",
+      "Rotate -15°",
+      "Node-edit: off",
+      "Hit-test @ centro",
+      "Export + round-trip",
+      "Run perf benchmark"
+    ],
+    "perfLine": "[23:41:05] Fabric.js: import=19.0ms, 220 paths / ~4952 nodos, pan avg frame=16.35ms (61.2 fps sobre 60 frames).",
+    "totalLogs": 7,
+    "allLogsForThisTab": [
+      "[23:41:02] loadSVGFromString(): 10 objetos PLANOS de nivel superior (tipos: path, path, path, path, path, path, path, path, path, path) -- Fabric NO preserva los <g> del fixture (a diferencia de Paper.js). Reagrupados a mano en 4 layers usando paths.length del dominio como guía; paths recuperados: 10/10.",
+      "[23:41:02] fabric.loadSVGFromString() completado en 2.00ms.",
+      "[23:41:03] Vista reseteada (zoom=0.45, pan=0,0). Zoom/Pan en vivo: rueda del mouse + arrastre (nativo de Fabric vía canvas listeners estándar).",
+      "[23:41:03] containsPoint() manual en centro del documento (400,400) -> ninguna capa (zona vacía, esperado por el layout en grilla)",
+      "[23:41:03] canvas.toSVG(): 11782 bytes, 10 <path> (original: 10, MATCH). IDs recuperables: 4/4 (fabric SÍ serializa el prop .id nativamente en toSVG; groupId/vectorId siguen sin canal nativo).",
+      "[23:41:04] Cargando medium-complexity.svg (220 paths, ~4840 nodos)...",
+      "[23:41:05] Fabric.js: import=19.0ms, 220 paths / ~4952 nodos, pan avg frame=16.35ms (61.2 fps sobre 60 frames)."
+    ]
+  },
+  "Konva / react-konva": {
+    "buttonLabels": [
+      "Zoom +",
+      "Zoom -",
+      "Reset vista",
+      "Node-edit: off",
+      "Hit-test @ centro",
+      "Export + round-trip",
+      "Run perf benchmark"
+    ],
+    "perfLine": "[23:41:08] Konva: construcción de escena=15.7ms, 220 paths / ~4952 nodos, pan avg frame=16.38ms (61.1 fps sobre 60 frames).",
+    "totalLogs": 9,
+    "allLogsForThisTab": [
+      "[23:41:05] 4 <Group> de React, 1:1 con SpikeLayer.id (prop `id` de React, sin mapeo posicional necesario -- react-konva no tiene su propio parser de SVG, así que no hay reconciliación de IDs que hacer: el id SIEMPRE es el que puso React).",
+      "[23:41:05] Construcción del árbol de nodos Konva (vía JSX) para 4 layers: 0.00ms.",
+      "[23:41:05] 4 <Group> de React, 1:1 con SpikeLayer.id (prop `id` de React, sin mapeo posicional necesario -- react-konva no tiene su propio parser de SVG, así que no hay reconciliación de IDs que hacer: el id SIEMPRE es el que puso React).",
+      "[23:41:05] Construcción del árbol de nodos Konva (vía JSX) para 4 layers: 0.00ms.",
+      "[23:41:06] Vista reseteada (scale=0.45, pos=0,0). Pan en vivo: arrastrar el fondo (Stage draggable=true, nativo).",
+      "[23:41:06] stage.getIntersection() en centro del documento -> sin match (zona vacía, esperado por el layout en grilla).",
+      "[23:41:06] SVG reconstruido a mano desde el modelo de dominio + transform de Konva.Group: 7849 bytes, 10 <path> (original: 10, MATCH). IDs: 4/4. Konva no ofrece exportSVG/toSVG nativo -- este round-trip funciona PORQUE el dominio (no Konva) sigue siendo la fuente de verdad de la geometría.",
+      "[23:41:07] Cargando medium-complexity.svg (220 paths, ~4840 nodos)...",
+      "[23:41:08] Konva: construcción de escena=15.7ms, 220 paths / ~4952 nodos, pan avg frame=16.38ms (61.1 fps sobre 60 frames)."
+    ]
+  }
+}
