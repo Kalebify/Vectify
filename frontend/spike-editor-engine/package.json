@@ -1,0 +1,30 @@
+{
+  "name": "spike-editor-engine",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Spike técnico M2.1-S05 (no es código de producción): compara Paper.js, Fabric.js y Konva/react-konva como motor gráfico candidato para el futuro Editor General. Vive fuera de frontend/src, con su propio package.json aislado, y no se referencia desde el build de producción.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "preview": "vite preview",
+    "fixtures:medium": "node fixtures/generate-medium-complexity.mjs > fixtures/medium-complexity.svg"
+  },
+  "dependencies": {
+    "fabric": "7.4.0",
+    "konva": "10.7.0",
+    "paper": "0.12.18",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-konva": "19.3.0"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7",
+    "@vitejs/plugin-react": "6.1.1",
+    "puppeteer-core": "^25.12.0",
+    "typescript": "7.0.2",
+    "vite": "8.3.0"
+  }
+}

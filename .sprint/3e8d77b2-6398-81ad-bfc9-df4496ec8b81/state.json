@@ -1,0 +1,17 @@
+{
+  "card_id": "3e8d77b2-6398-81ad-bfc9-df4496ec8b81",
+  "card_url": "https://app.notion.com/p/3e8d77b2639881adbfc9df4496ec8b81",
+  "title": "M2.1-S05 · Spike técnico del motor del Editor General",
+  "stack": "Frontend, Vector -- spike de investigacion, no feature de producto",
+  "branch": "sprint/3e8d77b2-spike-editor-motor",
+  "column": "Done",
+  "phase": "review",
+  "fix_rounds": 0,
+  "preview_url": null,
+  "pr_url": "https://github.com/Kalebify/Vectorify/pull/27",
+  "started_at": "2026-09-29T00:00:00Z",
+  "exceptions": [
+    "Corrida en modo autonomo dentro del backlog MVP2.1 (mismo criterio de MVP2).",
+    "Primera tarjeta que es un SPIKE de investigacion (ADR + demo comparativa), no una feature de producto. Entregable: demo ejecutable de 3 candidatos (Paper.js/Fabric.js/Konva) + ADR con matriz de decision. Explicitamente NO construye el editor completo (eso es M2.1-S06)."
+  ]
+}
