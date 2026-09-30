@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getColorPalette } from "../api/colorPaletteApi";
 import { getConsolidatedVectorLayers } from "../api/consolidatedVectorLayersApi";
-import { ApiClientError } from "../api/httpClient";
+import { API_BASE_URL, ApiClientError } from "../api/httpClient";
 import {
   reorderLayers as reorderLayersRequest,
   setLayerLocked as setLayerLockedRequest,
@@ -148,7 +148,9 @@ function toDocument(
       colorHex: layer.colorHex,
       fill: info?.fill ?? layer.colorHex,
       vectorId: layer.vectorId,
-      svgUrl: info?.svgUrl ?? layer.svgUrl,
+      // La API entrega rutas /api/v1/...; resolverlas contra la Web API,
+      // porque el frontend se sirve desde otro origen (Docker: :5173).
+      svgUrl: new URL(info?.svgUrl ?? layer.svgUrl, `${API_BASE_URL}/`).toString(),
       pathCount: info?.pathCount ?? 0,
       componentCount: info?.componentCount ?? null,
       manufacturingOperation: (info?.manufacturingOperation as ManufacturingOperationValue | undefined) ?? "unassigned",

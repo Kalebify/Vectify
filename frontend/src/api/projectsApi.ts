@@ -1,4 +1,4 @@
-import { API_BASE_URL, uploadFile } from "./httpClient";
+import { API_BASE_URL, httpClient, uploadFile } from "./httpClient";
 import type { UploadImageResponse } from "../types/upload";
 
 const IDEMPOTENCY_HEADER = "Idempotency-Key";
@@ -28,4 +28,18 @@ export function uploadProjectImage(
 /** URL para recuperar (y previsualizar) el original ya cargado, sin procesarlo. */
 export function getOriginalImageUrl(projectId: string, imageId: string): string {
   return `${API_BASE_URL}/api/v1/projects/${projectId}/images/${imageId}/original`;
+}
+
+/**
+ * Metadata (filename/dimensiones), sin el binario, de un proyecto/imagen ya
+ * cargada (M2.1-S08): permite reconstruir `activeProject` a partir de una
+ * URL (deep-link/reload del Workspace) sin volver a subir el archivo.
+ * Mismo shape que `uploadProjectImage`. 404 (`not_found`) si no existe.
+ */
+export function getProjectImage(
+  projectId: string,
+  imageId: string,
+  signal?: AbortSignal,
+): Promise<UploadImageResponse> {
+  return httpClient.get<UploadImageResponse>(`/api/v1/projects/${projectId}/images/${imageId}`, { signal });
 }

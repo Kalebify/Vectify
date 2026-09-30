@@ -168,6 +168,44 @@ public sealed class ProjectEndpointsTests : IDisposable
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
+    [Fact]
+    public async Task GetMetadata_WhenProjectExists_ReturnsSameShapeAsUploadResponse()
+    {
+        await using var factory = CreateFactory();
+        var client = factory.CreateClient();
+
+        using var content = MultipartWith(SampleImages.ValidPng1x1, "logo.png", "image/png");
+        var uploadResponse = await client.PostAsync("/api/v1/projects", content);
+        var uploadBody = await uploadResponse.Content.ReadFromJsonAsync<UploadImageResponse>();
+
+        var response = await client.GetAsync($"/api/v1/projects/{uploadBody!.ProjectId}/images/{uploadBody.ImageId}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<UploadImageResponse>();
+        Assert.NotNull(body);
+        Assert.Equal(uploadBody.ProjectId, body!.ProjectId);
+        Assert.Equal(uploadBody.ImageId, body.ImageId);
+        Assert.Equal("logo.png", body.Filename);
+        Assert.Equal("image/png", body.MimeType);
+        Assert.Equal(SampleImages.ValidPng1x1.Length, body.Bytes);
+        Assert.Equal(1, body.Width);
+        Assert.Equal(1, body.Height);
+        Assert.Equal("uploaded", body.Status);
+    }
+
+    [Fact]
+    public async Task GetMetadata_WhenProjectDoesNotExist_ReturnsNotFound()
+    {
+        await using var factory = CreateFactory();
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync($"/api/v1/projects/{Guid.NewGuid()}/images/{Guid.NewGuid()}");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        var error = await response.Content.ReadFromJsonAsync<ApiErrorResponse>();
+        Assert.Equal("not_found", error!.Code);
+    }
+
     private static MultipartFormDataContent MultipartWith(byte[] bytes, string fileName, string contentType)
     {
         var multipart = new MultipartFormDataContent();

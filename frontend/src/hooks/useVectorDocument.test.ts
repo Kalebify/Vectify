@@ -127,6 +127,7 @@ describe("useVectorDocument — proyecto multicolor (caso principal)", () => {
       manufacturingOperation: "cut",
       areaPercent: 60,
     });
+    expect(result.current.document?.layers[0].svgUrl).toBe(`http://localhost:5080/vectors/${VECTOR_A_ID}`);
     expect(result.current.visibility).toEqual({ [GROUP_A_ID]: true, [GROUP_B_ID]: true });
   });
 });
