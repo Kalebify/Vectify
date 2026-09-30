@@ -7,6 +7,7 @@ using Vectorify.Api.Contracts;
 using Vectorify.Api.Dimensioning;
 using Vectorify.Api.Endpoints;
 using Vectorify.Api.Export;
+using Vectorify.Api.LayerLayout;
 using Vectorify.Api.ManufacturingOperations;
 using Vectorify.Api.Middleware;
 using Vectorify.Api.Options;
@@ -461,6 +462,24 @@ builder.Services
 builder.Services.AddSingleton<IManufacturingOperationVersionRegistry, PersistentManufacturingOperationVersionRegistry>();
 builder.Services.AddScoped<IManufacturingOperationService, ManufacturingOperationService>();
 
+// Layout interactivo de capas: order/visible/locked (M2.1-S07). Lo que
+// M2.1-S03 dejó explícitamente pendiente ("una tarjeta posterior"). Mismo
+// patrón EXACTO que ManufacturingOperationService/ManufacturingOperationSetVersion
+// (sidecar versionado propio por paleta+versión confirmada, deliberadamente
+// NO agregado a ColorGroup/ColorPaletteVersion, que ya tienen su propia
+// responsabilidad bien acotada). Pura metadata de UI: SIN llamada a Python,
+// SIN tocar geometría, SIN crear una VectorVersion/VectorLayerSetVersion
+// nueva. Cada mutación (visibilidad/lock/reorder) crea una LayerLayoutSetVersion
+// NUEVA, vinculada a la paleta+versión confirmada vigente al momento de
+// mutar -- si esa paleta se recalcula, el layout viejo no se migra
+// automáticamente (mismo criterio que M2-S05/M2-S07).
+builder.Services
+    .AddOptions<LayerLayoutRegistryOptions>()
+    .Bind(builder.Configuration.GetSection(LayerLayoutRegistryOptions.SectionName));
+
+builder.Services.AddSingleton<ILayerLayoutVersionRegistry, PersistentLayerLayoutVersionRegistry>();
+builder.Services.AddScoped<ILayerLayoutService, LayerLayoutService>();
+
 // Exportación SVG (M1-S10): cierra el primer flujo productivo. Sirve, sin
 // modificar, los mismos bytes ya persistidos por Vectorization/
 // Simplification/Dimensioning -- SIN cliente Python, SIN caché/lock/registro
@@ -562,6 +581,7 @@ app.MapComponentEndpoints();
 app.MapComponentGroupEndpoints();
 app.MapPhysicalUnionEndpoints();
 app.MapManufacturingOperationEndpoints();
+app.MapLayerLayoutEndpoints();
 
 app.Run();
 

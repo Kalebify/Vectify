@@ -317,6 +317,15 @@
   background: rgba(170, 59, 255, 0.08);
 }
 
+.editor-layers-panel__row {
+  cursor: grab;
+}
+
+.editor-layers-panel__row--drag-over {
+  border-color: var(--accent);
+  border-style: dashed;
+}
+
 .editor-layers-panel__visibility,
 .editor-layers-panel__lock {
   background: none;
@@ -377,6 +386,23 @@
   color: var(--text);
   cursor: not-allowed;
   opacity: 0.6;
+}
+
+/* ---------- Inspector: extras M2.1-S07 (lock/select all/warnings láser) ---------- */
+
+.inspector-panel__extra {
+  display: flex;
+  flex-direction: column;
+  gap: var(--editor-space-2);
+  margin-top: var(--editor-space-3);
+  padding-top: var(--editor-space-3);
+  border-top: 1px solid var(--border);
+}
+
+.inspector-panel__laser-warnings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--editor-space-1);
 }
 
 /* ---------- Bottom bar: status + palette ---------- */

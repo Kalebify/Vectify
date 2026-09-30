@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useCanvasTransform } from "../../hooks/useCanvasTransform";
+import { useLaserWarnings } from "../../hooks/useLaserWarnings";
 import { useVectorDocument } from "../../hooks/useVectorDocument";
 import { EditorHeader } from "./EditorHeader";
 import { EditorLayersPanel } from "./EditorLayersPanel";
@@ -49,9 +50,14 @@ export function EditorShell({ projectId, imageId, paletteId, projectName, onClos
     toggleVisibility,
     isolate,
     showAll,
+    toggleLocked,
+    reorderLayers,
     selectedGroupId,
     selectGroup,
+    selectedPathKeys,
+    selectAllInLayer,
   } = useVectorDocument(projectId, imageId, paletteId);
+  const laserWarnings = useLaserWarnings(projectId, imageId);
 
   const { transform, zoomBy, panBy, fitToScreen } = useCanvasTransform();
   const [activeTool, setActiveTool] = useState<EditorTool>("select");
@@ -96,6 +102,7 @@ export function EditorShell({ projectId, imageId, paletteId, projectName, onClos
               sourceHeightPx={document.sourceHeightPx}
               selectedGroupId={selectedGroupId}
               onSelectGroup={selectGroup}
+              selectedPathKeys={selectedPathKeys}
               tool={activeTool}
               transform={transform}
               onZoomBy={zoomBy}
@@ -119,6 +126,8 @@ export function EditorShell({ projectId, imageId, paletteId, projectName, onClos
             layers={document?.layers ?? []}
             visibility={visibility}
             onToggleVisibility={toggleVisibility}
+            onToggleLocked={toggleLocked}
+            onReorder={reorderLayers}
             selectedGroupId={selectedGroupId}
             onSelectGroup={selectGroup}
           />
@@ -132,6 +141,14 @@ export function EditorShell({ projectId, imageId, paletteId, projectName, onClos
             }}
             onShowAll={showAll}
             onRefresh={reload}
+            onSelectAllInLayer={() => {
+              if (selectedGroupId) selectAllInLayer(selectedGroupId);
+            }}
+            selectedPathCount={selectedPathKeys.size}
+            onToggleLocked={() => {
+              if (selectedGroupId) toggleLocked(selectedGroupId);
+            }}
+            laserWarnings={laserWarnings}
           />
         </aside>
       </div>

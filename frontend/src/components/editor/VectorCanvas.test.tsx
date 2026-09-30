@@ -16,6 +16,8 @@ function layer(overrides: Partial<VectorDocumentLayer> = {}): VectorDocumentLaye
     componentCount: 1,
     manufacturingOperation: "cut",
     order: 0,
+    visible: true,
+    locked: false,
     areaPercent: 60,
     hasPartialAlpha: false,
     isExcluded: false,
