@@ -8,6 +8,7 @@ import type { StatusTone } from "./components/StatusPill";
 import { CheckPanel, type CheckSourceOption } from "./components/check/CheckPanel";
 import { ColorPalettePanel } from "./components/colorPalette/ColorPalettePanel";
 import { DimensionPanel, type DimensionSourceOption } from "./components/dimensions/DimensionPanel";
+import { EditorShell } from "./components/editor/EditorShell";
 import { ExportPanel, type ExportSourceOption } from "./components/export/ExportPanel";
 import { LayersPanel } from "./components/layers/LayersPanel";
 import { PreprocessPanel } from "./components/preprocess/PreprocessPanel";
@@ -184,6 +185,14 @@ function App() {
   // vive acá (padre común de ambos paneles) en vez de en cualquiera de los
   // dos, así que un click en cualquiera de los dos lados sincroniza al otro.
   const [selectedLayerGroupId, setSelectedLayerGroupId] = useState<string | null>(null);
+  // Workspace del Editor General (M2.1-S06): pantalla central nueva,
+  // integrando en un layout propio todo lo que MVP2/MVP2.1 ya construyó
+  // como paneles sueltos (ver EditorShell). Vive DETRÁS de un toggle
+  // explícito en vez de reemplazar el flujo clásico de abajo -- ese flujo
+  // sigue siendo el único lugar donde se detecta/confirma la paleta y se
+  // generan las capas (precondiciones del Workspace), y ninguna tarjeta
+  // pidió todavía retirarlo.
+  const [isWorkspaceOpen, setIsWorkspaceOpen] = useState(false);
   const [readyPreview, setReadyPreview] = useState<PreprocessResponse | null>(null);
   const [readyMask, setReadyMask] = useState<ThresholdResponse | null>(null);
   const [readyVector, setReadyVector] = useState<VectorizeResponse | null>(null);
@@ -193,6 +202,7 @@ function App() {
   const handleProjectCreated = (project: UploadImageResponse | null) => {
     setConfirmedPalette(null);
     setSelectedLayerGroupId(null);
+    setIsWorkspaceOpen(false);
     setReadyPreview(null);
     setReadyMask(null);
     setReadyVector(null);
@@ -257,6 +267,18 @@ function App() {
         ? "Desconocido"
         : PYTHON_STATUS_LABEL[response!.python.status];
 
+  if (isWorkspaceOpen && activeProject && confirmedPalette) {
+    return (
+      <EditorShell
+        projectId={activeProject.projectId}
+        imageId={activeProject.imageId}
+        paletteId={confirmedPalette.paletteId}
+        projectName={activeProject.filename}
+        onClose={() => setIsWorkspaceOpen(false)}
+      />
+    );
+  }
+
   return (
     <>
       <header className="app-header">
@@ -296,6 +318,15 @@ function App() {
               selectedLayerGroupId={selectedLayerGroupId}
               onSelectLayerGroup={setSelectedLayerGroupId}
             />
+
+            {confirmedPalette && (
+              <p className="upload-section__hint">
+                Paleta confirmada.{" "}
+                <button type="button" className="upload-actions__button upload-actions__button--primary" onClick={() => setIsWorkspaceOpen(true)}>
+                  Abrir en el Workspace
+                </button>
+              </p>
+            )}
           </section>
         )}
 

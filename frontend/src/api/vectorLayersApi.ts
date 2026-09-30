@@ -21,6 +21,24 @@ export function generateVectorLayers(
   return httpClient.postJson<VectorLayerSetResponse>(baseUrl(projectId, imageId, paletteId), {}, { signal });
 }
 
+/**
+ * Recupera (de solo lectura, SIN generar nada) el conjunto de capas
+ * vigente de una paleta, si ya existe -- usado por el Workspace del Editor
+ * General (M2.1-S06) para distinguir "todavía no se generaron capas para
+ * este proyecto" (404, estado vacío honesto) de "ya existen, mostralas" sin
+ * disparar una vectorización nueva solo por abrir el editor. Usa el
+ * endpoint GET ya expuesto por VectorLayerEndpoints (`GetVectorLayers`), no
+ * uno nuevo.
+ */
+export function getVectorLayers(
+  projectId: string,
+  imageId: string,
+  paletteId: string,
+  signal?: AbortSignal,
+): Promise<VectorLayerSetResponse> {
+  return httpClient.get<VectorLayerSetResponse>(baseUrl(projectId, imageId, paletteId), { signal });
+}
+
 /** URL del SVG ya generado de una capa individual -- reutiliza el endpoint de vectores de M1-S05. */
 export function getVectorLayerSvgUrl(projectId: string, imageId: string, vectorId: string): string {
   return `${API_BASE_URL}/api/v1/projects/${projectId}/images/${imageId}/vectors/${vectorId}`;

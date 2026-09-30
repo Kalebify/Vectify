@@ -1,0 +1,544 @@
+/**
+ * Tokens/spacing del Workspace (M2.1-S06): reusa las variables de color YA
+ * definidas en index.css (--text/--text-h/--bg/--border/--accent/...,
+ * incluida su variante dark-mode) en vez de definir una paleta nueva --
+ * "sistema consistente" (spec.md, Diseño) significa coherente con el resto
+ * de la app, no una isla visual. Solo se agregan los tokens que faltan:
+ * una escala de espaciado explícita y superficies de panel (paneles
+ * elevados sobre el fondo).
+ */
+.editor-shell {
+  --editor-space-1: 4px;
+  --editor-space-2: 8px;
+  --editor-space-3: 12px;
+  --editor-space-4: 16px;
+  --editor-space-5: 24px;
+  --editor-space-6: 32px;
+  --editor-panel-bg: var(--code-bg);
+  --editor-canvas-bg: var(--bg);
+
+  /* Full-bleed: #root (App.tsx) limita max-width a 720px y centra --
+     apropiado para el pipeline clásico, pero el spec.md es explícito acá
+     ("El Canvas debe dominar la pantalla", "desktop-first"). Este truco de
+     ancho completo saca al Workspace de esa restricción sin tocar el CSS
+     global (que otras pantallas siguen necesitando). */
+  position: relative;
+  left: 50%;
+  width: 100vw;
+  transform: translateX(-50%);
+
+  display: flex;
+  flex-direction: column;
+  height: 100svh;
+  min-height: 640px;
+  background: var(--editor-canvas-bg);
+  color: var(--text);
+  font-size: 14px;
+}
+
+/* ---------- Header ---------- */
+
+.editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--editor-space-4);
+  padding: var(--editor-space-3) var(--editor-space-5);
+  border-bottom: 1px solid var(--border);
+  background: var(--editor-panel-bg);
+  flex: 0 0 auto;
+}
+
+.editor-header__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--editor-space-4);
+  min-width: 0;
+}
+
+.editor-header__logo {
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: var(--text-h);
+  white-space: nowrap;
+}
+
+.editor-header__back {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  padding: var(--editor-space-1) var(--editor-space-2);
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.editor-header__project-name {
+  color: var(--text-h);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-header__dirty-state {
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.editor-header__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--editor-space-2);
+  flex: 0 0 auto;
+}
+
+.editor-header__button {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  border-radius: 6px;
+  padding: var(--editor-space-1) var(--editor-space-3);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.editor-header__button--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.editor-header__button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ---------- Body: toolbar | canvas | right rail ---------- */
+
+.editor-shell__body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.editor-toolbar {
+  flex: 0 0 auto;
+  width: 64px;
+  border-right: 1px solid var(--border);
+  background: var(--editor-panel-bg);
+  overflow-y: auto;
+}
+
+.editor-toolbar__list {
+  list-style: none;
+  margin: 0;
+  padding: var(--editor-space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--editor-space-1);
+}
+
+.editor-toolbar__button {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid transparent;
+  background: none;
+  border-radius: 8px;
+  padding: var(--editor-space-2) var(--editor-space-1);
+  cursor: pointer;
+  color: var(--text-h);
+}
+
+.editor-toolbar__button:hover:not(:disabled) {
+  background: var(--border);
+}
+
+.editor-toolbar__button--active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.editor-toolbar__button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.editor-toolbar__icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.editor-toolbar__label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.editor-shell__canvas-area {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  background: var(--editor-canvas-bg);
+  position: relative;
+}
+
+.editor-shell__status {
+  margin: auto;
+  padding: var(--editor-space-5);
+  text-align: center;
+  color: var(--text);
+  max-width: 480px;
+}
+
+.editor-shell__status--error {
+  color: var(--error);
+  display: flex;
+  flex-direction: column;
+  gap: var(--editor-space-3);
+  align-items: center;
+}
+
+.vector-canvas-2 {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  outline: none;
+  touch-action: none;
+}
+
+.vector-canvas-2--pan {
+  cursor: grab;
+}
+
+.vector-canvas-2--pan:active {
+  cursor: grabbing;
+}
+
+.vector-canvas-2--select {
+  cursor: default;
+}
+
+.vector-canvas-2__empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+}
+
+.editor-shell__right-rail {
+  flex: 0 0 300px;
+  min-width: 220px;
+  max-width: 480px;
+  border-left: 1px solid var(--border);
+  background: var(--editor-panel-bg);
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* "Paneles redimensionables si es razonable" (spec.md, Diseño): resize
+     nativo del navegador, sin escribir un sistema de arrastre propio para
+     algo que el spec explícitamente no exige al 100%. */
+  resize: horizontal;
+  padding: var(--editor-space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--editor-space-4);
+}
+
+.editor-panel__heading {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text);
+  margin: 0 0 var(--editor-space-2);
+}
+
+.editor-panel__empty {
+  font-size: 12px;
+  color: var(--text);
+}
+
+/* ---------- Preview navigator ---------- */
+
+.preview-navigator__frame {
+  position: relative;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.preview-navigator__layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.preview-navigator__viewport {
+  position: absolute;
+  border: 2px solid var(--accent);
+  background: rgba(170, 59, 255, 0.12);
+  pointer-events: none;
+}
+
+/* ---------- Editor layers panel ---------- */
+
+.editor-layers-panel__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--editor-space-1);
+}
+
+.editor-layers-panel__row {
+  display: flex;
+  align-items: center;
+  gap: var(--editor-space-2);
+  padding: var(--editor-space-1) var(--editor-space-2);
+  border-radius: 6px;
+  border: 1px solid transparent;
+}
+
+.editor-layers-panel__row--selected {
+  border-color: var(--accent);
+  background: rgba(170, 59, 255, 0.08);
+}
+
+.editor-layers-panel__visibility,
+.editor-layers-panel__lock {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px;
+}
+
+.editor-layers-panel__select {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--editor-space-2);
+  background: none;
+  border: none;
+  cursor: pointer;
+  min-width: 0;
+  text-align: left;
+  color: var(--text-h);
+}
+
+.editor-layers-panel__swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+
+.editor-layers-panel__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-layers-panel__selected-badge {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.editor-layers-panel__operation {
+  font-size: 10px;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.editor-layers-panel__add {
+  margin-top: var(--editor-space-2);
+  width: 100%;
+  border: 1px dashed var(--border);
+  background: none;
+  border-radius: 6px;
+  padding: var(--editor-space-2);
+  color: var(--text);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* ---------- Bottom bar: status + palette ---------- */
+
+.editor-shell__bottombar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--editor-space-5);
+  padding: var(--editor-space-2) var(--editor-space-5);
+  border-top: 1px solid var(--border);
+  background: var(--editor-panel-bg);
+  flex-wrap: wrap;
+}
+
+.editor-status-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--editor-space-3);
+  flex-wrap: wrap;
+}
+
+.editor-status-bar__zoom {
+  display: flex;
+  align-items: center;
+  gap: var(--editor-space-1);
+}
+
+.editor-status-bar__button {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  border-radius: 6px;
+  padding: var(--editor-space-1) var(--editor-space-2);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  min-width: 28px;
+}
+
+.editor-status-bar__button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.editor-status-bar__zoom-value {
+  min-width: 3.5em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.editor-status-bar__dimensions {
+  color: var(--text);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* ---------- Palette bar ---------- */
+
+.palette-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--editor-space-2);
+}
+
+.palette-bar__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: var(--editor-space-2);
+}
+
+.palette-bar__swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.palette-bar__swatch--selected {
+  border-color: var(--text-h);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.palette-bar__swatch-check {
+  color: white;
+  mix-blend-mode: difference;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.palette-bar__add {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px dashed var(--border);
+  background: none;
+  color: var(--text);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.palette-bar__empty {
+  font-size: 12px;
+  color: var(--text);
+}
+
+/* ---------- Responsive desktop-first: se degrada sin romperse ---------- */
+
+@media (max-width: 1100px) {
+  .editor-shell__right-rail {
+    flex-basis: 240px;
+  }
+}
+
+@media (max-width: 900px) {
+  .editor-toolbar__label {
+    display: none;
+  }
+
+  .editor-toolbar {
+    width: 48px;
+  }
+
+  .editor-header__project-name,
+  .editor-header__dirty-state {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .editor-shell__body {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .editor-toolbar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .editor-toolbar__list {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .editor-shell__canvas-area {
+    min-height: 320px;
+  }
+
+  .editor-shell__right-rail {
+    flex-basis: auto;
+    max-width: none;
+    resize: none;
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+}
