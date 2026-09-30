@@ -3,7 +3,9 @@ FROM node:24-alpine AS build
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN npm ci
+# El bundle web no usa los módulos nativos de las pruebas (canvas). Evitar
+# sus scripts de instalación permite construir en Alpine sin toolchain/Cairo.
+RUN npm ci --ignore-scripts
 
 COPY . .
 
