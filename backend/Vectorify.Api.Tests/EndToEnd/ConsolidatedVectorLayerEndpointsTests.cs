@@ -102,6 +102,38 @@ public sealed class ConsolidatedVectorLayerEndpointsTests : IDisposable
     }
 
     [Fact]
+    public async Task GetConsolidated_AfterRenamingALayerViaTheLayoutSidecar_ReflectsTheOverrideName()
+    {
+        await using var pythonServer = await FakePythonPreprocessServer.StartAsync(_ => (200, "{}"));
+        await using var factory = CreateFactory(pythonServer.BaseUrl);
+        var client = factory.CreateClient();
+
+        var (projectId, imageId, paletteId) = await DetectConfirmAndGenerateLayersAsync(client);
+
+        var layersResponse = await client.PostAsync(
+            $"/api/v1/projects/{projectId}/images/{imageId}/color-palette/{paletteId}/layers", null);
+        var layerSet = await layersResponse.Content.ReadFromJsonAsync<VectorLayerSetResponse>();
+        var groupId = layerSet!.Layers[0].GroupId;
+        var originalName = layerSet.Layers[0].Name;
+
+        // Renombrar vía el sidecar LayerLayout (ronda de fix 2) -- NUNCA
+        // ColorPaletteService.RenameAsync, que rechazaría con 409 porque la
+        // paleta ya está confirmada (precondición de .../layers).
+        var renameResponse = await client.PostAsJsonAsync(
+            $"/api/v1/projects/{projectId}/images/{imageId}/color-palette/{paletteId}/layers/{groupId}/rename",
+            new SetLayerNameRequest("Nombre nuevo"));
+        Assert.Equal(HttpStatusCode.OK, renameResponse.StatusCode);
+
+        var response = await client.GetAsync(
+            $"/api/v1/projects/{projectId}/images/{imageId}/color-palette/{paletteId}/layers/consolidated");
+        var body = await response.Content.ReadFromJsonAsync<ConsolidatedVectorLayerSetResponse>();
+
+        var layer = Assert.Single(body!.Layers);
+        Assert.Equal("Nombre nuevo", layer.Name);
+        Assert.NotEqual(originalName, layer.Name);
+    }
+
+    [Fact]
     public async Task GetConsolidated_WhenNoLayerSetWasEverGenerated_ReturnsNotFound()
     {
         await using var pythonServer = await FakePythonPreprocessServer.StartAsync(_ => (200, "{}"));

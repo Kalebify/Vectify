@@ -36,8 +36,8 @@ public sealed class PersistentLayerLayoutVersionRegistryTests : IDisposable
         Version: version,
         Entries: new List<LayerLayoutEntry>
         {
-            new(Guid.NewGuid(), Order: 0, Visible: true, Locked: false),
-            new(Guid.NewGuid(), Order: 1, Visible: false, Locked: true),
+            new(Guid.NewGuid(), Order: 0, Visible: true, Locked: false, Name: null),
+            new(Guid.NewGuid(), Order: 1, Visible: false, Locked: true, Name: "Verde"),
         },
         CreatedAt: DateTimeOffset.UtcNow);
 

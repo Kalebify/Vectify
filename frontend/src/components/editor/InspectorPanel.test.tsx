@@ -4,6 +4,7 @@ import { InspectorPanel } from "./InspectorPanel";
 import type { UseLaserWarningsState } from "../../hooks/useLaserWarnings";
 import type { VectorDocumentLayer } from "../../hooks/useVectorDocument";
 import type { CheckResponse } from "../../types/check";
+import type { ManufacturingOperationPayload } from "../../types/manufacturingOperations";
 
 function layer(overrides: Partial<VectorDocumentLayer> = {}): VectorDocumentLayer {
   return {
@@ -48,6 +49,10 @@ function defaultProps() {
     selectedPathCount: 0,
     onToggleLocked: vi.fn(),
     laserWarnings: fakeLaserWarnings(),
+    onRename: vi.fn(),
+    operations: {} as Record<string, ManufacturingOperationPayload>,
+    onChangeOperation: vi.fn(),
+    mutatingGroupId: null as string | null,
   };
 }
 
@@ -70,7 +75,7 @@ describe("InspectorPanel — capa seleccionada (Color / Paths / Pieces / Operati
     expect(screen.getByText("#ff0000")).toBeInTheDocument();
     expect(screen.getByText("3")).toBeInTheDocument();
     expect(screen.getAllByText("1").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Corte").length).toBeGreaterThan(0);
+    expect(screen.getByRole("combobox", { name: "Operación de fabricación de la capa Rojo" })).toHaveValue("cut");
   });
 
   it("Aislar llama a onIsolate", () => {
@@ -89,6 +94,67 @@ describe("InspectorPanel — capa seleccionada (Color / Paths / Pieces / Operati
     );
 
     expect(screen.getByText(/1 en Corte, 1 en Grabado/)).toBeInTheDocument();
+  });
+});
+
+describe("InspectorPanel — Rename inline (M2.1-S07, ronda de fix)", () => {
+  it("editar el nombre y salir del campo (blur) llama a onRename con el groupId y el nombre nuevo", () => {
+    const onRename = vi.fn();
+    render(<InspectorPanel {...defaultProps()} onRename={onRename} />);
+
+    const nameInput = screen.getByDisplayValue("Rojo");
+    fireEvent.change(nameInput, { target: { value: "Rojo oscuro" } });
+    fireEvent.blur(nameInput);
+
+    expect(onRename).toHaveBeenCalledWith("group-a", "Rojo oscuro");
+  });
+
+  it("editar el nombre y confirmar con Enter llama a onRename (Enter dispara blur)", () => {
+    const onRename = vi.fn();
+    render(<InspectorPanel {...defaultProps()} onRename={onRename} />);
+
+    const nameInput = screen.getByDisplayValue("Rojo");
+    // El commit de Enter delega en el propio blur() del input (ver
+    // LayerInfoPanel) -- blur() solo dispara el evento si el elemento está
+    // efectivamente enfocado, por eso el focus() explícito acá.
+    nameInput.focus();
+    fireEvent.change(nameInput, { target: { value: "Rojo intenso" } });
+    fireEvent.keyDown(nameInput, { key: "Enter" });
+
+    expect(onRename).toHaveBeenCalledWith("group-a", "Rojo intenso");
+  });
+});
+
+describe("InspectorPanel — cambio de operación CUT/ENGRAVE/IGNORE (M2.1-S07, ronda de fix)", () => {
+  it("elegir una operación distinta en el <select> llama a onChangeOperation con el groupId y la operación elegidos", () => {
+    const onChangeOperation = vi.fn();
+    render(<InspectorPanel {...defaultProps()} onChangeOperation={onChangeOperation} />);
+
+    const select = screen.getByRole("combobox", { name: "Operación de fabricación de la capa Rojo" });
+    fireEvent.change(select, { target: { value: "engrave" } });
+
+    expect(onChangeOperation).toHaveBeenCalledWith("group-a", "engrave");
+  });
+
+  it("mientras se está guardando (mutatingGroupId coincide con la capa seleccionada) el <select> queda deshabilitado", () => {
+    render(<InspectorPanel {...defaultProps()} mutatingGroupId="group-a" />);
+    expect(screen.getByRole("combobox", { name: "Operación de fabricación de la capa Rojo" })).toBeDisabled();
+  });
+});
+
+describe("InspectorPanel — Lock deshabilita rename y operación (M2.1-S07, ronda de fix)", () => {
+  it("capa bloqueada: el input de rename y el <select> de operación quedan deshabilitados", () => {
+    render(<InspectorPanel {...defaultProps()} selectedLayer={layer({ locked: true })} />);
+
+    expect(screen.getByDisplayValue("Rojo")).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: "Operación de fabricación de la capa Rojo" })).toBeDisabled();
+  });
+
+  it("capa desbloqueada: el input de rename y el <select> de operación quedan habilitados", () => {
+    render(<InspectorPanel {...defaultProps()} selectedLayer={layer({ locked: false })} />);
+
+    expect(screen.getByDisplayValue("Rojo")).toBeEnabled();
+    expect(screen.getByRole("combobox", { name: "Operación de fabricación de la capa Rojo" })).toBeEnabled();
   });
 });
 

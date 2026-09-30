@@ -231,8 +231,9 @@ describe("App — reapertura del Workspace por URL (M2.1-S08)", () => {
     const rowsBefore = within(listBefore).getAllByRole("listitem");
     expect(rowsBefore).toHaveLength(2);
     // Layout persistido: Azul (order 0, oculta, bloqueada) antes que Rojo (order 1).
-    expect(within(rowsBefore[0]).getByText("Azul")).toBeInTheDocument();
-    expect(within(rowsBefore[1]).getByText("Rojo")).toBeInTheDocument();
+    // El nombre es un <input> editable (fix round M2.1-S07, Rename) -- se verifica por su value, no por texto.
+    expect(within(rowsBefore[0]).getByDisplayValue("Azul")).toBeInTheDocument();
+    expect(within(rowsBefore[1]).getByDisplayValue("Rojo")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Mostrar la capa Azul" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Desbloquear la capa Azul" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ocultar la capa Rojo" })).toBeInTheDocument();
@@ -249,8 +250,8 @@ describe("App — reapertura del Workspace por URL (M2.1-S08)", () => {
     const listAfter = screen.getByRole("list", { name: "Capas del documento (arrastrá para reordenar)" });
     const rowsAfter = within(listAfter).getAllByRole("listitem");
     expect(rowsAfter).toHaveLength(2);
-    expect(within(rowsAfter[0]).getByText("Azul")).toBeInTheDocument();
-    expect(within(rowsAfter[1]).getByText("Rojo")).toBeInTheDocument();
+    expect(within(rowsAfter[0]).getByDisplayValue("Azul")).toBeInTheDocument();
+    expect(within(rowsAfter[1]).getByDisplayValue("Rojo")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Mostrar la capa Azul" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Desbloquear la capa Azul" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ocultar la capa Rojo" })).toBeInTheDocument();

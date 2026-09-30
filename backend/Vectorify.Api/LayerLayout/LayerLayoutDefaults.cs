@@ -21,7 +21,7 @@ public static class LayerLayoutDefaults
         return layerSet.Layers
             .Select((layer, index) => existingByGroupId.TryGetValue(layer.GroupId, out var entry)
                 ? entry
-                : new LayerLayoutEntry(layer.GroupId, index, Visible: true, Locked: false))
+                : new LayerLayoutEntry(layer.GroupId, index, Visible: true, Locked: false, Name: null))
             .ToList();
     }
 }

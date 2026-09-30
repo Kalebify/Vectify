@@ -11,6 +11,8 @@ export interface LayerLayoutEntryPayload {
   order: number;
   visible: boolean;
   locked: boolean;
+  /** `null` si esa capa nunca recibió un rename explícito (ronda de fix 2) -- el nombre EFECTIVO a mostrar cae al nombre original de la capa (ver useVectorDocument.toDocument). */
+  name: string | null;
 }
 
 export interface LayerLayoutSetResponse {

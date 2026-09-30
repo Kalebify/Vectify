@@ -336,14 +336,13 @@
 }
 
 .editor-layers-panel__select {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: var(--editor-space-2);
   background: none;
   border: none;
   cursor: pointer;
-  min-width: 0;
   text-align: left;
   color: var(--text-h);
 }
@@ -356,15 +355,37 @@
   flex: 0 0 auto;
 }
 
-.editor-layers-panel__name {
+.editor-layers-panel__name-input {
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 2px 4px;
+  color: var(--text-h);
+  font: inherit;
+}
+
+.editor-layers-panel__name-input:hover:not(:disabled),
+.editor-layers-panel__name-input:focus {
+  border-color: var(--border);
+  background: var(--editor-panel-bg);
+}
+
+.editor-layers-panel__name-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .editor-layers-panel__selected-badge {
   color: var(--accent);
   font-weight: 700;
+}
+
+.editor-layers-panel__operation-field {
+  flex: 0 0 auto;
 }
 
 .editor-layers-panel__operation {
@@ -374,6 +395,13 @@
   border-radius: 999px;
   border: 1px solid var(--border);
   white-space: nowrap;
+  background: var(--editor-panel-bg);
+  color: var(--text-h);
+}
+
+.editor-layers-panel__operation:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .editor-layers-panel__add {

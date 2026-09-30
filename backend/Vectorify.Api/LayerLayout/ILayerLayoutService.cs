@@ -23,6 +23,17 @@ public interface ILayerLayoutService
         Guid projectId, Guid imageId, Guid paletteId, Guid groupId, bool locked, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Persiste el nombre editable (rename, ronda de fix 2) de UNA capa --
+    /// NUNCA el <see cref="LayerLayoutEntry.GroupId"/>, que es estable (ver
+    /// spec.md, "Rename -&gt; cambiar nombre, no id"). <paramref name="name"/>
+    /// se rechaza (ValidationFailed) si es null/vacío/solo espacios -- mismo
+    /// criterio que <see cref="Vectorify.Api.ColorPalette.ColorPaletteService.RenameAsync"/>
+    /// -- y se persiste trimeado. Togglear Name NO afecta Visible/Locked/Order.
+    /// </summary>
+    Task<LayerLayoutResult> SetNameAsync(
+        Guid projectId, Guid imageId, Guid paletteId, Guid groupId, string name, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Persiste el nuevo orden visual de TODAS las capas del conjunto vigente
     /// (Drag &amp; Drop): <paramref name="orderedGroupIds"/> debe contener,
     /// exactamente una vez cada uno, todos los groupId de

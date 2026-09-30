@@ -64,6 +64,32 @@ public static class LayerLayoutEndpoints
             "ninguna interacción que mute su geometría. Togglear Locked NO afecta Visible ni Order.");
 
         app.MapPost(
+            "/api/v1/projects/{projectId:guid}/images/{imageId:guid}/color-palette/{paletteId:guid}/layers/{groupId:guid}/rename",
+            async (
+                Guid projectId,
+                Guid imageId,
+                Guid paletteId,
+                Guid groupId,
+                SetLayerNameRequest request,
+                ILayerLayoutService service,
+                CancellationToken cancellationToken) =>
+            {
+                var result = await service.SetNameAsync(projectId, imageId, paletteId, groupId, request.Name, cancellationToken);
+                return ToHttpResult(result);
+            })
+        .WithName("SetVectorLayerName")
+        .WithTags("LayerLayout")
+        .Produces<LayerLayoutSetResponse>(StatusCodes.Status200OK)
+        .Produces<ApiErrorResponse>(StatusCodes.Status400BadRequest)
+        .Produces<ApiErrorResponse>(StatusCodes.Status404NotFound)
+        .WithSummary("Persiste el nombre editable (rename, ronda de fix 2) de una capa -- crea una nueva versión del layout, NUNCA muta geometría ni GroupId.")
+        .WithDescription(
+            "name vacío/solo espacios -> 400 invalid_parameters. Deliberadamente un sidecar propio (LayerLayout), " +
+            "no ColorPaletteService.RenameAsync: ese endpoint rechaza con 409 palette_confirmed en cuanto la " +
+            "paleta está confirmada, que es SIEMPRE el caso en el Workspace -- ver IMPL-fix-round-1.md. " +
+            "Togglear Name NO afecta Visible/Locked/Order de esa capa ni de ninguna otra.");
+
+        app.MapPost(
             "/api/v1/projects/{projectId:guid}/images/{imageId:guid}/color-palette/{paletteId:guid}/layers/reorder",
             async (
                 Guid projectId,
@@ -134,6 +160,6 @@ public static class LayerLayoutEndpoints
             layerSet.PaletteVersion,
             layerSet.LayerSetId,
             layout?.Version ?? 0,
-            entries.Select(e => new LayerLayoutEntryPayload(e.GroupId, e.Order, e.Visible, e.Locked)).ToList());
+            entries.Select(e => new LayerLayoutEntryPayload(e.GroupId, e.Order, e.Visible, e.Locked, e.Name)).ToList());
     }
 }

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useCanvasTransform } from "../../hooks/useCanvasTransform";
 import { useLaserWarnings } from "../../hooks/useLaserWarnings";
+import { useManufacturingOperations } from "../../hooks/useManufacturingOperations";
 import { useVectorDocument } from "../../hooks/useVectorDocument";
 import { EditorHeader } from "./EditorHeader";
 import { EditorLayersPanel } from "./EditorLayersPanel";
@@ -51,6 +52,7 @@ export function EditorShell({ projectId, imageId, paletteId, projectName, onClos
     isolate,
     showAll,
     toggleLocked,
+    renameLayer,
     reorderLayers,
     selectedGroupId,
     selectGroup,
@@ -58,6 +60,19 @@ export function EditorShell({ projectId, imageId, paletteId, projectName, onClos
     selectAllInLayer,
   } = useVectorDocument(projectId, imageId, paletteId);
   const laserWarnings = useLaserWarnings(projectId, imageId);
+
+  // Operación de fabricación CUT/ENGRAVE/IGNORE (fix round M2.1-S07): el
+  // Workspace leía `manufacturingOperation` solo de lectura vía el
+  // consolidado de `useVectorDocument` -- este hook es el mismo que ya usa
+  // `LayersPanel.tsx` (flujo clásico) para ofrecer la asignación real, ver
+  // IMPL.md "Ronda de fix 1". `paletteId` viene confirmado por props (misma
+  // precondición que abre el Workspace); `layerSetId` recién existe una vez
+  // que el documento cargó.
+  const {
+    operations: manufacturingOperations,
+    mutatingGroupId: manufacturingMutatingGroupId,
+    assign: assignManufacturingOperation,
+  } = useManufacturingOperations(projectId, imageId, paletteId, document?.layerSetId ?? null);
 
   const { transform, zoomBy, panBy, fitToScreen } = useCanvasTransform();
   const [activeTool, setActiveTool] = useState<EditorTool>("select");
@@ -130,6 +145,10 @@ export function EditorShell({ projectId, imageId, paletteId, projectName, onClos
             onReorder={reorderLayers}
             selectedGroupId={selectedGroupId}
             onSelectGroup={selectGroup}
+            onRename={renameLayer}
+            operations={manufacturingOperations}
+            onChangeOperation={assignManufacturingOperation}
+            mutatingGroupId={manufacturingMutatingGroupId}
           />
 
           <InspectorPanel
@@ -149,6 +168,10 @@ export function EditorShell({ projectId, imageId, paletteId, projectName, onClos
               if (selectedGroupId) toggleLocked(selectedGroupId);
             }}
             laserWarnings={laserWarnings}
+            onRename={renameLayer}
+            operations={manufacturingOperations}
+            onChangeOperation={assignManufacturingOperation}
+            mutatingGroupId={manufacturingMutatingGroupId}
           />
         </aside>
       </div>

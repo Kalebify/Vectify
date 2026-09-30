@@ -7,8 +7,8 @@ namespace Vectorify.Api.LayerLayout;
 /// Implementación de <see cref="ILayerLayoutService"/>: resuelve el conjunto
 /// de capas vigente de la paleta (vía <see cref="IVectorLayerService.FindLatest"/>
 /// -- NUNCA llama a Python ni dispara un cálculo nuevo, solo lectura), valida
-/// que el groupId indicado exista entre esas capas (para Visible/Locked) o
-/// que el nuevo orden sea exactamente una permutación de esas capas (para
+/// que el groupId indicado exista entre esas capas (para Visible/Locked/Name)
+/// o que el nuevo orden sea exactamente una permutación de esas capas (para
 /// Reorder), y guarda una nueva versión del layout que preserva intactos los
 /// valores de las demás capas. Lock por paleta+versión confirmada (mismo
 /// criterio que ManufacturingOperationService) para que mutaciones
@@ -40,6 +40,19 @@ public sealed class LayerLayoutService : ILayerLayoutService
     public Task<LayerLayoutResult> SetLockedAsync(
         Guid projectId, Guid imageId, Guid paletteId, Guid groupId, bool locked, CancellationToken cancellationToken) =>
         MutateEntryAsync(projectId, imageId, paletteId, groupId, entry => entry with { Locked = locked }, cancellationToken);
+
+    public Task<LayerLayoutResult> SetNameAsync(
+        Guid projectId, Guid imageId, Guid paletteId, Guid groupId, string name, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return Task.FromResult<LayerLayoutResult>(
+                new LayerLayoutResult.ValidationFailed("invalid_parameters", "El nombre no puede estar vacío."));
+        }
+
+        var trimmedName = name.Trim();
+        return MutateEntryAsync(projectId, imageId, paletteId, groupId, entry => entry with { Name = trimmedName }, cancellationToken);
+    }
 
     private async Task<LayerLayoutResult> MutateEntryAsync(
         Guid projectId,

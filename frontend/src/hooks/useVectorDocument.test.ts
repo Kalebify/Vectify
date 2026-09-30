@@ -195,8 +195,8 @@ function layoutResponse(overrides: Record<string, unknown> = {}) {
     layerSetId: LAYER_SET_ID,
     version: 1,
     entries: [
-      { groupId: GROUP_A_ID, order: 0, visible: true, locked: false },
-      { groupId: GROUP_B_ID, order: 1, visible: true, locked: false },
+      { groupId: GROUP_A_ID, order: 0, visible: true, locked: false, name: null },
+      { groupId: GROUP_B_ID, order: 1, visible: true, locked: false, name: null },
     ],
     ...overrides,
   };
@@ -279,6 +279,96 @@ describe("useVectorDocument — Lock (M2.1-S07, concepto nuevo, PERSISTIDO)", ()
     // Lock jamás toca visible/order de la capa que se bloqueó ni de ninguna otra.
     expect(result.current.visibility[GROUP_A_ID]).toBe(true);
     expect(result.current.document?.layers.find((l) => l.groupId === GROUP_B_ID)?.locked).toBe(false);
+  });
+});
+
+describe("useVectorDocument — Rename (M2.1-S07, ronda de fix 2 -- PERSISTIDO vía el sidecar LayerLayout)", () => {
+  it("renameLayer persiste vía setLayerName (sidecar LayerLayout), NO vía renameColorPaletteGroup", async () => {
+    const fetch = stubFetchSequence([
+      (url) =>
+        url.includes("/rename")
+          ? jsonResponse(
+              layoutResponse({
+                entries: [
+                  { groupId: GROUP_A_ID, order: 0, visible: true, locked: false, name: "Rojo carmesí" },
+                  { groupId: GROUP_B_ID, order: 1, visible: true, locked: false, name: null },
+                ],
+                version: 1,
+              }),
+            )
+          : undefined!,
+      (url) => (url.includes("/layers/consolidated") ? jsonResponse(consolidatedResponse()) : undefined!),
+      (url) => (/\/layers$/.test(url) ? jsonResponse(layerSetResponse()) : undefined!),
+      (url) => (url.endsWith(`/color-palette/${PALETTE_ID}`) ? jsonResponse(paletteResponse()) : undefined!),
+    ]);
+
+    const { result } = renderHook(() => useVectorDocument(PROJECT_ID, IMAGE_ID, PALETTE_ID));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    // Optimista: el nombre se refleja de inmediato, antes de que resuelva el POST.
+    act(() => result.current.renameLayer(GROUP_A_ID, "Rojo carmesí"));
+    expect(result.current.document?.layers.find((l) => l.groupId === GROUP_A_ID)?.name).toBe("Rojo carmesí");
+
+    await waitFor(() =>
+      expect(fetch.mock.calls.some((call) => String(call[0]).includes(`/${GROUP_A_ID}/rename`))).toBe(true),
+    );
+    // Nunca pega al endpoint clásico de M2-S01 (ese sí rechazaría con 409 palette_confirmed).
+    expect(fetch.mock.calls.some((call) => String(call[0]).endsWith(`/color-palette/${PALETTE_ID}/rename`))).toBe(false);
+
+    await waitFor(() =>
+      expect(result.current.document?.layers.find((l) => l.groupId === GROUP_A_ID)?.name).toBe("Rojo carmesí"),
+    );
+    // NUNCA toca el GroupId ni Visible/Locked/Order de la capa renombrada ni de ninguna otra.
+    expect(result.current.document?.layers.find((l) => l.groupId === GROUP_A_ID)?.groupId).toBe(GROUP_A_ID);
+    expect(result.current.document?.layers.find((l) => l.groupId === GROUP_B_ID)?.name).toBe("Azul");
+  });
+
+  it("si la Web API falla, retrocede (rollback) al nombre anterior", async () => {
+    const fetch = stubFetchSequence([
+      (url) => (url.includes("/rename") ? new Response("error", { status: 400 }) : undefined!),
+      (url) => (url.includes("/layers/consolidated") ? jsonResponse(consolidatedResponse()) : undefined!),
+      (url) => (/\/layers$/.test(url) ? jsonResponse(layerSetResponse()) : undefined!),
+      (url) => (url.endsWith(`/color-palette/${PALETTE_ID}`) ? jsonResponse(paletteResponse()) : undefined!),
+    ]);
+
+    const { result } = renderHook(() => useVectorDocument(PROJECT_ID, IMAGE_ID, PALETTE_ID));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    act(() => result.current.renameLayer(GROUP_A_ID, "Nombre que falla"));
+    expect(result.current.document?.layers.find((l) => l.groupId === GROUP_A_ID)?.name).toBe("Nombre que falla");
+
+    await waitFor(() => expect(fetch.mock.calls.some((call) => String(call[0]).includes("/rename"))).toBe(true));
+    await waitFor(() =>
+      expect(result.current.document?.layers.find((l) => l.groupId === GROUP_A_ID)?.name).toBe("Rojo"),
+    );
+  });
+});
+
+describe("useVectorDocument — reload conserva el nombre renombrado (Rename, M2.1-S07, ronda de fix 2)", () => {
+  it("después de recargar (reload/remount), el nombre override del sidecar LayerLayout vuelve a leerse de la Web API tal como quedó persistido", async () => {
+    stubFetchSequence([
+      (url) =>
+        url.includes("/layers/consolidated")
+          ? jsonResponse(
+              consolidatedResponse({
+                layers: [
+                  { id: GROUP_A_ID, name: "Rojo carmesí", colorHex: "#ff0000", fill: "#ff0000", vectorId: VECTOR_A_ID, svgUrl: `/vectors/${VECTOR_A_ID}`, pathCount: 3, componentCount: 1, manufacturingOperation: "cut", visible: true, locked: false, order: 0, rasterValidation: { ownMismatchRatio: 0, ownMismatchTolerance: 0.02, ownMismatchWithinTolerance: true, contaminationRatio: 0, contaminationTolerance: 0.02, contaminationWithinTolerance: true, warnings: [] } },
+                  { id: GROUP_B_ID, name: "Azul", colorHex: "#0000ff", fill: "#0000ff", vectorId: VECTOR_B_ID, svgUrl: `/vectors/${VECTOR_B_ID}`, pathCount: 2, componentCount: null, manufacturingOperation: "unassigned", visible: true, locked: false, order: 1, rasterValidation: { ownMismatchRatio: 0, ownMismatchTolerance: 0.02, ownMismatchWithinTolerance: true, contaminationRatio: 0, contaminationTolerance: 0.02, contaminationWithinTolerance: true, warnings: [] } },
+                ],
+              }),
+            )
+          : undefined!,
+      (url) => (/\/layers$/.test(url) ? jsonResponse(layerSetResponse()) : undefined!),
+      (url) => (url.endsWith(`/color-palette/${PALETTE_ID}`) ? jsonResponse(paletteResponse()) : undefined!),
+    ]);
+
+    const { result } = renderHook(() => useVectorDocument(PROJECT_ID, IMAGE_ID, PALETTE_ID));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    // "Rojo carmesí" viene del consolidado (que ya resuelve el override del
+    // sidecar LayerLayout, layout.Name ?? layer.Name) -- no del snapshot
+    // crudo "Rojo" de VectorLayer.Name (ver layerSetResponse() arriba).
+    expect(result.current.document?.layers.find((l) => l.groupId === GROUP_A_ID)?.name).toBe("Rojo carmesí");
   });
 });
 

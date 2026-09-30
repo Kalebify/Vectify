@@ -5,6 +5,7 @@ import { API_BASE_URL, ApiClientError } from "../api/httpClient";
 import {
   reorderLayers as reorderLayersRequest,
   setLayerLocked as setLayerLockedRequest,
+  setLayerName as setLayerNameRequest,
   setLayerVisible as setLayerVisibleRequest,
 } from "../api/layerLayoutApi";
 import { getVectorLayers } from "../api/vectorLayersApi";
@@ -109,6 +110,26 @@ export interface UseVectorDocumentState {
   /** Persiste (Lock, M2.1-S07) el bloqueo de edición de una capa -- optimista, con rollback si falla la Web API. NUNCA afecta `visible`. */
   toggleLocked: (groupId: string) => void;
 
+  /**
+   * Rename inline (M2.1-S07, ronda de fix 1 -- persistencia real sumada en
+   * la ronda de fix 2): cambia el NOMBRE, nunca el GroupId -- ver spec.md,
+   * "Rename → cambiar nombre, no id". Optimista, con rollback si falla la
+   * Web API, mismo patrón que `toggleLocked`/`toggleVisibility` (sin mensaje
+   * de error expuesto, igual que esos dos: la fila simplemente vuelve a
+   * mostrar el nombre anterior).
+   *
+   * Persiste vía `setLayerName` (sidecar `LayerLayout`, ver
+   * `Vectorify.Api.LayerLayout.LayerLayoutService.SetNameAsync`) -- NO vía
+   * `renameColorPaletteGroup` (`ColorPaletteService.RenameAsync`, M2-S01),
+   * que rechaza con 409 "palette_confirmed" en cuanto la paleta está
+   * confirmada, que es SIEMPRE el caso en el Workspace (ver
+   * IMPL-fix-round-1.md, "Ronda de fix 2" para el detalle completo de por
+   * qué se descartó tocar esa gate). El flujo clásico pre-confirmación
+   * (`ColorSwatchList.tsx`) sigue usando `renameColorPaletteGroup` tal cual,
+   * sin cambios.
+   */
+  renameLayer: (groupId: string, name: string) => void;
+
   /** Persiste (Drag & Drop, M2.1-S07) el nuevo orden visual completo -- optimista, con rollback si falla. NUNCA toca geometría (`d`/`transform`/VectorId). */
   reorderLayers: (orderedGroupIds: string[]) => void;
 
@@ -144,7 +165,10 @@ function toDocument(
     const paletteInfo = paletteGroupsById.get(layer.groupId);
     return {
       groupId: layer.groupId,
-      name: layer.name,
+      // Nombre EFECTIVO: el override del sidecar LayerLayout (rename, ronda
+      // de fix 2) si existe, o el snapshot crudo de VectorLayer.Name --
+      // mismo criterio que visible/locked/order.
+      name: info?.name ?? layer.name,
       colorHex: layer.colorHex,
       fill: info?.fill ?? layer.colorHex,
       vectorId: layer.vectorId,
@@ -178,12 +202,16 @@ function toDocument(
   };
 }
 
-/** Aplica la respuesta AUTORITATIVA de la Web API (POST visibility/lock/reorder) sobre el documento en memoria -- reemplaza el optimismo local por lo que realmente quedó persistido, re-ordenando por el `order` vigente. */
+/** Aplica la respuesta AUTORITATIVA de la Web API (POST visibility/lock/rename/reorder) sobre el documento en memoria -- reemplaza el optimismo local por lo que realmente quedó persistido, re-ordenando por el `order` vigente. */
 function applyLayoutEntries(document: VectorDocument, entries: LayerLayoutEntryPayload[]): VectorDocument {
   const byGroupId = new Map(entries.map((entry) => [entry.groupId, entry]));
   const layers = document.layers.map((layer) => {
     const entry = byGroupId.get(layer.groupId);
-    return entry ? { ...layer, order: entry.order, visible: entry.visible, locked: entry.locked } : layer;
+    if (!entry) return layer;
+    // entry.name es null si esa capa nunca recibió un rename explícito --
+    // en ese caso se conserva el nombre en memoria (ya resuelto por
+    // toDocument al cargar), nunca se pisa con un valor inventado.
+    return { ...layer, order: entry.order, visible: entry.visible, locked: entry.locked, name: entry.name ?? layer.name };
   });
   layers.sort((a, b) => a.order - b.order);
   return { ...document, layers };
@@ -373,6 +401,33 @@ export function useVectorDocument(
     [document, projectId, imageId],
   );
 
+  // ---- Rename (M2.1-S07, ronda de fix 1 -- ver docstring de renameLayer arriba) ----
+
+  const renameLayer = useCallback(
+    (groupId: string, name: string) => {
+      if (!document) return;
+      const layer = document.layers.find((l) => l.groupId === groupId);
+      if (!layer) return;
+
+      const trimmed = name.trim();
+      if (!trimmed || trimmed === layer.name) return;
+
+      const previousName = layer.name;
+      const paletteIdForRequest = document.paletteId;
+
+      setDocument((current) => current && { ...current, layers: current.layers.map((l) => (l.groupId === groupId ? { ...l, name: trimmed } : l)) });
+
+      setLayerNameRequest(projectId, imageId, paletteIdForRequest, groupId, trimmed)
+        .then((response) => setDocument((current) => current && applyLayoutEntries(current, response.entries)))
+        .catch(() =>
+          setDocument(
+            (current) => current && { ...current, layers: current.layers.map((l) => (l.groupId === groupId ? { ...l, name: previousName } : l)) },
+          ),
+        );
+    },
+    [document, projectId, imageId],
+  );
+
   // ---- Reorder (Drag & Drop, PERSISTIDO -- NUNCA toca geometría) ----
 
   const reorderLayers = useCallback(
@@ -433,6 +488,7 @@ export function useVectorDocument(
     isolate,
     showAll,
     toggleLocked,
+    renameLayer,
     reorderLayers,
     selectedGroupId,
     selectGroup,

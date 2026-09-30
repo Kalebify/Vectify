@@ -3,9 +3,12 @@ namespace Vectorify.Api.Contracts;
 /// <summary>
 /// Una capa vista a través de su layout persistido (M2.1-S07): hereda
 /// GroupId como único identificador estable -- nunca ColorHex/Fill (ver
-/// spec.md, regla: "color no debe usarse como identificador primario").
+/// spec.md, regla: "color no debe usarse como identificador primario"). Name
+/// es `null` si esa capa nunca recibió un rename explícito (ronda de fix 2) --
+/// el nombre EFECTIVO para mostrar es responsabilidad del consumidor
+/// (fallback al nombre original de la capa, ver ConsolidatedVectorLayerEndpoints.ToPayload).
 /// </summary>
-public sealed record LayerLayoutEntryPayload(Guid GroupId, int Order, bool Visible, bool Locked);
+public sealed record LayerLayoutEntryPayload(Guid GroupId, int Order, bool Visible, bool Locked, string? Name);
 
 /// <summary>
 /// Respuesta de POST .../layers/{groupId}/visibility, POST
