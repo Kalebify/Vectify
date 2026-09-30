@@ -1,0 +1,18 @@
+{
+  "card_id": "3ebd77b2-6398-8173-a8cd-cd55fc807ea4",
+  "card_url": "https://app.notion.com/p/3ebd77b263988173a8cdcd55fc807ea4",
+  "title": "M2.1-S08 · Persistencia del VectorDocument y reapertura",
+  "stack": "Frontend (ruteo minimo, sin libreria nueva salvo justificacion), ASP.NET Core (un endpoint de metadata nuevo)",
+  "branch": "sprint/3e8d77b2-vectordocument-persistencia-reapertura",
+  "column": "Doing",
+  "phase": "implementation",
+  "fix_rounds": 0,
+  "preview_url": null,
+  "pr_url": null,
+  "started_at": "2026-09-30T00:00:00Z",
+  "exceptions": [
+    "Corrida en modo autonomo dentro del backlog MVP2.1 (mismo criterio de MVP2/MVP2.1 previo).",
+    "Tarjeta creada por el orquestador (con confirmacion del usuario, 'si dale'), no transcripta de un cuerpo Notion preexistente -- MVP2.1 originalmente solo tenia 7 cartas (S01-S07); esta S08 cierra lo que M2.1-S06/S07 dejaron explicitamente diferido.",
+    "Alcance investigado y verificado antes de escribir el spec (grep de package.json y de endpoints backend) -- no es persistencia de datos de dominio (ya resuelta en S07), es navegacion/ruteo del lado del cliente."
+  ]
+}
