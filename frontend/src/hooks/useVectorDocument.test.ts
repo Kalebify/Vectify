@@ -185,23 +185,57 @@ describe("useVectorDocument — error de carga", () => {
   });
 });
 
-describe("useVectorDocument — visibilidad/selección compartidas", () => {
-  it("toggleVisibility/isolate/showAll operan sobre el mismo record que consumen todos los paneles", async () => {
-    stubHappyPath();
+function layoutResponse(overrides: Record<string, unknown> = {}) {
+  return {
+    projectId: PROJECT_ID,
+    imageId: IMAGE_ID,
+    paletteId: PALETTE_ID,
+    paletteVersion: 2,
+    layerSetId: LAYER_SET_ID,
+    version: 1,
+    entries: [
+      { groupId: GROUP_A_ID, order: 0, visible: true, locked: false },
+      { groupId: GROUP_B_ID, order: 1, visible: true, locked: false },
+    ],
+    ...overrides,
+  };
+}
+
+describe("useVectorDocument — visibilidad PERSISTIDA (Eye, M2.1-S07) + Isolate/Show All EFÍMEROS", () => {
+  it("toggleVisibility persiste vía la Web API (optimista) y NO se pierde con Isolate/Show All", async () => {
+    const fetch = stubFetchSequence([
+      (url) => (url.includes("/visibility") ? jsonResponse(layoutResponse({ entries: [
+        { groupId: GROUP_A_ID, order: 0, visible: false, locked: false },
+        { groupId: GROUP_B_ID, order: 1, visible: true, locked: false },
+      ], version: 1 })) : undefined!),
+      (url) => (url.includes("/layers/consolidated") ? jsonResponse(consolidatedResponse()) : undefined!),
+      (url) => (/\/layers$/.test(url) ? jsonResponse(layerSetResponse()) : undefined!),
+      (url) => (url.endsWith(`/color-palette/${PALETTE_ID}`) ? jsonResponse(paletteResponse()) : undefined!),
+    ]);
+
     const { result } = renderHook(() => useVectorDocument(PROJECT_ID, IMAGE_ID, PALETTE_ID));
     await waitFor(() => expect(result.current.status).toBe("ready"));
 
+    // Optimista: el toggle se refleja de inmediato, antes de que resuelva el POST.
     act(() => result.current.toggleVisibility(GROUP_A_ID));
     expect(result.current.visibility[GROUP_A_ID]).toBe(false);
 
+    await waitFor(() =>
+      expect(fetch.mock.calls.some((call) => String(call[0]).includes(`/${GROUP_A_ID}/visibility`))).toBe(true),
+    );
+
+    // Isolate NUNCA borra el Eye persistido (spec.md: "sin borrar estados") --
+    // solo un overlay de vista, session-only.
     act(() => result.current.isolate(GROUP_B_ID));
     expect(result.current.visibility).toEqual({ [GROUP_A_ID]: false, [GROUP_B_ID]: true });
 
+    // Show All descarta el overlay -- revela el Eye REAL de cada capa (A
+    // sigue oculta: eso fue un toggle explícito, no algo que Isolate tocó).
     act(() => result.current.showAll());
-    expect(result.current.visibility).toEqual({ [GROUP_A_ID]: true, [GROUP_B_ID]: true });
+    await waitFor(() => expect(result.current.visibility).toEqual({ [GROUP_A_ID]: false, [GROUP_B_ID]: true }));
   });
 
-  it("selectGroup sincroniza la selección compartida", async () => {
+  it("selectGroup sincroniza la selección compartida y limpia la selección múltiple de paths", async () => {
     stubHappyPath();
     const { result } = renderHook(() => useVectorDocument(PROJECT_ID, IMAGE_ID, PALETTE_ID));
     await waitFor(() => expect(result.current.status).toBe("ready"));
@@ -209,5 +243,137 @@ describe("useVectorDocument — visibilidad/selección compartidas", () => {
     expect(result.current.selectedGroupId).toBeNull();
     act(() => result.current.selectGroup(GROUP_A_ID));
     expect(result.current.selectedGroupId).toBe(GROUP_A_ID);
+  });
+});
+
+describe("useVectorDocument — Lock (M2.1-S07, concepto nuevo, PERSISTIDO)", () => {
+  it("toggleLocked persiste vía la Web API y NO afecta la visibilidad de la capa", async () => {
+    const fetch = stubFetchSequence([
+      (url) =>
+        url.includes("/lock")
+          ? jsonResponse(
+              layoutResponse({
+                entries: [
+                  { groupId: GROUP_A_ID, order: 0, visible: true, locked: true },
+                  { groupId: GROUP_B_ID, order: 1, visible: true, locked: false },
+                ],
+                version: 1,
+              }),
+            )
+          : undefined!,
+      (url) => (url.includes("/layers/consolidated") ? jsonResponse(consolidatedResponse()) : undefined!),
+      (url) => (/\/layers$/.test(url) ? jsonResponse(layerSetResponse()) : undefined!),
+      (url) => (url.endsWith(`/color-palette/${PALETTE_ID}`) ? jsonResponse(paletteResponse()) : undefined!),
+    ]);
+
+    const { result } = renderHook(() => useVectorDocument(PROJECT_ID, IMAGE_ID, PALETTE_ID));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    act(() => result.current.toggleLocked(GROUP_A_ID));
+    expect(result.current.document?.layers.find((l) => l.groupId === GROUP_A_ID)?.locked).toBe(true);
+
+    await waitFor(() => expect(fetch.mock.calls.some((call) => String(call[0]).includes(`/${GROUP_A_ID}/lock`))).toBe(true));
+    await waitFor(() => expect(result.current.document?.layers.find((l) => l.groupId === GROUP_A_ID)?.locked).toBe(true));
+
+    // Lock jamás toca visible/order de la capa que se bloqueó ni de ninguna otra.
+    expect(result.current.visibility[GROUP_A_ID]).toBe(true);
+    expect(result.current.document?.layers.find((l) => l.groupId === GROUP_B_ID)?.locked).toBe(false);
+  });
+});
+
+describe("useVectorDocument — Reorder (Drag & Drop, M2.1-S07, PERSISTIDO)", () => {
+  it("reorderLayers persiste el nuevo orden y preserva el VectorId (geometría) de cada capa", async () => {
+    const fetch = stubFetchSequence([
+      (url) =>
+        url.includes("/reorder")
+          ? jsonResponse(
+              layoutResponse({
+                entries: [
+                  { groupId: GROUP_B_ID, order: 0, visible: true, locked: false },
+                  { groupId: GROUP_A_ID, order: 1, visible: true, locked: false },
+                ],
+                version: 1,
+              }),
+            )
+          : undefined!,
+      (url) => (url.includes("/layers/consolidated") ? jsonResponse(consolidatedResponse()) : undefined!),
+      (url) => (/\/layers$/.test(url) ? jsonResponse(layerSetResponse()) : undefined!),
+      (url) => (url.endsWith(`/color-palette/${PALETTE_ID}`) ? jsonResponse(paletteResponse()) : undefined!),
+    ]);
+
+    const { result } = renderHook(() => useVectorDocument(PROJECT_ID, IMAGE_ID, PALETTE_ID));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    const vectorIdsBefore = new Map(result.current.document!.layers.map((l) => [l.groupId, l.vectorId]));
+
+    act(() => result.current.reorderLayers([GROUP_B_ID, GROUP_A_ID]));
+
+    expect(result.current.document?.layers.map((l) => l.groupId)).toEqual([GROUP_B_ID, GROUP_A_ID]);
+
+    await waitFor(() => expect(fetch.mock.calls.some((call) => String(call[0]).includes("/reorder"))).toBe(true));
+    await waitFor(() => expect(result.current.document?.layers[0]?.groupId).toBe(GROUP_B_ID));
+
+    // NUNCA toca geometría: mismo VectorId de cada capa, antes y después.
+    for (const layer of result.current.document!.layers) {
+      expect(layer.vectorId).toBe(vectorIdsBefore.get(layer.groupId));
+    }
+  });
+});
+
+describe("useVectorDocument — Select All in Layer (M2.1-S07, primera selección múltiple real)", () => {
+  it("selecciona TODOS los paths de esa capa (una clave por índice 0..pathCount-1) y también selecciona el Layer", async () => {
+    stubHappyPath();
+    const { result } = renderHook(() => useVectorDocument(PROJECT_ID, IMAGE_ID, PALETTE_ID));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    expect(result.current.selectedPathKeys.size).toBe(0);
+
+    act(() => result.current.selectAllInLayer(GROUP_A_ID));
+
+    // consolidatedResponse() define pathCount=3 para GROUP_A_ID.
+    expect(result.current.selectedPathKeys.size).toBe(3);
+    expect(result.current.selectedPathKeys.has(`${GROUP_A_ID}:0`)).toBe(true);
+    expect(result.current.selectedPathKeys.has(`${GROUP_A_ID}:2`)).toBe(true);
+    expect(result.current.selectedGroupId).toBe(GROUP_A_ID);
+  });
+
+  it("seleccionar otra capa limpia la selección múltiple de la capa anterior", async () => {
+    stubHappyPath();
+    const { result } = renderHook(() => useVectorDocument(PROJECT_ID, IMAGE_ID, PALETTE_ID));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    act(() => result.current.selectAllInLayer(GROUP_A_ID));
+    expect(result.current.selectedPathKeys.size).toBe(3);
+
+    act(() => result.current.selectGroup(GROUP_B_ID));
+    expect(result.current.selectedPathKeys.size).toBe(0);
+  });
+});
+
+describe("useVectorDocument — reload conserva order/visible/locked persistidos", () => {
+  it("después de recargar (reload/remount), los valores de order/visible/locked vuelven a leerse de la Web API tal como quedaron persistidos", async () => {
+    stubFetchSequence([
+      (url) =>
+        url.includes("/layers/consolidated")
+          ? jsonResponse(
+              consolidatedResponse({
+                layers: [
+                  { id: GROUP_A_ID, name: "Rojo", colorHex: "#ff0000", fill: "#ff0000", vectorId: VECTOR_A_ID, svgUrl: `/vectors/${VECTOR_A_ID}`, pathCount: 3, componentCount: 1, manufacturingOperation: "cut", visible: false, locked: true, order: 1, rasterValidation: { ownMismatchRatio: 0, ownMismatchTolerance: 0.02, ownMismatchWithinTolerance: true, contaminationRatio: 0, contaminationTolerance: 0.02, contaminationWithinTolerance: true, warnings: [] } },
+                  { id: GROUP_B_ID, name: "Azul", colorHex: "#0000ff", fill: "#0000ff", vectorId: VECTOR_B_ID, svgUrl: `/vectors/${VECTOR_B_ID}`, pathCount: 2, componentCount: null, manufacturingOperation: "unassigned", visible: true, locked: false, order: 0, rasterValidation: { ownMismatchRatio: 0, ownMismatchTolerance: 0.02, ownMismatchWithinTolerance: true, contaminationRatio: 0, contaminationTolerance: 0.02, contaminationWithinTolerance: true, warnings: [] } },
+                ],
+              }),
+            )
+          : undefined!,
+      (url) => (/\/layers$/.test(url) ? jsonResponse(layerSetResponse()) : undefined!),
+      (url) => (url.endsWith(`/color-palette/${PALETTE_ID}`) ? jsonResponse(paletteResponse()) : undefined!),
+    ]);
+
+    const { result } = renderHook(() => useVectorDocument(PROJECT_ID, IMAGE_ID, PALETTE_ID));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    // Persistido: Azul (order=0) va PRIMERO, Rojo (order=1, locked, oculta) va segundo.
+    expect(result.current.document?.layers.map((l) => l.groupId)).toEqual([GROUP_B_ID, GROUP_A_ID]);
+    expect(result.current.document?.layers.find((l) => l.groupId === GROUP_A_ID)?.locked).toBe(true);
+    expect(result.current.visibility[GROUP_A_ID]).toBe(false);
   });
 });

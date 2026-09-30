@@ -18,6 +18,8 @@ interface VectorCanvasProps {
   sourceHeightPx: number;
   selectedGroupId: string | null;
   onSelectGroup: (groupId: string) => void;
+  /** Select All in Layer (M2.1-S07): claves `${groupId}:${pathIndex}` de los paths multi-seleccionados -- ver useVectorDocument.selectAllInLayer. Opcional (default: ninguno seleccionado). */
+  selectedPathKeys?: ReadonlySet<string>;
   tool: EditorTool;
   transform: CanvasTransform;
   onZoomBy: (factor: number, anchor?: { x: number; y: number }) => void;
@@ -55,6 +57,7 @@ export function VectorCanvas({
   sourceHeightPx,
   selectedGroupId,
   onSelectGroup,
+  selectedPathKeys,
   tool,
   transform,
   onZoomBy,
@@ -292,28 +295,44 @@ export function VectorCanvas({
               const isSelected = selectedGroupId === layer.groupId;
 
               return (
-                <Group key={layer.groupId}>
-                  {entry.geometry.paths.map((path, index) => (
-                    <Path
-                      key={index}
-                      data={path.d}
-                      fill={path.fill}
-                      x={path.transform.x}
-                      y={path.transform.y}
-                      rotation={path.transform.rotation}
-                      scaleX={path.transform.scaleX}
-                      scaleY={path.transform.scaleY}
-                      skewX={path.transform.skewX}
-                      stroke={isSelected ? "#3a5cf5" : undefined}
-                      strokeWidth={isSelected ? Math.max(1, 2 / transform.scale) : 0}
-                      onClick={() => {
-                        if (effectiveTool === "select") onSelectGroup(layer.groupId);
-                      }}
-                      onTap={() => {
-                        if (effectiveTool === "select") onSelectGroup(layer.groupId);
-                      }}
-                    />
-                  ))}
+                // Lock (M2.1-S07, concepto NUEVO): un Layer bloqueado sigue
+                // siendo visible/seleccionable/inspeccionable -- `listening`
+                // se deja SIEMPRE en su default (true), Select/Select All
+                // siguen funcionando igual. `draggable={false}` explícito
+                // documenta la intención (hoy MVP3 todavía no agregó ninguna
+                // herramienta de transform/drag real sobre paths, así que el
+                // comportamiento observable es idéntico al de una capa
+                // desbloqueada -- ver IMPL.md, "Lock en el Canvas").
+                <Group key={layer.groupId} name={`vector-canvas-layer-group ${layer.locked ? "vector-canvas-layer-group--locked" : ""}`} draggable={false}>
+                  {entry.geometry.paths.map((path, index) => {
+                    const pathKey = `${layer.groupId}:${index}`;
+                    const isPathMultiSelected = selectedPathKeys?.has(pathKey) ?? false;
+                    const stroke = isPathMultiSelected ? "#f5a623" : isSelected ? "#3a5cf5" : undefined;
+                    const strokeWidth = isPathMultiSelected || isSelected ? Math.max(1, 2 / transform.scale) : 0;
+
+                    return (
+                      <Path
+                        key={index}
+                        data={path.d}
+                        fill={path.fill}
+                        x={path.transform.x}
+                        y={path.transform.y}
+                        rotation={path.transform.rotation}
+                        scaleX={path.transform.scaleX}
+                        scaleY={path.transform.scaleY}
+                        skewX={path.transform.skewX}
+                        stroke={stroke}
+                        strokeWidth={strokeWidth}
+                        draggable={false}
+                        onClick={() => {
+                          if (effectiveTool === "select") onSelectGroup(layer.groupId);
+                        }}
+                        onTap={() => {
+                          if (effectiveTool === "select") onSelectGroup(layer.groupId);
+                        }}
+                      />
+                    );
+                  })}
                 </Group>
               );
             })}

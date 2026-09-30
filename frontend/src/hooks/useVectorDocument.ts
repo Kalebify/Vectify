@@ -1,14 +1,24 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getColorPalette } from "../api/colorPaletteApi";
 import { getConsolidatedVectorLayers } from "../api/consolidatedVectorLayersApi";
 import { ApiClientError } from "../api/httpClient";
+import {
+  reorderLayers as reorderLayersRequest,
+  setLayerLocked as setLayerLockedRequest,
+  setLayerVisible as setLayerVisibleRequest,
+} from "../api/layerLayoutApi";
 import { getVectorLayers } from "../api/vectorLayersApi";
+import type { LayerLayoutEntryPayload } from "../types/layerLayout";
 import type { ManufacturingOperationValue } from "../types/manufacturingOperations";
 
 /**
- * `VectorDocument`: estado de dominio del Workspace (M2.1-S06), agregando en
- * un solo objeto lo que hoy son 3 llamadas de solo lectura independientes
- * (paleta confirmada + conjunto de capas + info consolidada). Ver spec.md,
+ * `VectorDocument`: estado de dominio del Workspace (M2.1-S06, extendido en
+ * M2.1-S07 con persistencia real de order/visible/locked), agregando en un
+ * solo objeto lo que hoy son varias llamadas de solo lectura independientes
+ * (paleta confirmada + conjunto de capas + info consolidada -- esta última YA
+ * incluye order/visible/locked persistidos por
+ * Vectorify.Api.LayerLayout.LayerLayoutService desde M2.1-S07, ver
+ * Vectorify.Api.Endpoints.ConsolidatedVectorLayerEndpoints). Ver spec.md,
  * "Ambigüedades detectadas": esto es una agregación del lado del CLIENTE
  * sobre endpoints YA EXISTENTES -- no hay ninguna entidad `VectorDocument`
  * nueva en el backend, ni se persiste acá (esa es M2.1-S08, la tarjeta
@@ -18,6 +28,16 @@ import type { ManufacturingOperationValue } from "../types/manufacturingOperatio
  * PaletteBar, InspectorPanel, PreviewNavigator) consumen ESTE hook como
  * única fuente de verdad -- ninguno vuelve a pedir la paleta/capas por su
  * cuenta ni guarda una copia divergente.
+ *
+ * Efímero vs. persistente (M2.1-S07, spec.md "Decidir qué estado de
+ * selección es efímero" -- ver IMPL.md para el detalle completo):
+ * - PERSISTENTE (sobrevive a un reload, backend): `order`/`visible`/`locked`
+ *   de cada capa (más `name`/`manufacturingOperation`, ya persistidos por
+ *   tarjetas anteriores y solo expuestos acá).
+ * - EFÍMERO (solo esta sesión del Workspace, nunca viaja al backend):
+ *   `selectedGroupId` (qué capa se inspecciona ahora), `isolatedGroupId`
+ *   (overlay de "Isolate" -- ver más abajo) y `selectedPathKeys` (selección
+ *   múltiple de "Select All in Layer").
  */
 export type VectorDocumentStatus = "idle" | "loading" | "ready" | "empty" | "error";
 
@@ -39,6 +59,10 @@ export interface VectorDocumentLayer {
   componentCount: number | null;
   manufacturingOperation: ManufacturingOperationValue;
   order: number;
+  /** Visibilidad PERSISTIDA (Eye, M2.1-S07) -- ver `visibility` más abajo para el valor EFECTIVO (con Isolate aplicado). */
+  visible: boolean;
+  /** Bloqueo de edición PERSISTIDO (Lock, M2.1-S07, concepto NUEVO) -- no afecta Eye/Isolate/Select All/Inspector. */
+  locked: boolean;
   areaPercent: number;
   hasPartialAlpha: boolean;
   isExcluded: boolean;
@@ -53,6 +77,7 @@ export interface VectorDocument {
   version: number;
   sourceWidthPx: number;
   sourceHeightPx: number;
+  /** Siempre ordenadas por `order` ascendente -- el ÚNICO lugar donde se aplica ese orden, ningún panel necesita volver a ordenar. */
   layers: VectorDocumentLayer[];
 }
 
@@ -64,15 +89,42 @@ export interface UseVectorDocumentState {
   /** Vuelve a pedir todo desde cero (ej. después de generar capas desde otro panel, o el botón "Reintentar" del estado de error). */
   reload: () => void;
 
-  /** groupId -> visible. Estado de vista COMPARTIDO por todos los paneles (mismo patrón que useVectorLayers.visibility de M2-S02/M2.1-S04), nunca escrito en 2 lugares. */
+  /**
+   * groupId -> visible EFECTIVO (lo que debe mostrar el Canvas/paneles ahora
+   * mismo): la visibilidad PERSISTIDA (`document.layers[].visible`, Eye) si
+   * no hay ningún Isolate activo, o -- si lo hay -- únicamente `true` para
+   * `isolatedGroupId` y `false` para el resto. Isolate NUNCA escribe sobre la
+   * visibilidad persistida (spec.md: "mostrar solo selección SIN BORRAR
+   * ESTADOS") -- togglear Show All simplemente descarta el overlay y revela
+   * el Eye real de cada capa, tal como estaba antes de aislar.
+   */
   visibility: Record<string, boolean>;
+  /** Persiste (Eye) la visibilidad de una capa -- optimista, con rollback si falla la Web API. */
   toggleVisibility: (groupId: string) => void;
+  /** Overlay de VISTA, solo de sesión -- ver `visibility`. */
   isolate: (groupId: string) => void;
+  /** Descarta el overlay de Isolate (si había uno) -- NUNCA fuerza `visible=true` en el backend. */
   showAll: () => void;
 
-  /** Selección COMPARTIDA de "qué capa se está inspeccionando" (Canvas/LayersPanel/PaletteBar/Inspector). */
+  /** Persiste (Lock, M2.1-S07) el bloqueo de edición de una capa -- optimista, con rollback si falla la Web API. NUNCA afecta `visible`. */
+  toggleLocked: (groupId: string) => void;
+
+  /** Persiste (Drag & Drop, M2.1-S07) el nuevo orden visual completo -- optimista, con rollback si falla. NUNCA toca geometría (`d`/`transform`/VectorId). */
+  reorderLayers: (orderedGroupIds: string[]) => void;
+
+  /** Selección COMPARTIDA de "qué capa se está inspeccionando" (Canvas/LayersPanel/PaletteBar/Inspector). Efímera. Seleccionar una capa distinta limpia `selectedPathKeys`. */
   selectedGroupId: string | null;
   selectGroup: (groupId: string | null) => void;
+
+  /**
+   * Selección múltiple de geometría ACOTADA a un solo Layer (M2.1-S07,
+   * "Select All in Layer" -- primera selección múltiple real de la app).
+   * Claves con forma `${groupId}:${pathIndex}`, 0..pathCount-1 de esa capa.
+   * Efímera (nunca persistida).
+   */
+  selectedPathKeys: ReadonlySet<string>;
+  selectAllInLayer: (groupId: string) => void;
+  clearPathSelection: () => void;
 }
 
 const GENERIC_ERROR_MESSAGE = "No se pudo cargar el documento del proyecto. Intentá de nuevo.";
@@ -101,11 +153,15 @@ function toDocument(
       componentCount: info?.componentCount ?? null,
       manufacturingOperation: (info?.manufacturingOperation as ManufacturingOperationValue | undefined) ?? "unassigned",
       order: info?.order ?? index,
+      visible: info?.visible ?? true,
+      locked: info?.locked ?? false,
       areaPercent: paletteInfo?.areaPercent ?? layer.areaPercent,
       hasPartialAlpha: paletteInfo?.hasPartialAlpha ?? layer.hasPartialAlpha,
       isExcluded: paletteInfo?.isExcluded ?? false,
     };
   });
+
+  layers.sort((a, b) => a.order - b.order);
 
   return {
     projectId,
@@ -120,6 +176,17 @@ function toDocument(
   };
 }
 
+/** Aplica la respuesta AUTORITATIVA de la Web API (POST visibility/lock/reorder) sobre el documento en memoria -- reemplaza el optimismo local por lo que realmente quedó persistido, re-ordenando por el `order` vigente. */
+function applyLayoutEntries(document: VectorDocument, entries: LayerLayoutEntryPayload[]): VectorDocument {
+  const byGroupId = new Map(entries.map((entry) => [entry.groupId, entry]));
+  const layers = document.layers.map((layer) => {
+    const entry = byGroupId.get(layer.groupId);
+    return entry ? { ...layer, order: entry.order, visible: entry.visible, locked: entry.locked } : layer;
+  });
+  layers.sort((a, b) => a.order - b.order);
+  return { ...document, layers };
+}
+
 export function useVectorDocument(
   projectId: string,
   imageId: string,
@@ -129,8 +196,9 @@ export function useVectorDocument(
   const [document, setDocument] = useState<VectorDocument | null>(null);
   const [emptyReason, setEmptyReason] = useState<VectorDocumentEmptyReason | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [visibility, setVisibility] = useState<Record<string, boolean>>({});
+  const [isolatedGroupId, setIsolatedGroupId] = useState<string | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [selectedPathKeys, setSelectedPathKeys] = useState<ReadonlySet<string>>(new Set());
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const requestedForRef = useRef<string | null>(null);
@@ -154,6 +222,8 @@ export function useVectorDocument(
     setStatus("loading");
     setEmptyReason(null);
     setErrorMessage(null);
+    setIsolatedGroupId(null);
+    setSelectedPathKeys(new Set());
 
     (async () => {
       const palette = await getColorPalette(projectId, imageId, paletteId, controller.signal);
@@ -197,7 +267,6 @@ export function useVectorDocument(
       }
 
       setDocument(doc);
-      setVisibility(Object.fromEntries(doc.layers.map((layer) => [layer.groupId, true])));
       setStatus("ready");
     })().catch((error: unknown) => {
       abortControllerRef.current = null;
@@ -236,20 +305,119 @@ export function useVectorDocument(
     load();
   }, [load]);
 
-  const toggleVisibility = useCallback((groupId: string) => {
-    setVisibility((current) => ({ ...current, [groupId]: !current[groupId] }));
-  }, []);
+  // ---- Visibilidad (Eye, PERSISTIDA) + Isolate/Show All (overlay EFÍMERO) ----
+
+  const toggleVisibility = useCallback(
+    (groupId: string) => {
+      if (!document) return;
+      const layer = document.layers.find((l) => l.groupId === groupId);
+      if (!layer) return;
+
+      const nextVisible = !layer.visible;
+      const paletteIdForRequest = document.paletteId;
+
+      // Updaters de setState PUROS (sin llamar a la Web API adentro, StrictMode
+      // los invoca 2 veces en desarrollo): el efecto (fetch) se dispara acá
+      // afuera, una sola vez, leyendo el valor "previo" ya calculado arriba.
+      setDocument((current) => current && { ...current, layers: current.layers.map((l) => (l.groupId === groupId ? { ...l, visible: nextVisible } : l)) });
+
+      setLayerVisibleRequest(projectId, imageId, paletteIdForRequest, groupId, nextVisible)
+        .then((response) => setDocument((current) => current && applyLayoutEntries(current, response.entries)))
+        .catch(() =>
+          setDocument(
+            (current) => current && { ...current, layers: current.layers.map((l) => (l.groupId === groupId ? { ...l, visible: !nextVisible } : l)) },
+          ),
+        );
+    },
+    [document, projectId, imageId],
+  );
 
   const isolate = useCallback((groupId: string) => {
-    setVisibility((current) => Object.fromEntries(Object.keys(current).map((key) => [key, key === groupId])));
+    setIsolatedGroupId(groupId);
   }, []);
 
   const showAll = useCallback(() => {
-    setVisibility((current) => Object.fromEntries(Object.keys(current).map((key) => [key, true])));
+    setIsolatedGroupId(null);
   }, []);
+
+  const visibility = useMemo(() => {
+    if (!document) return {};
+    const base = Object.fromEntries(document.layers.map((layer) => [layer.groupId, layer.visible]));
+    if (!isolatedGroupId) return base;
+    return Object.fromEntries(Object.keys(base).map((groupId) => [groupId, groupId === isolatedGroupId]));
+  }, [document, isolatedGroupId]);
+
+  // ---- Lock (PERSISTIDO, concepto NUEVO M2.1-S07) ----
+
+  const toggleLocked = useCallback(
+    (groupId: string) => {
+      if (!document) return;
+      const layer = document.layers.find((l) => l.groupId === groupId);
+      if (!layer) return;
+
+      const nextLocked = !layer.locked;
+      const paletteIdForRequest = document.paletteId;
+
+      setDocument((current) => current && { ...current, layers: current.layers.map((l) => (l.groupId === groupId ? { ...l, locked: nextLocked } : l)) });
+
+      setLayerLockedRequest(projectId, imageId, paletteIdForRequest, groupId, nextLocked)
+        .then((response) => setDocument((current) => current && applyLayoutEntries(current, response.entries)))
+        .catch(() =>
+          setDocument(
+            (current) => current && { ...current, layers: current.layers.map((l) => (l.groupId === groupId ? { ...l, locked: !nextLocked } : l)) },
+          ),
+        );
+    },
+    [document, projectId, imageId],
+  );
+
+  // ---- Reorder (Drag & Drop, PERSISTIDO -- NUNCA toca geometría) ----
+
+  const reorderLayers = useCallback(
+    (orderedGroupIds: string[]) => {
+      if (!document) return;
+      const byGroupId = new Map(document.layers.map((l) => [l.groupId, l]));
+      if (orderedGroupIds.length !== document.layers.length || orderedGroupIds.some((id) => !byGroupId.has(id))) {
+        return;
+      }
+
+      const previousLayers = document.layers;
+      const paletteIdForRequest = document.paletteId;
+      const optimisticLayers = orderedGroupIds.map((groupId, index) => ({ ...byGroupId.get(groupId)!, order: index }));
+
+      setDocument((current) => current && { ...current, layers: optimisticLayers });
+
+      reorderLayersRequest(projectId, imageId, paletteIdForRequest, orderedGroupIds)
+        .then((response) => setDocument((current) => current && applyLayoutEntries(current, response.entries)))
+        .catch(() => setDocument((current) => current && { ...current, layers: previousLayers }));
+    },
+    [document, projectId, imageId],
+  );
+
+  // ---- Selección (EFÍMERA) ----
 
   const selectGroup = useCallback((groupId: string | null) => {
     setSelectedGroupId(groupId);
+    setSelectedPathKeys(new Set());
+  }, []);
+
+  const selectAllInLayer = useCallback(
+    (groupId: string) => {
+      const layer = document?.layers.find((l) => l.groupId === groupId);
+      if (!layer) return;
+
+      const keys = new Set<string>();
+      for (let index = 0; index < layer.pathCount; index += 1) {
+        keys.add(`${groupId}:${index}`);
+      }
+      setSelectedPathKeys(keys);
+      setSelectedGroupId(groupId);
+    },
+    [document],
+  );
+
+  const clearPathSelection = useCallback(() => {
+    setSelectedPathKeys(new Set());
   }, []);
 
   return {
@@ -262,7 +430,12 @@ export function useVectorDocument(
     toggleVisibility,
     isolate,
     showAll,
+    toggleLocked,
+    reorderLayers,
     selectedGroupId,
     selectGroup,
+    selectedPathKeys,
+    selectAllInLayer,
+    clearPathSelection,
   };
 }
