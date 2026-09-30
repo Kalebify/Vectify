@@ -104,6 +104,36 @@ public static class ProjectEndpoints
             "mismo envío: si se repite la clave, se devuelve 200 con el proyecto ya creado " +
             "en vez de crear uno nuevo.");
 
+        // Metadata JSON de un proyecto/imagen ya subida (M2.1-S08): permite reconstruir
+        // `activeProject` del lado del cliente a partir de una URL (deep-link/reload del
+        // Workspace) sin volver a subir el archivo. Mismo shape que UploadImageResponse.
+        app.MapGet("/api/v1/projects/{projectId:guid}/images/{imageId:guid}", (
+            Guid projectId,
+            Guid imageId,
+            IProjectRegistry registry) =>
+        {
+            var record = registry.Find(projectId, imageId);
+            if (record is null)
+            {
+                return Results.NotFound(new ApiErrorResponse("not_found", "No existe un proyecto/imagen con esos IDs."));
+            }
+
+            return Results.Ok(new UploadImageResponse(
+                record.ProjectId,
+                record.ImageId,
+                record.FileName,
+                record.MimeType,
+                record.Bytes,
+                record.Width,
+                record.Height,
+                record.Status));
+        })
+        .WithName("GetProjectImageMetadata")
+        .WithTags("Projects")
+        .Produces<UploadImageResponse>(StatusCodes.Status200OK)
+        .Produces<ApiErrorResponse>(StatusCodes.Status404NotFound)
+        .WithSummary("Recupera la metadata (filename/dimensiones) de un proyecto/imagen ya cargada, sin su binario.");
+
         // Recupera el original guardado, sin procesarlo (fuera de alcance de este sprint).
         app.MapGet("/api/v1/projects/{projectId:guid}/images/{imageId:guid}/original", async (
             Guid projectId,

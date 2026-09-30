@@ -1,5 +1,7 @@
-import { useState } from "react";
-import { getOriginalImageUrl } from "./api/projectsApi";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { getColorPalette } from "./api/colorPaletteApi";
+import { ApiClientError } from "./api/httpClient";
+import { getOriginalImageUrl, getProjectImage } from "./api/projectsApi";
 import { getPreviewImageUrl } from "./api/preprocessApi";
 import { getSimplificationSvgUrl } from "./api/simplifyApi";
 import { getVectorSvgUrl } from "./api/vectorizeApi";
@@ -17,6 +19,12 @@ import { ThresholdPanel } from "./components/threshold/ThresholdPanel";
 import { UploadPanel } from "./components/upload/UploadPanel";
 import { VectorizePanel } from "./components/vectorize/VectorizePanel";
 import { useSystemHealth } from "./hooks/useSystemHealth";
+import {
+  clearWorkspaceLocation,
+  pushWorkspaceLocation,
+  readWorkspaceLocation,
+  type WorkspaceLocation,
+} from "./lib/workspaceLocation";
 import type { ColorPaletteResponse } from "./types/colorPalette";
 import type { DimensionResponse } from "./types/dimension";
 import type { PreprocessResponse } from "./types/preprocess";
@@ -199,6 +207,74 @@ function App() {
   const [readySimplification, setReadySimplification] = useState<SimplifyResponse | null>(null);
   const [readyDimension, setReadyDimension] = useState<DimensionResponse | null>(null);
 
+  // Reapertura del Workspace por URL (M2.1-S08): si la URL YA trae
+  // projectId/imageId/paletteId (reload dentro del Workspace, o un
+  // deep-link pegado a mano), reconstruye `activeProject` (nuevo endpoint
+  // de metadata) y `confirmedPalette` (GET ya existente) en vez de arrancar
+  // siempre en Upload -- ver lib/workspaceLocation.ts. Corre una sola vez,
+  // al montar: abrir/cerrar el Workspace desde el flujo normal actualiza la
+  // URL pero no vuelve a disparar esta resolución (ver
+  // handlePaletteConfirmed/"Abrir en el Workspace" y el onClose de
+  // EditorShell más abajo).
+  const [deepLinkStatus, setDeepLinkStatus] = useState<"idle" | "resolving" | "invalid">("idle");
+  const [deepLinkMessage, setDeepLinkMessage] = useState<string | null>(null);
+  const deepLinkResolvedRef = useRef(false);
+
+  // Extraída (en vez de vivir inline en el efecto) para que el `setState`
+  // síncrono de "resolving" quede fuera del cuerpo directo del efecto --
+  // mismo patrón ya usado en useVectorDocument.load/useEffect.
+  const resolveWorkspaceDeepLink = useCallback((location: WorkspaceLocation) => {
+    setDeepLinkStatus("resolving");
+
+    (async () => {
+      let project: UploadImageResponse;
+      try {
+        project = await getProjectImage(location.projectId, location.imageId);
+      } catch (error) {
+        clearWorkspaceLocation();
+        setDeepLinkStatus("invalid");
+        setDeepLinkMessage(
+          error instanceof ApiClientError && !error.isNetworkError
+            ? "El proyecto de esta URL ya no existe. Subí una imagen para empezar un proyecto nuevo."
+            : "No se pudo recuperar el proyecto de esta URL. Intentá de nuevo más tarde.",
+        );
+        return;
+      }
+
+      let palette: ColorPaletteResponse;
+      try {
+        palette = await getColorPalette(location.projectId, location.imageId, location.paletteId);
+      } catch (error) {
+        clearWorkspaceLocation();
+        setDeepLinkStatus("invalid");
+        setDeepLinkMessage(
+          error instanceof ApiClientError && !error.isNetworkError
+            ? "La paleta de esta URL ya no existe. Volvé a confirmar una paleta desde el proyecto."
+            : "No se pudo recuperar la paleta de esta URL. Intentá de nuevo más tarde.",
+        );
+        return;
+      }
+
+      // Nota: si `palette.isConfirmed` es false, EditorShell/useVectorDocument
+      // ya maneja ese caso con `emptyReason: "palette_not_confirmed"` (mismo
+      // criterio reusado tal cual, sin duplicar esa lógica acá).
+      setActiveProject(project);
+      setConfirmedPalette(palette);
+      setIsWorkspaceOpen(true);
+      setDeepLinkStatus("idle");
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (deepLinkResolvedRef.current) return;
+    deepLinkResolvedRef.current = true;
+
+    const location = readWorkspaceLocation();
+    if (!location) return;
+
+    resolveWorkspaceDeepLink(location);
+  }, [resolveWorkspaceDeepLink]);
+
   const handleProjectCreated = (project: UploadImageResponse | null) => {
     setConfirmedPalette(null);
     setSelectedLayerGroupId(null);
@@ -274,8 +350,19 @@ function App() {
         imageId={activeProject.imageId}
         paletteId={confirmedPalette.paletteId}
         projectName={activeProject.filename}
-        onClose={() => setIsWorkspaceOpen(false)}
+        onClose={() => {
+          setIsWorkspaceOpen(false);
+          clearWorkspaceLocation();
+        }}
       />
+    );
+  }
+
+  if (deepLinkStatus === "resolving") {
+    return (
+      <p className="app-header__subtitle" role="status">
+        Recuperando el proyecto de esta URL…
+      </p>
     );
   }
 
@@ -289,6 +376,12 @@ function App() {
       </header>
 
       <main>
+        {deepLinkStatus === "invalid" && deepLinkMessage && (
+          <div aria-label="Enlace del Workspace inválido" className="status-banner status-banner--error" role="alert">
+            <p>{deepLinkMessage}</p>
+          </div>
+        )}
+
         <section aria-labelledby="upload-heading" className="upload-section">
           <h2 id="upload-heading">Nuevo proyecto</h2>
           <p className="upload-section__hint">
@@ -322,7 +415,21 @@ function App() {
             {confirmedPalette && (
               <p className="upload-section__hint">
                 Paleta confirmada.{" "}
-                <button type="button" className="upload-actions__button upload-actions__button--primary" onClick={() => setIsWorkspaceOpen(true)}>
+                <button
+                  type="button"
+                  className="upload-actions__button upload-actions__button--primary"
+                  onClick={() => {
+                    // La URL se actualiza ACÁ (no en un efecto) para que un reload
+                    // inmediatamente después reconstruya la misma sesión (M2.1-S08,
+                    // spec.md punto 4 del alcance) -- no solo un deep-link pegado a mano.
+                    pushWorkspaceLocation({
+                      projectId: activeProject.projectId,
+                      imageId: activeProject.imageId,
+                      paletteId: confirmedPalette.paletteId,
+                    });
+                    setIsWorkspaceOpen(true);
+                  }}
+                >
                   Abrir en el Workspace
                 </button>
               </p>
