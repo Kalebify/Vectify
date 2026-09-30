@@ -1,9 +1,11 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Vectorify.Api.Checking;
 using Vectorify.Api.Clients;
 using Vectorify.Api.ColorPalette;
 using Vectorify.Api.Components;
 using Vectorify.Api.Contracts;
+using Vectorify.Api.Data;
 using Vectorify.Api.Dimensioning;
 using Vectorify.Api.Endpoints;
 using Vectorify.Api.Export;
@@ -63,6 +65,26 @@ builder.Services.AddHttpClient<IPythonVectorizationClient, PythonVectorizationCl
     client.BaseAddress = new Uri(options.BaseUrl);
     client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
 });
+
+// PostgreSQL / EF Core (M2.2-S01): primera infraestructura de base de datos
+// relacional real del proyecto, en paralelo a los registries de archivos JSON
+// existentes bajo App_Data/ (que esta tarjeta no toca). Connection string SOLO por
+// variable de entorno (Postgres__ConnectionString, ver PostgresOptions) -- nunca en
+// appsettings.json/appsettings.Development.json. Connection pooling: Npgsql lo trae
+// activado por defecto, no requiere configuración adicional. VectorizationDbContext es
+// deliberadamente mínimo (ver Data/VectorizationDbContext.cs): "Modelo completo de
+// dominio" es M2.2-S02, la tarjeta siguiente.
+builder.Services
+    .AddOptions<PostgresOptions>()
+    .Bind(builder.Configuration.GetSection(PostgresOptions.SectionName));
+
+builder.Services.AddDbContext<VectorizationDbContext>((sp, options) =>
+{
+    var postgresOptions = sp.GetRequiredService<IOptions<PostgresOptions>>().Value;
+    options.UseNpgsql(postgresOptions.ConnectionString);
+});
+
+builder.Services.AddScoped<IDatabaseHealthChecker, DatabaseHealthChecker>();
 
 // CORS: React se sirve desde otro origen (p. ej. http://localhost:5173) que la
 // Web API (http://localhost:5080), así que sin esta política el navegador bloquearía
@@ -489,6 +511,46 @@ builder.Services.AddScoped<IExportService, ExportService>();
 
 var app = builder.Build();
 
+// Aplica las migraciones de EF Core/PostgreSQL versionadas automáticamente al
+// arrancar -- flujo correcto que pide la tarjeta M2.2-S01 (Database.Migrate(),
+// NUNCA EnsureCreated(): EnsureCreated() no es compatible con un historial de
+// migraciones versionado y está explícitamente prohibido). Tolerante a fallos, mismo
+// criterio que el chequeo del motor Python: si Postgres no está configurado o no
+// responde, la API sigue arrancando igual -- el estado real queda reflejado en
+// GET /api/v1/system/health, nunca tira una excepción no controlada que tumbe el
+// proceso. El log nunca expone la connection string completa, solo host/puerto/DB
+// (ver DatabaseConnectionDescriber).
+using (var migrationScope = app.Services.CreateScope())
+{
+    var postgresOptions = migrationScope.ServiceProvider.GetRequiredService<IOptions<PostgresOptions>>().Value;
+    var migrationLogger = migrationScope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
+    if (string.IsNullOrWhiteSpace(postgresOptions.ConnectionString))
+    {
+        migrationLogger.LogWarning(
+            "Postgres:ConnectionString no está configurado: se omite la migración automática al arrancar.");
+    }
+    else
+    {
+        var target = DatabaseConnectionDescriber.Describe(postgresOptions.ConnectionString);
+        try
+        {
+            var dbContext = migrationScope.ServiceProvider.GetRequiredService<VectorizationDbContext>();
+            migrationLogger.LogInformation("Aplicando migraciones de PostgreSQL en {Target}...", target);
+            dbContext.Database.Migrate();
+            migrationLogger.LogInformation("Migraciones de PostgreSQL aplicadas correctamente en {Target}.", target);
+        }
+        catch (Exception ex)
+        {
+            migrationLogger.LogError(
+                ex,
+                "No se pudieron aplicar las migraciones de PostgreSQL en {Target}. La API sigue arrancando; " +
+                "el estado real se refleja en GET /api/v1/system/health.",
+                target);
+        }
+    }
+}
+
 var allowedOrigins = app.Services.GetRequiredService<IOptions<FrontendCorsOptions>>().Value.GetOrigins();
 if (allowedOrigins.Length == 0)
 {
@@ -530,10 +592,12 @@ app.MapGet("/health", () => Results.Ok(new
 // nunca "cae" por culpa de Python), reflejando online/degraded según corresponda.
 app.MapGet("/api/v1/system/health", async (
     IPythonVectorizationClient pythonClient,
+    IDatabaseHealthChecker databaseHealthChecker,
     ILogger<Program> logger,
     CancellationToken cancellationToken) =>
 {
     var pythonResult = await pythonClient.CheckHealthAsync(cancellationToken);
+    var databaseResult = await databaseHealthChecker.CheckHealthAsync(cancellationToken);
 
     var pythonStatus = pythonResult.State switch
     {
@@ -545,21 +609,35 @@ app.MapGet("/api/v1/system/health", async (
         _ => "error",
     };
 
-    var overallStatus = pythonResult.State == PythonHealthState.Online ? "online" : "degraded";
+    var databaseStatus = databaseResult.State switch
+    {
+        DatabaseHealthState.Online => "online",
+        DatabaseHealthState.Unavailable => "unavailable",
+        DatabaseHealthState.Error => "error",
+        _ => "error",
+    };
+
+    var overallStatus = pythonResult.State == PythonHealthState.Online && databaseResult.State == DatabaseHealthState.Online
+        ? "online"
+        : "degraded";
 
     if (overallStatus == "degraded")
     {
         logger.LogWarning(
-            "Estado global degradado: motor Python en estado {PythonStatus} ({Message})",
+            "Estado global degradado: motor Python en estado {PythonStatus} ({PythonMessage}); " +
+            "PostgreSQL en estado {DatabaseStatus} ({DatabaseMessage})",
             pythonStatus,
-            pythonResult.Message);
+            pythonResult.Message,
+            databaseStatus,
+            databaseResult.Message);
     }
 
     var response = new SystemHealthResponse(
         Status: overallStatus,
         Timestamp: DateTimeOffset.UtcNow,
         Api: new ApiHealthInfo("online"),
-        Python: new PythonHealthInfo(pythonStatus, pythonResult.Service, pythonResult.Version, pythonResult.Message));
+        Python: new PythonHealthInfo(pythonStatus, pythonResult.Service, pythonResult.Version, pythonResult.Message),
+        Database: new DatabaseHealthInfo(databaseStatus, databaseResult.Message));
 
     return Results.Ok(response);
 })

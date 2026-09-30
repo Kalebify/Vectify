@@ -54,7 +54,12 @@ const PYTHON_STATUS_TONE: Record<PythonStatus, StatusTone> = {
 const BANNER_COPY: Record<"loading" | "online" | "degraded" | "error", string> = {
   loading: "Consultando el estado del sistema…",
   online: "Todos los servicios están en línea.",
-  degraded: "La Web API está en línea, pero el motor Python presenta problemas.",
+  // Desde M2.2-S01 "degraded" puede deberse a Python O a PostgreSQL (ver
+  // GET /api/v1/system/health, campo "database") -- copy deliberadamente
+  // genérico para no atribuir el problema a un servicio específico que
+  // podría no ser el real. El detalle por servicio ya se ve en las
+  // ServiceCard de abajo.
+  degraded: "La Web API está en línea, pero uno o más servicios dependientes presentan problemas.",
   error: "No se pudo contactar a la Web API.",
 };
 

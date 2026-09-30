@@ -12,6 +12,17 @@
          únicamente Swashbuckle para generar el documento OpenAPI y servir Swagger UI. -->
     <PackageReference Include="SixLabors.ImageSharp" Version="2.1.13" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.3" />
+    <!-- PostgreSQL/EF Core (M2.2-S01): primera infraestructura de base de datos
+         relacional real del proyecto, en paralelo a los registries de archivos JSON
+         existentes bajo App_Data/ (que esta tarjeta no toca). -->
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
+    <!-- Solo para el tooling de diseño (dotnet ef migrations add / database update),
+         nunca se necesita en runtime: PrivateAssets evita que se propague como
+         dependencia a proyectos que referencien este. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.20">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
   </ItemGroup>
 
 </Project>
