@@ -2188,6 +2188,30 @@ main {
   color: var(--text-h);
 }
 
+/* M2.1-S07, ronda de fix 1: rename inline del título (ver LayerInfoPanel, prop onRename). */
+.layer-info-panel__title-input {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-h);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 2px 4px;
+  min-width: 0;
+  flex: 1 1 auto;
+  font-family: inherit;
+}
+
+.layer-info-panel__title-input:hover:not(:disabled),
+.layer-info-panel__title-input:focus {
+  border-color: var(--border);
+}
+
+.layer-info-panel__title-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .layer-info-panel__details {
   margin: 0;
 }

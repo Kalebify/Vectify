@@ -47,6 +47,22 @@ export function setLayerLocked(
   );
 }
 
+/** Persiste el nombre editable (rename) de una capa -- sidecar LayerLayout (ronda de fix 2), NO ColorPaletteService.RenameAsync (ese rechaza con 409 en cuanto la paleta está confirmada). NUNCA afecta GroupId/Visible/Locked/Order. */
+export function setLayerName(
+  projectId: string,
+  imageId: string,
+  paletteId: string,
+  groupId: string,
+  name: string,
+  signal?: AbortSignal,
+): Promise<LayerLayoutSetResponse> {
+  return httpClient.postJson<LayerLayoutSetResponse>(
+    `${baseUrl(projectId, imageId, paletteId)}/${groupId}/rename`,
+    { name },
+    { signal },
+  );
+}
+
 /** Persiste el nuevo orden visual COMPLETO de las capas (Drag & Drop) -- NUNCA toca d/transform/geometría. */
 export function reorderLayers(
   projectId: string,

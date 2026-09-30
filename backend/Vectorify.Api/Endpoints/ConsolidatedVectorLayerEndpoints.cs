@@ -116,7 +116,12 @@ public static class ConsolidatedVectorLayerEndpoints
 
         return new ConsolidatedVectorLayerPayload(
             Id: layer.GroupId,
-            Name: layer.Name,
+            // Nombre EFECTIVO (ronda de fix 2): el override del sidecar LayerLayout
+            // si existe (rename post-confirmación, ver LayerLayoutEndpoints), o el
+            // snapshot original de VectorLayer.Name (capturado de ColorGroup.Name al
+            // generar las capas, sin cambios acá) -- mismo criterio ya usado para
+            // Visible/Locked/Order.
+            Name: layout.Name ?? layer.Name,
             ColorHex: layer.ColorHex,
             Fill: layer.ColorHex,
             VectorId: layer.VectorId,

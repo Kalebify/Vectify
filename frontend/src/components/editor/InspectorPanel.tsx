@@ -3,7 +3,12 @@ import { LayerInfoPanel } from "../layers/LayerInfoPanel";
 import { ManufacturingOperationSummary } from "../layers/ManufacturingOperationSummary";
 import type { UseLaserWarningsState } from "../../hooks/useLaserWarnings";
 import type { VectorDocumentLayer } from "../../hooks/useVectorDocument";
-import type { ManufacturingOperationSummaryPayload, ManufacturingOperationValue } from "../../types/manufacturingOperations";
+import type {
+  ManufacturingOperationChoice,
+  ManufacturingOperationPayload,
+  ManufacturingOperationSummaryPayload,
+  ManufacturingOperationValue,
+} from "../../types/manufacturingOperations";
 
 interface InspectorPanelProps {
   layers: VectorDocumentLayer[];
@@ -20,6 +25,13 @@ interface InspectorPanelProps {
   onToggleLocked: () => void;
   /** Cache de sesión de resultados del Laser Checker (M1-S08) por capa -- ver useLaserWarnings. */
   laserWarnings: UseLaserWarningsState;
+  /** Rename inline de la capa seleccionada (fix round M2.1-S07) -- ver useVectorDocument.renameLayer. */
+  onRename: (groupId: string, name: string) => void;
+  /** groupId -> intención de fabricación vigente (M2-S07/MVP2, ver useManufacturingOperations). */
+  operations: Record<string, ManufacturingOperationPayload>;
+  onChangeOperation: (groupId: string, operation: ManufacturingOperationChoice) => void;
+  /** groupId de la capa cuya operación se está guardando, para deshabilitar su selector mientras la request está en curso. */
+  mutatingGroupId: string | null;
 }
 
 function summarize(layers: VectorDocumentLayer[]): ManufacturingOperationSummaryPayload {
@@ -58,6 +70,14 @@ function summarize(layers: VectorDocumentLayer[]): ManufacturingOperationSummary
  * un `useConsolidatedVectorLayers` propio con `refetch` independiente), acá
  * hay una única fuente de verdad (`useVectorDocument`) y un único mecanismo
  * de refresco -- decisión documentada en IMPL.md.
+ *
+ * M2.1-S07, ronda de fix 1: el título de `LayerInfoPanel` y su fila
+ * "Operación de fabricación" eran de solo lectura -- ahora pasa `onRename`/
+ * `onChangeOperation` (ambas props OPCIONALES de `LayerInfoPanel`, ver ese
+ * componente) para que también ofrezcan edición inline desde acá, con el
+ * mismo criterio de Lock que `EditorLayersPanel` (una capa bloqueada
+ * deshabilita ambos controles). Ver IMPL.md, "Ronda de fix 1" para una
+ * limitación conocida del backend sobre Rename en este contexto.
  */
 export function InspectorPanel({
   layers,
@@ -70,6 +90,10 @@ export function InspectorPanel({
   selectedPathCount,
   onToggleLocked,
   laserWarnings,
+  onRename,
+  operations,
+  onChangeOperation,
+  mutatingGroupId,
 }: InspectorPanelProps) {
   const [operationFilter, setOperationFilter] = useState<ManufacturingOperationValue | "all">("all");
   const summary = useMemo(() => summarize(layers), [layers]);
@@ -77,6 +101,14 @@ export function InspectorPanel({
   const laserStatus = selectedLayer ? laserWarnings.statusFor(selectedLayer.groupId) : "idle";
   const laserResult = selectedLayer ? laserWarnings.resultFor(selectedLayer.groupId) : null;
   const laserError = selectedLayer ? laserWarnings.errorFor(selectedLayer.groupId) : null;
+
+  // Operación EFECTIVA de la capa seleccionada: prioriza el estado ya vivo
+  // de `useManufacturingOperations` (refleja una asignación recién hecha sin
+  // esperar un reload completo del VectorDocument) y cae al valor del
+  // consolidado (`selectedLayer.manufacturingOperation`) mientras ese hook
+  // todavía no resolvió su fetch inicial -- mismo criterio que
+  // EditorLayersPanel.
+  const isOperationMutating = selectedLayer ? mutatingGroupId === selectedLayer.groupId : false;
 
   return (
     <section aria-labelledby="inspector-heading" className="inspector-panel">
@@ -109,7 +141,7 @@ export function InspectorPanel({
                 svgUrl: selectedLayer.svgUrl,
                 pathCount: selectedLayer.pathCount,
                 componentCount: selectedLayer.componentCount,
-                manufacturingOperation: selectedLayer.manufacturingOperation,
+                manufacturingOperation: operations[selectedLayer.groupId]?.operation ?? selectedLayer.manufacturingOperation,
                 visible: isVisible,
                 locked: selectedLayer.locked,
                 order: selectedLayer.order,
@@ -131,6 +163,10 @@ export function InspectorPanel({
         isVisible={isVisible}
         onIsolate={onIsolate}
         onShowAll={onShowAll}
+        onRename={onRename}
+        renameDisabled={selectedLayer?.locked ?? false}
+        onChangeOperation={onChangeOperation}
+        operationDisabled={(selectedLayer?.locked ?? false) || isOperationMutating}
       />
 
       {selectedLayer && (

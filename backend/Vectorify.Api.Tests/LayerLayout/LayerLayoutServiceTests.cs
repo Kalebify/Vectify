@@ -153,6 +153,91 @@ public sealed class LayerLayoutServiceTests
         Assert.True(green.Visible);
     }
 
+    // ---- Name (rename, ronda de fix 2) ----
+
+    [Fact]
+    public async Task SetNameAsync_WhenValid_PersistsAndFindCurrentReadsBackTheSameValue()
+    {
+        var (service, _, _, _) = CreateService();
+
+        var result = await service.SetNameAsync(ProjectId, ImageId, PaletteId, GroupRedId, "Rojo carmesí", CancellationToken.None);
+        var ready = Assert.IsType<LayerLayoutResult.Ready>(result);
+        Assert.Equal("Rojo carmesí", ready.Record.Entries.Single(e => e.GroupId == GroupRedId).Name);
+
+        var current = service.FindCurrent(ProjectId, ImageId, PaletteId);
+        Assert.NotNull(current);
+        var entry = current!.Value.Layout!.Entries.Single(e => e.GroupId == GroupRedId);
+        Assert.Equal("Rojo carmesí", entry.Name);
+    }
+
+    [Fact]
+    public async Task SetNameAsync_TrimsWhitespaceBeforePersisting()
+    {
+        var (service, _, _, _) = CreateService();
+
+        var result = await service.SetNameAsync(ProjectId, ImageId, PaletteId, GroupRedId, "  Rojo  ", CancellationToken.None);
+
+        var ready = Assert.IsType<LayerLayoutResult.Ready>(result);
+        Assert.Equal("Rojo", ready.Record.Entries.Single(e => e.GroupId == GroupRedId).Name);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public async Task SetNameAsync_WhenNameIsNullOrWhitespace_ReturnsValidationFailed(string? name)
+    {
+        var (service, _, _, _) = CreateService();
+
+        var result = await service.SetNameAsync(ProjectId, ImageId, PaletteId, GroupRedId, name!, CancellationToken.None);
+
+        var failed = Assert.IsType<LayerLayoutResult.ValidationFailed>(result);
+        Assert.Equal("invalid_parameters", failed.Code);
+    }
+
+    [Fact]
+    public async Task SetNameAsync_RenamingOneLayer_DoesNotAffectVisibleLockedOrOrderOfTheSameLayerNorOtherLayers()
+    {
+        var (service, _, _, _) = CreateService();
+
+        await service.SetVisibleAsync(ProjectId, ImageId, PaletteId, GroupRedId, false, CancellationToken.None);
+        await service.SetLockedAsync(ProjectId, ImageId, PaletteId, GroupGreenId, true, CancellationToken.None);
+
+        var result = await service.SetNameAsync(ProjectId, ImageId, PaletteId, GroupRedId, "Rojo carmesí", CancellationToken.None);
+
+        var ready = Assert.IsType<LayerLayoutResult.Ready>(result);
+        var red = ready.Record.Entries.Single(e => e.GroupId == GroupRedId);
+        Assert.Equal("Rojo carmesí", red.Name);
+        Assert.False(red.Visible);
+        Assert.Equal(0, red.Order);
+
+        // La capa Verde (de una mutación anterior) queda intacta.
+        var green = ready.Record.Entries.Single(e => e.GroupId == GroupGreenId);
+        Assert.True(green.Locked);
+        Assert.Null(green.Name);
+    }
+
+    [Fact]
+    public async Task SetNameAsync_WhenGroupIdDoesNotExistInTheCurrentLayerSet_ReturnsNotFound()
+    {
+        var (service, _, _, _) = CreateService();
+
+        var result = await service.SetNameAsync(ProjectId, ImageId, PaletteId, Guid.NewGuid(), "Rojo carmesí", CancellationToken.None);
+
+        var notFound = Assert.IsType<LayerLayoutResult.NotFound>(result);
+        Assert.Equal("group_not_found", notFound.Code);
+    }
+
+    [Fact]
+    public void LayerLayoutDefaults_Resolve_WhenLayoutIsNull_NameIsNullForEveryLayerNeverTouched()
+    {
+        var (_, _, _, layerSet) = CreateService();
+
+        var resolved = LayerLayoutDefaults.Resolve(layerSet, layout: null);
+
+        Assert.All(resolved, e => Assert.Null(e.Name));
+    }
+
     // ---- Reorder ----
 
     [Fact]

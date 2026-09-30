@@ -89,7 +89,11 @@ function consolidatedResponse() {
 }
 
 function stubFetch(handler: (url: string) => Response | undefined) {
-  const fetch = vi.fn((input: string | URL) => {
+  // `_init` tipado explícitamente (aunque no se usa en el cuerpo) para que
+  // `fetch.mock.calls[i][1]` quede tipado como `RequestInit | undefined` --
+  // lo necesita el test de wiring de operaciones (fix round M2.1-S07) para
+  // inspeccionar el body del POST, mismo criterio que ColorPalettePanel.test.tsx.
+  const fetch = vi.fn((input: string | URL, _init?: RequestInit) => {
     const url = String(input);
     if (/\/vectors\//.test(url)) {
       return Promise.resolve(new Response(SVG_TEXT, { status: 200 }));
@@ -229,6 +233,64 @@ describe("EditorShell — sincronización básica con el documento", () => {
 
     expect(screen.getByRole("button", { name: "Ocultar la capa Rojo" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Mostrar la capa Azul" })).toBeInTheDocument();
+  });
+});
+
+describe("EditorShell — operación de fabricación (fix round M2.1-S07, wiring de useManufacturingOperations)", () => {
+  beforeEach(() => {
+    vi.stubGlobal("ResizeObserver", ImmediateResizeObserver);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("cambiar la operación desde el panel Layers del Workspace llama al endpoint de asignación con el groupId y la operación correctos", async () => {
+    const fetch = stubFetch((url) => {
+      if (url.includes("/layers/operations")) {
+        return jsonResponse({
+          projectId: PROJECT_ID,
+          imageId: IMAGE_ID,
+          paletteId: PALETTE_ID,
+          paletteVersion: 2,
+          layerSetId: LAYER_SET_ID,
+          version: 0,
+          operations: [],
+          summary: { cutCount: 0, engraveCount: 0, ignoreCount: 0, unassignedCount: 2, totalCount: 2 },
+        });
+      }
+      if (/\/layers\/[0-9a-f-]+\/operation$/.test(url)) {
+        return jsonResponse({
+          projectId: PROJECT_ID,
+          imageId: IMAGE_ID,
+          paletteId: PALETTE_ID,
+          paletteVersion: 2,
+          layerSetId: LAYER_SET_ID,
+          version: 1,
+          operations: [{ groupId: GROUP_A_ID, name: "Rojo", colorHex: "#ff0000", operation: "engrave" }],
+          summary: { cutCount: 0, engraveCount: 1, ignoreCount: 0, unassignedCount: 1, totalCount: 2 },
+        });
+      }
+      if (url.includes("/layers/consolidated")) return jsonResponse(consolidatedResponse());
+      if (/\/layers$/.test(url)) return jsonResponse(layerSetResponse());
+      if (url.endsWith(`/color-palette/${PALETTE_ID}`)) return jsonResponse(paletteResponse());
+      return undefined;
+    });
+
+    renderShell();
+    await waitFor(() => expect(screen.getByRole("application")).toBeInTheDocument());
+
+    const select = await screen.findByRole("combobox", { name: "Operación de fabricación de la capa Rojo" });
+    expect(select).toHaveValue("cut");
+
+    fireEvent.change(select, { target: { value: "engrave" } });
+
+    // El <select> refleja el valor YA PERSISTIDO (respuesta autoritativa de
+    // useManufacturingOperations.assign), no solo un cambio optimista local.
+    await waitFor(() => expect(select).toHaveValue("engrave"));
+
+    const operationCall = fetch.mock.calls.find(([input]) => /\/operation$/.test(String(input)));
+    expect(operationCall).toBeDefined();
+    expect(String(operationCall![0])).toContain(`/layers/${GROUP_A_ID}/operation`);
+    const init = operationCall![1] as RequestInit;
+    expect(JSON.parse(init.body as string)).toEqual({ operation: "engrave" });
   });
 });
 
