@@ -1,0 +1,19 @@
+{
+  "card_id": "3e8d77b2-6398-8163-98d6-cda7b426dda4",
+  "card_url": "https://app.notion.com/p/3e8d77b26398816398d6cda7b426dda4",
+  "title": "M2.2-S03 · Project Repository + API CRUD",
+  "stack": "ASP.NET Core, Frontend (solo preparado, no consumido todavia) -- primer consumo real del modelo persistente de M2.2-S02",
+  "branch": "sprint/3e8d77b2-project-repository-crud",
+  "column": "Doing",
+  "phase": "implementation",
+  "fix_rounds": 0,
+  "preview_url": null,
+  "pr_url": null,
+  "started_at": "2026-10-01T00:00:00Z",
+  "exceptions": [
+    "Corrida en modo autonomo dentro del backlog MVP2.2 (confirmado explicitamente por el usuario para las 10 tarjetas del milestone).",
+    "CONFLICTO DE RUTA DETECTADO Y RESUELTO: la tarjeta pedia literalmente POST /api/v1/projects, pero esa ruta YA EXISTE (upload multipart del flujo clasico, ProjectEndpoints.cs). La API CRUD nueva vive bajo /api/v2/projects en su lugar -- decision documentada en spec.md con justificacion tecnica, no una desviacion silenciosa.",
+    "IUserContext minimo (DevelopmentUserContext con un usuario fijo sembrado) para que el filtrado por OwnerId sea real pero sin implementar Auth real todavia -- M2.2-S09 lo reemplaza/extiende sin cambiar la abstraccion.",
+    "No conecta el flujo clasico de la UI a esta API nueva -- DoD es 'la UI PUEDE depender', no que ya dependa."
+  ]
+}
