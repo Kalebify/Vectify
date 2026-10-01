@@ -22,10 +22,25 @@ public interface IFileStorage
 
     /// <summary>Indica si existe contenido guardado bajo la clave dada.</summary>
     Task<bool> ExistsAsync(string key, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Borra el contenido guardado bajo la clave dada (M2.2-S04, agregado para que
+    /// <c>AssetService</c> pueda hacer hard-delete de un Asset individual -- el flujo
+    /// clásico nunca borra un original, por eso esta operación no existía hasta ahora).
+    /// Idempotente a propósito, mismo criterio que el resto de la interfaz: si la clave ya
+    /// no existe, NO lanza -- el resultado deseado ("esta clave no tiene contenido") ya se
+    /// cumple.
+    /// </summary>
+    Task DeleteAsync(string key, CancellationToken cancellationToken);
 }
 
-/// <summary>Metadatos devueltos tras guardar un archivo exitosamente.</summary>
-public sealed record StoredFile(string Key, long SizeBytes);
+/// <summary>
+/// Metadatos devueltos tras guardar un archivo exitosamente. <see cref="Checksum"/>
+/// (SHA-256 en hexadecimal minúscula, M2.2-S04) se calcula DURANTE <see cref="IFileStorage.SaveAsync"/>
+/// con un <see cref="System.Security.Cryptography.CryptoStream"/> mientras se copia al
+/// destino -- nunca leyendo el archivo una segunda vez.
+/// </summary>
+public sealed record StoredFile(string Key, long SizeBytes, string Checksum);
 
 /// <summary>
 /// Fallo de la capa de almacenamiento (disco lleno, permisos, I/O, etc.) — se
