@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -78,6 +79,42 @@ public sealed class LocalFileStorageTests : IDisposable
 
         await Assert.ThrowsAsync<FileStorageException>(
             () => storage.SaveAsync("../escape/original.png", new MemoryStream([1]), "image/png", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task SaveAsync_ReturnsChecksum_MatchingTheRealSha256OfTheSavedContent()
+    {
+        var storage = CreateStorage();
+        var content = new byte[] { 10, 20, 30, 40, 50, 60 };
+        var expectedChecksum = Convert.ToHexStringLower(SHA256.HashData(content));
+
+        var stored = await storage.SaveAsync("proj/img/original.png", new MemoryStream(content), "image/png", CancellationToken.None);
+
+        Assert.Equal(expectedChecksum, stored.Checksum);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_WhenKeyExists_RemovesTheFile()
+    {
+        var storage = CreateStorage();
+        var key = "proj/img/original.png";
+        await storage.SaveAsync(key, new MemoryStream([1, 2, 3]), "image/png", CancellationToken.None);
+        Assert.True(await storage.ExistsAsync(key, CancellationToken.None));
+
+        await storage.DeleteAsync(key, CancellationToken.None);
+
+        Assert.False(await storage.ExistsAsync(key, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task DeleteAsync_WhenKeyWasNeverSaved_IsIdempotentAndDoesNotThrow()
+    {
+        var storage = CreateStorage();
+
+        var exception = await Record.ExceptionAsync(
+            () => storage.DeleteAsync("no/existe/original.png", CancellationToken.None));
+
+        Assert.Null(exception);
     }
 
     public void Dispose()

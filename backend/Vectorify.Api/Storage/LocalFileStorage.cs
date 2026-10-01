@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Microsoft.Extensions.Options;
 using Vectorify.Api.Options;
 
@@ -41,13 +42,24 @@ public sealed class LocalFileStorage : IFileStorage
         var finalPath = ResolvePath(key);
         var tempPath = finalPath + ".tmp";
 
+        string checksum;
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(finalPath)!);
 
-            await using (var fileStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
+            // El checksum SHA-256 se calcula EN LA MISMA pasada de escritura (CryptoStream
+            // envuelve el FileStream) -- nunca se vuelve a leer el archivo desde disco para
+            // esto (M2.2-S04).
+            using (var sha256 = SHA256.Create())
             {
-                await content.CopyToAsync(fileStream, cancellationToken);
+                await using (var fileStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                await using (var hashingStream = new CryptoStream(fileStream, sha256, CryptoStreamMode.Write, leaveOpen: true))
+                {
+                    await content.CopyToAsync(hashingStream, cancellationToken);
+                    await hashingStream.FlushFinalBlockAsync(cancellationToken);
+                }
+
+                checksum = Convert.ToHexStringLower(sha256.Hash!);
             }
 
             File.Move(tempPath, finalPath, overwrite: true);
@@ -65,7 +77,34 @@ public sealed class LocalFileStorage : IFileStorage
         }
 
         var sizeBytes = new FileInfo(finalPath).Length;
-        return new StoredFile(key, sizeBytes);
+        return new StoredFile(key, sizeBytes, checksum);
+    }
+
+    public Task DeleteAsync(string key, CancellationToken cancellationToken)
+    {
+        var path = ResolvePath(key);
+
+        try
+        {
+            // File.Delete no lanza si el archivo no existe -- la idempotencia que pide la
+            // interfaz sale gratis de la semántica del propio BCL en ese caso, no hace falta
+            // un File.Exists previo (que además sería una condición de carrera inofensiva
+            // pero innecesaria). Pero SÍ lanza DirectoryNotFoundException si ni siquiera el
+            // directorio contenedor existe (p. ej. nunca se guardó nada bajo ese prefijo de
+            // clave) -- se atrapa aparte, abajo, porque es el MISMO resultado deseado ("esta
+            // clave no tiene contenido"), no un error real de storage.
+            File.Delete(path);
+        }
+        catch (DirectoryNotFoundException)
+        {
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.LogError(ex, "Fallo de almacenamiento local al borrar la clave {Key}", key);
+            throw new FileStorageException($"No se pudo borrar el archivo bajo la clave '{key}'.", ex);
+        }
+
+        return Task.CompletedTask;
     }
 
     public Task<Stream> OpenReadAsync(string key, CancellationToken cancellationToken)

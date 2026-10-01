@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Vectorify.Api.Storage;
 
 namespace Vectorify.Api.Tests.PhysicalUnion;
@@ -21,7 +22,7 @@ internal sealed class FakeFileStorage : IFileStorage
         await content.CopyToAsync(buffer, cancellationToken);
         var bytes = buffer.ToArray();
         Saved[key] = bytes;
-        return new StoredFile(key, bytes.Length);
+        return new StoredFile(key, bytes.Length, Convert.ToHexStringLower(SHA256.HashData(bytes)));
     }
 
     public Task<Stream> OpenReadAsync(string key, CancellationToken cancellationToken)
@@ -36,4 +37,10 @@ internal sealed class FakeFileStorage : IFileStorage
 
     public Task<bool> ExistsAsync(string key, CancellationToken cancellationToken) =>
         Task.FromResult(Saved.ContainsKey(key));
+
+    public Task DeleteAsync(string key, CancellationToken cancellationToken)
+    {
+        Saved.Remove(key);
+        return Task.CompletedTask;
+    }
 }

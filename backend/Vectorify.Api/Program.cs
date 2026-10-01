@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Vectorify.Api.Assets;
+using Vectorify.Api.Assets.Persistence;
 using Vectorify.Api.Checking;
 using Vectorify.Api.Clients;
 using Vectorify.Api.ColorPalette;
@@ -527,6 +529,26 @@ builder.Services.AddScoped<IUserContext, DevelopmentUserContext>();
 builder.Services.AddScoped<IProjectRepository, ProjectRepository>();
 builder.Services.AddScoped<IProjectService, ProjectService>();
 
+// Object Storage + gestión de Assets (M2.2-S04): CUARTA tarjeta de MVP2.2. EXTIENDE
+// IFileStorage/LocalFileStorage ya existentes desde M1-S02 (DeleteAsync nuevo, StoredFile
+// con Checksum) en vez de reinventar una abstracción paralela -- ver spec.md, "Hallazgo
+// clave". AssetService/IAssetRepository siguen el MISMO patrón arquitectónico que
+// ProjectService/IProjectRepository (M2.2-S03): Endpoint -> IAssetService -> IAssetRepository
+// (EF Core) + IFileStorage. AssetService reusa IProjectRepository (no uno propio) para
+// resolver ownership del Project dueño del Asset -- mismo criterio 404 uniforme que
+// ProjectV2Endpoints. IFileStorage sigue siendo únicamente LocalFileStorage -- MinIO/S3
+// queda diferido (ver IMPL.md), sin que esto comprometa nada: IAssetService/IAssetRepository
+// no conocen la implementación concreta.
+builder.Services
+    .AddOptions<AssetOptions>()
+    .Bind(builder.Configuration.GetSection(AssetOptions.SectionName))
+    .Validate(o => o.MaxFileSizeBytes > 0, "Asset:MaxFileSizeBytes debe ser mayor a 0.")
+    .Validate(o => o.GetAllowedContentTypes().Length > 0, "Asset:AllowedContentTypes no puede estar vacío.");
+
+builder.Services.AddSingleton<IAssetUploadValidator, AssetUploadValidator>();
+builder.Services.AddScoped<IAssetRepository, AssetRepository>();
+builder.Services.AddScoped<IAssetService, AssetService>();
+
 var app = builder.Build();
 
 // Aplica las migraciones de EF Core/PostgreSQL versionadas automáticamente al
@@ -685,6 +707,7 @@ app.MapPhysicalUnionEndpoints();
 app.MapManufacturingOperationEndpoints();
 app.MapLayerLayoutEndpoints();
 app.MapProjectV2Endpoints();
+app.MapAssetEndpoints();
 
 app.Run();
 
