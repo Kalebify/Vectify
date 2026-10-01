@@ -11,6 +11,16 @@
     <PackageReference Include="coverlet.collector" Version="6.0.2" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="9.0.9" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <!-- PostgreSQL real y efímera para los tests de integración de M2.2-S01: la
+         tarjeta prohíbe explícitamente UseInMemoryDatabase (no prueba comportamientos
+         reales de PostgreSQL). Requiere Docker disponible en el entorno de test. -->
+    <PackageReference Include="Testcontainers.PostgreSql" Version="4.15.0" />
+    <!-- Referencia directa (los tests construyen DbContextOptionsBuilder<VectorizationDbContext>
+         y llaman Database.MigrateAsync explícitamente). Versión fijada igual a la que
+         Vectorify.Api.csproj termina resolviendo (por Microsoft.EntityFrameworkCore.Design)
+         para evitar un conflicto de versiones entre ambos proyectos. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.20" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.20" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
   </ItemGroup>

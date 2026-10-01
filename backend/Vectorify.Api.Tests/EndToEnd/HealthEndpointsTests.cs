@@ -30,8 +30,14 @@ public sealed class HealthEndpointsTests
     }
 
     [Fact]
-    public async Task GetSystemHealth_WhenPythonRespondsOk_ReturnsOnlineViaRealCall()
+    public async Task GetSystemHealth_WhenPythonRespondsOkButPostgresIsUnconfigured_ReturnsDegradedWithPythonOnline()
     {
+        // Ninguno de estos tests configura Postgres:ConnectionString (ver CreateFactory):
+        // desde M2.2-S01, "online" global también depende de Postgres, así que el
+        // resultado compuesto es "degraded" aunque Python esté 100% online -- el caso
+        // "los tres arriba" lo cubre DatabaseHealthEndpointTests (con Postgres real via
+        // Testcontainers), fuera de este archivo para no pagar el costo de un container
+        // en cada uno de estos tests de Python.
         await using var python = await FakePythonServer.StartAsync(
             """{"status":"ok","service":"vectorify-python-engine","version":"0.1.0"}""");
         await using var factory = CreateFactory(python.BaseUrl);
@@ -42,11 +48,12 @@ public sealed class HealthEndpointsTests
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(body);
-        Assert.Equal("online", body!.Status);
+        Assert.Equal("degraded", body!.Status);
         Assert.Equal("online", body.Api.Status);
         Assert.Equal("online", body.Python.Status);
         Assert.Equal("vectorify-python-engine", body.Python.Service);
         Assert.Equal("0.1.0", body.Python.Version);
+        Assert.Equal("unavailable", body.Database.Status);
     }
 
     [Fact]
@@ -63,6 +70,7 @@ public sealed class HealthEndpointsTests
         Assert.Equal("degraded", body!.Status);
         Assert.Equal("online", body.Api.Status);
         Assert.Equal("unavailable", body.Python.Status);
+        Assert.Equal("unavailable", body.Database.Status);
     }
 
     [Fact]

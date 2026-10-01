@@ -1,0 +1,18 @@
+{
+  "card_id": "3e8d77b2-6398-81ca-991c-de0e64fc5e2b",
+  "card_url": "https://app.notion.com/p/3e8d77b2639881ca991cde0e64fc5e2b",
+  "title": "M2.2-S01 · PostgreSQL + EF Core + Migrations",
+  "stack": "ASP.NET Core, Infra -- primera introduccion de PostgreSQL/EF Core/Npgsql al proyecto, en paralelo a los registries de archivos JSON existentes (sin migrarlos)",
+  "branch": "sprint/3e8d77b2-postgres-efcore-migrations",
+  "column": "Done",
+  "phase": "review",
+  "fix_rounds": 0,
+  "preview_url": null,
+  "pr_url": "https://github.com/Kalebify/Vectorify/pull/32",
+  "started_at": "2026-10-01T00:00:00Z",
+  "exceptions": [
+    "Corrida en modo autonomo dentro del backlog MVP2.2 (confirmado explicitamente por el usuario via AskUserQuestion para las 10 tarjetas del milestone, mismo criterio que MVP2/MVP2.1).",
+    "Primera tarjeta fundacional de MVP2.2: introduce PostgreSQL/EF Core sin migrar ningun registry de archivos JSON existente -- coexisten en paralelo hasta que una tarjeta posterior lo decida.",
+    "Migracion inicial recomendada como minima/descartable (tabla marcador), ya que el modelo completo de dominio es explicitamente M2.2-S02, la tarjeta siguiente."
+  ]
+}

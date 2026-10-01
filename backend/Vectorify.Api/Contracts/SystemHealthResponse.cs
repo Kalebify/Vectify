@@ -10,11 +10,19 @@ public sealed record ApiHealthInfo(string Status);
 public sealed record PythonHealthInfo(string Status, string? Service, string? Version, string? Message);
 
 /// <summary>
+/// Estado de PostgreSQL tal como lo observó la Web API al chequear la conexión
+/// (M2.2-S01). Status: "online" | "unavailable" | "error" -- mismo criterio
+/// discriminado que <see cref="PythonHealthInfo"/>.
+/// </summary>
+public sealed record DatabaseHealthInfo(string Status, string? Message);
+
+/// <summary>
 /// Estado global compuesto que consume el frontend React.
-/// Status: "online" (todo ok) | "degraded" (API arriba, Python con problemas).
+/// Status: "online" (todo ok) | "degraded" (API arriba, Python y/o Postgres con problemas).
 /// </summary>
 public sealed record SystemHealthResponse(
     string Status,
     DateTimeOffset Timestamp,
     ApiHealthInfo Api,
-    PythonHealthInfo Python);
+    PythonHealthInfo Python,
+    DatabaseHealthInfo Database);

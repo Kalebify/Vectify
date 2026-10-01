@@ -31,6 +31,12 @@ de vectorización. Estado actual:
   preprocesamiento → threshold → vectorización → simplificación → Laser
   Checker → dimensiones → export) vía HTTP contra la pila real, sin agregar
   features nuevas. Ver "Flujo E2E completo" más abajo.
+- **M2.2-S01**: primera tarjeta de MVP2.2 — introduce PostgreSQL/EF Core como
+  base de datos relacional real del proyecto (antes toda la persistencia era
+  en memoria o sidecars de archivos JSON, que siguen sin tocarse). Migración
+  inicial mínima aplicada automáticamente al arrancar, health check extendido
+  y tests de integración contra una PostgreSQL real y efímera (Testcontainers).
+  Ver "PostgreSQL + EF Core" más abajo.
 
 ## Arquitectura
 
@@ -77,7 +83,9 @@ la Web API aplica una política CORS con los orígenes configurados en
 - [.NET SDK 9.0](https://dotnet.microsoft.com/download) (backend)
 - [Node.js 24.x](https://nodejs.org/) y npm (frontend)
 - [Python 3.12+](https://www.python.org/) (motor)
-- [Docker](https://www.docker.com/) + Docker Compose (para levantar todo junto)
+- [Docker](https://www.docker.com/) + Docker Compose (para levantar todo junto, incluyendo
+  PostgreSQL) -- también requerido para correr `dotnet test` desde M2.2-S01 (Testcontainers
+  levanta una PostgreSQL real y efímera para los tests de integración)
 
 ## Arranque con Docker (recomendado)
 
@@ -91,6 +99,9 @@ Con la configuración por defecto:
 - Frontend: http://localhost:5173
 - Backend (Web API): http://localhost:5080 (`/health`, `/api/v1/system/health`, Swagger en `/swagger`)
 - Motor Python: http://localhost:8001 (`/health`, `/api/v1/info`, docs en `/docs`)
+- PostgreSQL: `localhost:5432` (puerto publicado solo para inspección manual con un
+  cliente externo, ej. `psql`/pgAdmin; la Web API se conecta por el nombre de servicio
+  interno `postgres`, ver "PostgreSQL + EF Core" más abajo)
 
 `docker-compose.yml` monta un volumen nombrado (`vectorify_backend_data`) en
 `/app/App_Data` del contenedor `backend`, así que los originales
@@ -99,7 +110,9 @@ vectorización/simplificación (`PersistentProjectRegistry`,
 `PersistentThresholdConfigRegistry`, `PersistentVectorVersionRegistry`,
 `PersistentSimplificationVersionRegistry`) sobreviven a `docker compose
 down`/restart. El Laser Checker (M1-S08) no tiene registro propio: es de
-solo lectura y no persiste ningún resultado.
+solo lectura y no persiste ningún resultado. Desde M2.2-S01, otro volumen
+nombrado (`vectorify_postgres_data`) cumple el mismo rol para los datos de
+PostgreSQL -- ver "PostgreSQL + EF Core" más abajo.
 
 Abrir http://localhost:5173 debería mostrar "API Online" y "Python Online".
 Para probar la recuperación ante fallos:
@@ -124,6 +137,13 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
 
 # 2) Backend
 cd backend/Vectorify.Api
+# Postgres__ConnectionString no tiene default en appsettings.*.json (ver "PostgreSQL +
+# EF Core" más abajo) -- si querés migraciones automáticas/health check en online
+# corriendo así, sin Docker, exportá la variable primero apuntando a una PostgreSQL
+# real (por ejemplo, la de `docker compose up postgres` en el puerto publicado):
+# export Postgres__ConnectionString="Host=localhost;Port=5432;Database=vectorify;Username=vectorify;Password=vectorify_dev_password"
+# Sin esa variable, la API arranca igual (omite la migración, Postgres queda "unavailable"
+# en el health check) -- mismo criterio de tolerancia a fallos que el motor Python.
 dotnet run
 # Sirve en http://localhost:5080 (ver Properties/launchSettings.json).
 # PythonEngine:BaseUrl por defecto en appsettings.json apunta a http://localhost:8001.
@@ -144,7 +164,10 @@ npm run dev
 # los registros persistentes de proyecto/threshold/vectorización/
 # simplificación y los endpoints de preprocesamiento (M1-S03),
 # threshold (M1-S04), vectorización (M1-S05), simplificación de nodos
-# (M1-S07) y el Laser Checker de paths (M1-S08)
+# (M1-S07) y el Laser Checker de paths (M1-S08). Desde M2.2-S01 también
+# incluye tests contra una PostgreSQL real y efímera vía Testcontainers
+# (migraciones, round-trip de escritura/lectura, health check) -- REQUIERE
+# Docker disponible y tarda más que antes por eso mismo.
 cd backend
 dotnet test
 
@@ -218,6 +241,109 @@ secretos reales.
 | `LOG_LEVEL` | `services/python-engine/.env` | `info` | Nivel de logging del motor |
 | `FRONTEND_PORT` / `BACKEND_PORT` / `PYTHON_PORT` | `.env` (raíz) | `5173` / `5080` / `8001` | Puertos publicados por `docker-compose.yml` |
 | `PYTHON_ENGINE_INTERNAL_URL` | `.env` (raíz) | `http://python-engine:8000` | URL interna (red de Docker) que usa el backend para llamar a Python |
+| `Postgres__ConnectionString` | `backend` (solo variable de entorno, NUNCA appsettings.*.json) | _(vacío)_ | Connection string Npgsql completa que usa `VectorizationDbContext` (M2.2-S01). Si no está seteada, la API arranca igual, omite la migración automática y el health check reporta Postgres "unavailable" |
+| `POSTGRES_PORT` / `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | `.env` (raíz) | `5432` / `vectorify` / `vectorify` / `vectorify_dev_password` | Credenciales/puerto de ejemplo (NO reales) que `docker-compose.yml` usa para el servicio `postgres` y para construir `Postgres__ConnectionString` del `backend` |
+
+## PostgreSQL + EF Core (M2.2-S01)
+
+Primera infraestructura de base de datos relacional real del proyecto. Hasta
+esta tarjeta, TODA la persistencia era en memoria o sidecars de archivos JSON
+bajo `App_Data/` (`PersistentProjectRegistry`, `PersistentLayerLayoutVersionRegistry`,
+etc.) — esos registries **no se tocan**, siguen funcionando exactamente igual,
+en paralelo a PostgreSQL. Esta tarjeta es puramente de infraestructura: NO
+modela el dominio real (proyectos/imágenes/paletas/capas) como entidades EF —
+eso es `M2.2-S02`, la tarjeta siguiente.
+
+### `VectorizationDbContext`
+
+Deliberadamente mínimo: un único `DbSet<SchemaProbe>` (`Id`/`CreatedAt`), una
+tabla marcador **descartable** sin ningún significado de dominio, cuyo único
+propósito es demostrar el pipeline completo de punta a punta que pide el DoD
+(migrar, escribir, releer, sobrevivir a un restart de Postgres). Se espera que
+`M2.2-S02` la reemplace por el modelo real.
+
+### Configuración (`PostgresOptions`)
+
+Mismo patrón que `PythonEngineOptions`/`FrontendCorsOptions`: una clase de
+opciones tipada (`Vectorify.Api.Options.PostgresOptions`, sección `Postgres`)
+con un único campo, `ConnectionString`. A diferencia de esas dos, **nunca**
+tiene un valor por defecto en `appsettings.json` ni en
+`appsettings.Development.json` (contendría credenciales, aunque sean de
+desarrollo): se resuelve EXCLUSIVAMENTE por la variable de entorno
+`Postgres__ConnectionString`, en los tres ambientes:
+
+- **Development**: la inyecta `docker-compose.yml` (`Host=postgres;...`, nombre
+  de servicio interno de Docker). Corriendo `dotnet run` fuera de Docker, hay
+  que exportarla a mano (ver "Arranque en local" más arriba) — si no está
+  seteada, la API arranca igual (omite la migración automática, el health
+  check reporta Postgres `"unavailable"`), mismo criterio de tolerancia a
+  fallos que ya existe para el motor Python.
+- **Test**: cada test la configura directamente (Testcontainers genera una
+  PostgreSQL real y efímera por corrida), nunca pasa por `appsettings.*.json`.
+- **Production**: solo por variable de entorno real del orquestador/proveedor,
+  nunca un archivo versionado.
+
+Connection pooling: Npgsql lo trae activado por defecto: no se agregó
+configuración adicional.
+
+### Migraciones
+
+Tooling: `dotnet ef` (paquete `Microsoft.EntityFrameworkCore.Design`, referenciado
+como `PrivateAssets="all"` porque solo hace falta en tiempo de diseño). Si no
+tenés el tool global instalado: `dotnet tool install --global dotnet-ef --version 9.0.20`.
+
+```bash
+cd backend/Vectorify.Api
+
+# Crear una migración nueva a partir de cambios en VectorizationDbContext
+dotnet ef migrations add <NombreDescriptivo> --output-dir Migrations
+
+# Aplicar todas las migraciones pendientes contra la base configurada en
+# Postgres__ConnectionString (o el default de VectorizationDbContextFactory,
+# pensado para `docker compose up postgres` con el puerto publicado en el host)
+dotnet ef database update
+
+# Rollback a una migración anterior (o "0" para revertir todas)
+dotnet ef database update <MigraciónAnterior>
+```
+
+La migración inicial (`InitialCreate`) se aplica **automáticamente** al
+arrancar la API (`dbContext.Database.Migrate()` en `Program.cs`, nunca
+`EnsureCreated()` — prohibido explícitamente por la tarjeta: no es compatible
+con un historial de migraciones versionado). Tolerante a fallos: si Postgres
+no está configurado o no responde, la API sigue arrancando igual, y el log
+nunca expone la connection string completa (solo host/puerto/nombre de base,
+ver `DatabaseConnectionDescriber`).
+
+### Health check
+
+`GET /api/v1/system/health` (el mismo endpoint ya existente, no uno nuevo)
+ahora compone también el estado de PostgreSQL (`database`, mismo criterio
+discriminado que `python`: `"online"` / `"unavailable"` / `"error"`). El
+`status` global pasa a `"online"` solo si Python **y** Postgres están
+`"online"` — si cualquiera de los dos tiene problemas, `"degraded"`, sin que
+la Web API deje de responder 200 (ver ejemplo actualizado más abajo).
+
+### Docker Compose
+
+Servicio `postgres` nuevo (`postgres:17-alpine`), con volumen nombrado propio
+(`vectorify_postgres_data`) y healthcheck (`pg_isready`). `backend` depende de
+él con `condition: service_healthy` (Postgres tarda en aceptar conexiones,
+un `depends_on` simple no alcanza) — `python-engine` conserva el
+comportamiento previo (`condition: service_started`).
+
+### Testing contra PostgreSQL real
+
+Prohibido explícitamente usar `UseInMemoryDatabase` (no prueba comportamientos
+reales de PostgreSQL). `backend/Vectorify.Api.Tests` usa
+`Testcontainers.PostgreSql` para levantar una instancia real y efímera de
+PostgreSQL por corrida de tests (`VectorizationDbContextTests`: migra desde
+cero, confirma idempotencia de migrar dos veces, y hace un round-trip de
+escritura/lectura de un `SchemaProbe`; `DatabaseHealthEndpointTests`: levanta
+la Web API real vía `WebApplicationFactory` apuntando a esa misma PostgreSQL
+efímera y confirma que el health check compuesto reporta `"online"`). Requiere
+Docker disponible en el entorno donde corren los tests — confirmado disponible
+en el entorno de este sprint.
 
 ## Contrato inicial (Python → ASP.NET Core)
 
@@ -235,14 +361,17 @@ ASP.NET Core lo deserializa en un contrato tipado y compone
   "status": "online",
   "timestamp": "2026-01-01T00:00:00Z",
   "api": { "status": "online" },
-  "python": { "status": "online", "service": "vectorify-python-engine", "version": "0.1.0", "message": null }
+  "python": { "status": "online", "service": "vectorify-python-engine", "version": "0.1.0", "message": null },
+  "database": { "status": "online", "message": null }
 }
 ```
 
 Si Python está apagado, con timeout, o responde algo inválido, `python.status`
 pasa a `unavailable` / `timeout` / `invalid_response` (o `error` para otros
-códigos HTTP) y `status` global pasa a `degraded` — sin que la Web API deje
-de responder 200.
+códigos HTTP); si Postgres no está configurado, no responde, o falla de forma
+inesperada, `database.status` pasa a `unavailable` / `error` (M2.2-S01). En
+cualquiera de los dos casos, `status` global pasa a `degraded` — sin que la
+Web API deje de responder 200.
 
 ## Carga y almacenamiento de imágenes (M1-S02)
 

@@ -37,7 +37,7 @@ describe('Diagnóstico desde la respuesta HTTP', () => {
     render(<App />);
     expect(await screen.findByText(label)).toBeInTheDocument();
     expect(screen.getByText('En línea')).toBeInTheDocument();
-    expect(screen.getByText('La Web API está en línea, pero el motor Python presenta problemas.')).toBeInTheDocument();
+    expect(screen.getByText('La Web API está en línea, pero uno o más servicios dependientes presentan problemas.')).toBeInTheDocument();
   });
 
   it('muestra API offline y Python desconocido ante fallo de red', async () => {
