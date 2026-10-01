@@ -103,6 +103,23 @@ public sealed class VectorizationDbContext : DbContext
             // proyectos con DeletedAt != null. Usar IgnoreQueryFilters() explícitamente
             // para los (pocos) casos que sí necesiten verlos.
             entity.HasQueryFilter(e => e.DeletedAt == null);
+
+            // Concurrencia optimista (M2.2-S03): mapea la columna de SISTEMA "xmin" de
+            // PostgreSQL (que el motor actualiza automáticamente en cada UPDATE de la fila,
+            // sin que ninguna aplicación la escriba) como concurrency token -- en vez de
+            // agregar una columna propia tipo "RowVersion"/"byte[]". Es una shadow property
+            // (no existe como miembro en Project.cs): el nombre de la propiedad ("xmin")
+            // determina el nombre de columna por convención, y coincide deliberadamente con
+            // la columna de sistema real. IsRowVersion() = ValueGeneratedOnAddOrUpdate() +
+            // IsConcurrencyToken(). La migración generada para esto NO debe emitir
+            // AddColumn/DropColumn para "xmin" -- esa columna ya existe en TODA tabla de
+            // PostgreSQL por definición del motor, y un ALTER TABLE ADD COLUMN "xmin" falla
+            // en runtime ("column name "xmin" conflicts with a system column name"). Ver
+            // Migrations/*_AddProjectConcurrencyToken.cs (editada a mano para remover esas
+            // operaciones) e IMPL.md para el razonamiento completo.
+            entity.Property<uint>("xmin")
+                .HasColumnName("xmin")
+                .IsRowVersion();
         });
 
         modelBuilder.Entity<Asset>(entity =>
