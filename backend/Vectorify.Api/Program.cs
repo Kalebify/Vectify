@@ -15,10 +15,13 @@ using Vectorify.Api.Middleware;
 using Vectorify.Api.Options;
 using Vectorify.Api.PhysicalUnion;
 using Vectorify.Api.Preprocessing;
+using Vectorify.Api.ProjectManagement;
 using Vectorify.Api.Projects;
+using Vectorify.Api.Projects.Persistence;
 using Vectorify.Api.Simplification;
 using Vectorify.Api.Storage;
 using Vectorify.Api.Threshold;
+using Vectorify.Api.Users;
 using Vectorify.Api.Validation;
 using Vectorify.Api.VectorLayers;
 using Vectorify.Api.Vectorization;
@@ -509,6 +512,21 @@ builder.Services.AddScoped<ILayerLayoutService, LayerLayoutService>();
 // Vectorify.Api.Export.ExportService.
 builder.Services.AddScoped<IExportService, ExportService>();
 
+// Project Repository + API CRUD (M2.2-S03): TERCERA tarjeta de MVP2.2, primera que da uso
+// REAL al modelo persistente de M2.2-S02 (Project/VectorDocument/DocumentVersion/Layer/
+// PaletteColor). IUserContext es un mínimo sin Auth real (DevelopmentUserContext: siempre
+// el mismo Guid fijo, sembrado como User al arrancar -- ver DevelopmentUserSeeder más abajo
+// y Vectorify.Api.Users para el razonamiento completo); M2.2-S09 la reemplaza/extiende sin
+// que ProjectService/IProjectRepository cambien. IProjectRepository/ProjectRepository viven
+// en Vectorify.Api.Projects.Persistence (namespace NUEVO, distinto de
+// Vectorify.Api.Projects donde siguen -- sin cambios -- IProjectRegistry/ProjectRecord del
+// flujo clásico de upload). La API nueva se expone bajo /api/v2/projects, NO /api/v1/projects
+// (colisión real de ruta con el upload multipart existente -- ver spec.md, "Conflicto real
+// detectado", e IMPL.md).
+builder.Services.AddScoped<IUserContext, DevelopmentUserContext>();
+builder.Services.AddScoped<IProjectRepository, ProjectRepository>();
+builder.Services.AddScoped<IProjectService, ProjectService>();
+
 var app = builder.Build();
 
 // Aplica las migraciones de EF Core/PostgreSQL versionadas automáticamente al
@@ -539,13 +557,19 @@ using (var migrationScope = app.Services.CreateScope())
             migrationLogger.LogInformation("Aplicando migraciones de PostgreSQL en {Target}...", target);
             dbContext.Database.Migrate();
             migrationLogger.LogInformation("Migraciones de PostgreSQL aplicadas correctamente en {Target}.", target);
+
+            // Siembra el User "dev" fijo que DevelopmentUserContext (M2.2-S03) siempre
+            // devuelve -- acá, al arrancar, y no lazily en el primer request, para que la FK
+            // Project.OwnerId -> Users.Id nunca falle al crear el primer proyecto de una
+            // sesión de desarrollo nueva. Idempotente (ver DevelopmentUserSeeder).
+            DevelopmentUserSeeder.EnsureSeededAsync(dbContext).GetAwaiter().GetResult();
         }
         catch (Exception ex)
         {
             migrationLogger.LogError(
                 ex,
-                "No se pudieron aplicar las migraciones de PostgreSQL en {Target}. La API sigue arrancando; " +
-                "el estado real se refleja en GET /api/v1/system/health.",
+                "No se pudieron aplicar las migraciones de PostgreSQL (o sembrar el usuario de desarrollo) en " +
+                "{Target}. La API sigue arrancando; el estado real se refleja en GET /api/v1/system/health.",
                 target);
         }
     }
@@ -660,6 +684,7 @@ app.MapComponentGroupEndpoints();
 app.MapPhysicalUnionEndpoints();
 app.MapManufacturingOperationEndpoints();
 app.MapLayerLayoutEndpoints();
+app.MapProjectV2Endpoints();
 
 app.Run();
 
