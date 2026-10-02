@@ -3,7 +3,7 @@ using Vectorify.Api.Data;
 
 namespace Vectorify.Api.VectorDocuments.Persistence;
 
-/// <summary>Implementación EF Core de <see cref="IVectorDocumentRepository"/> (M2.2-S05). Ver la interfaz para el rol en la arquitectura.</summary>
+/// <summary>Implementación EF Core de <see cref="IVectorDocumentRepository"/> (M2.2-S05/S06). Ver la interfaz para el rol en la arquitectura.</summary>
 public sealed class VectorDocumentRepository : IVectorDocumentRepository
 {
     private readonly VectorizationDbContext _dbContext;
@@ -17,7 +17,7 @@ public sealed class VectorDocumentRepository : IVectorDocumentRepository
         Guid projectId, Guid ownerId, DocumentSnapshot snapshot, CancellationToken cancellationToken)
     {
         var project = await _dbContext.Projects
-            .Include(p => p.VectorDocuments).ThenInclude(d => d.Versions).ThenInclude(v => v.Layers)
+            .Include(p => p.VectorDocuments).ThenInclude(d => d.Versions)
             .FirstOrDefaultAsync(p => p.Id == projectId && p.OwnerId == ownerId, cancellationToken);
 
         if (project is null)
@@ -56,11 +56,6 @@ public sealed class VectorDocumentRepository : IVectorDocumentRepository
             _dbContext.Add(document);
         }
 
-        document.WidthMm = snapshot.WidthMm;
-        document.HeightMm = snapshot.HeightMm;
-        document.ViewBox = snapshot.ViewBox;
-        document.SchemaVersion = snapshot.SchemaVersion;
-
         var nextVersionNumber = document.Versions.Count == 0
             ? 1
             : document.Versions.Max(v => v.VersionNumber) + 1;
@@ -71,6 +66,10 @@ public sealed class VectorDocumentRepository : IVectorDocumentRepository
             Id = Guid.NewGuid(),
             VectorDocumentId = document.Id,
             VersionNumber = nextVersionNumber,
+            WidthMm = snapshot.WidthMm,
+            HeightMm = snapshot.HeightMm,
+            ViewBox = snapshot.ViewBox,
+            SchemaVersion = snapshot.SchemaVersion,
             Origin = snapshot.Origin,
             MetadataJson = snapshot.MetadataJson,
             CreatedAt = now,
@@ -78,22 +77,13 @@ public sealed class VectorDocumentRepository : IVectorDocumentRepository
         document.Versions.Add(version);
         _dbContext.Add(version); // siempre nuevo -- ver comentario de arriba sobre VectorDocument.
 
-        // "IDs estables de Layer" (spec.md M2.2-S05): Layer.Id reutiliza el groupId clásico
-        // VERBATIM en cada versión nueva -- pero Layer.Id es la PK GLOBAL de la tabla "layers"
-        // (una sola fila puede existir con ese Id en TODA la base, nunca una por VersionId), así
-        // que un segundo Save real con el mismo groupId no puede volver a INSERTAR una fila con
-        // ese mismo Id sin violar esa PK. Se resuelve con upsert-por-Id: si el groupId YA
-        // existía en una versión anterior de este MISMO VectorDocument, esa fila se REUTILIZA
-        // (se actualiza in-place y se repunta a la versión nueva) en vez de insertar una
-        // segunda -- conserva la identidad estable que pide el criterio de aceptación sin violar
-        // el esquema. Efecto secundario documentado (ver reporte del sprint): una vez que una
-        // versión posterior "adopta" un Layer, la versión anterior deja de tener esa fila entre
-        // sus hijos -- aceptable en esta tarjeta porque GET .../document solo lee la versión
-        // ACTUAL (Project.CurrentVersionId), nunca el historial completo de versiones viejas.
-        var existingLayersById = document.Versions
-            .SelectMany(v => v.Layers)
-            .ToDictionary(l => l.Id);
-
+        // M2.2-S06: cada checkpoint vuelve a insertar TODOS los Layers/PaletteColors vigentes
+        // como filas 100% NUEVAS (Guid.NewGuid() propio por fila, nunca reutiliza/actualiza una
+        // fila de una versión anterior) -- ya NO hace falta la rama upsert-vs-insert de M2.2-S05
+        // (ver el conflicto #1 de spec.md M2.2-S06: ese upsert "robaba" la fila de la versión
+        // anterior, dejándola con huecos -- violaba la inmutabilidad que esta tarjeta exige).
+        // Layer.GroupId preserva la correlación "mismo layer conceptual" entre versiones sin
+        // comprometer la PK global de "layers" (Layer.Id).
         foreach (var layerSnapshot in snapshot.Layers)
         {
             var color = new PaletteColor
@@ -108,36 +98,22 @@ public sealed class VectorDocumentRepository : IVectorDocumentRepository
             version.PaletteColors.Add(color);
             _dbContext.Add(color); // siempre nuevo -- ver comentario sobre VectorDocument más arriba.
 
-            if (existingLayersById.TryGetValue(layerSnapshot.LayerId, out var existingLayer))
+            var layer = new Layer
             {
-                existingLayer.VersionId = version.Id;
-                existingLayer.ColorId = color.Id;
-                existingLayer.Name = layerSnapshot.Name;
-                existingLayer.Order = layerSnapshot.Order;
-                existingLayer.Visible = layerSnapshot.Visible;
-                existingLayer.Locked = layerSnapshot.Locked;
-                existingLayer.ManufacturingOperation = layerSnapshot.ManufacturingOperation;
-                existingLayer.SvgAssetId = layerSnapshot.SvgAssetId;
-                existingLayer.PathCount = layerSnapshot.PathCount;
-            }
-            else
-            {
-                var newLayer = new Layer
-                {
-                    Id = layerSnapshot.LayerId,
-                    VersionId = version.Id,
-                    ColorId = color.Id,
-                    Name = layerSnapshot.Name,
-                    Order = layerSnapshot.Order,
-                    Visible = layerSnapshot.Visible,
-                    Locked = layerSnapshot.Locked,
-                    ManufacturingOperation = layerSnapshot.ManufacturingOperation,
-                    SvgAssetId = layerSnapshot.SvgAssetId,
-                    PathCount = layerSnapshot.PathCount,
-                };
-                version.Layers.Add(newLayer);
-                _dbContext.Add(newLayer); // siempre nuevo -- ver comentario sobre VectorDocument más arriba.
-            }
+                Id = Guid.NewGuid(),
+                GroupId = layerSnapshot.LayerId,
+                VersionId = version.Id,
+                ColorId = color.Id,
+                Name = layerSnapshot.Name,
+                Order = layerSnapshot.Order,
+                Visible = layerSnapshot.Visible,
+                Locked = layerSnapshot.Locked,
+                ManufacturingOperation = layerSnapshot.ManufacturingOperation,
+                SvgAssetId = layerSnapshot.SvgAssetId,
+                PathCount = layerSnapshot.PathCount,
+            };
+            version.Layers.Add(layer);
+            _dbContext.Add(layer); // siempre nuevo -- ver comentario sobre VectorDocument más arriba.
         }
 
         // Fase 1: inserta VectorDocument/DocumentVersion/Layer/PaletteColor -- Project.CurrentVersionId
@@ -162,7 +138,6 @@ public sealed class VectorDocumentRepository : IVectorDocumentRepository
         Guid projectId, Guid ownerId, CancellationToken cancellationToken)
     {
         var project = await _dbContext.Projects
-            .Include(p => p.VectorDocuments)
             .FirstOrDefaultAsync(p => p.Id == projectId && p.OwnerId == ownerId, cancellationToken);
 
         if (project?.CurrentVersionId is null)
@@ -170,41 +145,195 @@ public sealed class VectorDocumentRepository : IVectorDocumentRepository
             return null;
         }
 
+        // Resuelve el VersionNumber de la versión actual y delega a FindVersionAsync -- caso
+        // particular de la lectura genérica por número (M2.2-S06), sin duplicar la carga del
+        // grafo completo (Layers/PaletteColors).
+        var currentVersionNumber = await _dbContext.DocumentVersions
+            .Where(v => v.Id == project.CurrentVersionId)
+            .Select(v => (int?)v.VersionNumber)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (currentVersionNumber is null)
+        {
+            return null;
+        }
+
+        return await FindVersionAsync(projectId, ownerId, currentVersionNumber.Value, cancellationToken);
+    }
+
+    public async Task<(VectorDocument Document, DocumentVersion Version)?> FindVersionAsync(
+        Guid projectId, Guid ownerId, int versionNumber, CancellationToken cancellationToken)
+    {
+        var project = await _dbContext.Projects
+            .Include(p => p.VectorDocuments)
+            .FirstOrDefaultAsync(p => p.Id == projectId && p.OwnerId == ownerId, cancellationToken);
+
+        var document = project?.VectorDocuments.FirstOrDefault();
+        if (document is null)
+        {
+            return null;
+        }
+
         var version = await _dbContext.DocumentVersions
             .Include(v => v.Layers).ThenInclude(l => l.Color)
             .Include(v => v.PaletteColors)
-            .FirstOrDefaultAsync(v => v.Id == project.CurrentVersionId, cancellationToken);
+            .FirstOrDefaultAsync(v => v.VectorDocumentId == document.Id && v.VersionNumber == versionNumber, cancellationToken);
 
         if (version is null)
         {
             return null;
         }
 
-        var document = project.VectorDocuments.First(d => d.Id == version.VectorDocumentId);
         return (document, version);
+    }
+
+    public async Task<IReadOnlyList<DocumentVersion>?> ListVersionsAsync(
+        Guid projectId, Guid ownerId, CancellationToken cancellationToken)
+    {
+        var project = await _dbContext.Projects
+            .Include(p => p.VectorDocuments)
+            .FirstOrDefaultAsync(p => p.Id == projectId && p.OwnerId == ownerId, cancellationToken);
+
+        var document = project?.VectorDocuments.FirstOrDefault();
+        if (document is null)
+        {
+            return null;
+        }
+
+        return await _dbContext.DocumentVersions
+            .Where(v => v.VectorDocumentId == document.Id)
+            .OrderByDescending(v => v.VersionNumber)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<VectorDocumentSaveOutcome?> RestoreAsync(
+        Guid projectId, Guid ownerId, int versionNumber, CancellationToken cancellationToken)
+    {
+        var project = await _dbContext.Projects
+            .Include(p => p.VectorDocuments).ThenInclude(d => d.Versions)
+            .FirstOrDefaultAsync(p => p.Id == projectId && p.OwnerId == ownerId, cancellationToken);
+
+        var document = project?.VectorDocuments.FirstOrDefault();
+        if (project is null || document is null)
+        {
+            return null;
+        }
+
+        var sourceVersionMeta = document.Versions.FirstOrDefault(v => v.VersionNumber == versionNumber);
+        if (sourceVersionMeta is null)
+        {
+            return null;
+        }
+
+        // Carga el grafo completo (Layers/PaletteColors) de la versión origen -- document.Versions
+        // (de arriba) solo trae metadata vía el Include plano, sin sus hijos.
+        var sourceVersion = await _dbContext.DocumentVersions
+            .Include(v => v.Layers)
+            .Include(v => v.PaletteColors)
+            .FirstAsync(v => v.Id == sourceVersionMeta.Id, cancellationToken);
+
+        // Misma transacción EF explícita de dos fases que SaveAsync -- ver ese método para el
+        // razonamiento completo del ciclo Project <-> VectorDocument <-> DocumentVersion.
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        var nextVersionNumber = document.Versions.Max(v => v.VersionNumber) + 1;
+        var now = DateTimeOffset.UtcNow;
+
+        var newVersion = new DocumentVersion
+        {
+            Id = Guid.NewGuid(),
+            VectorDocumentId = document.Id,
+            VersionNumber = nextVersionNumber,
+            WidthMm = sourceVersion.WidthMm,
+            HeightMm = sourceVersion.HeightMm,
+            ViewBox = sourceVersion.ViewBox,
+            SchemaVersion = sourceVersion.SchemaVersion,
+            Origin = DocumentVersionOrigin.Restore,
+            MetadataJson = $"{{\"restoredFromVersion\":{versionNumber}}}",
+            CreatedAt = now,
+        };
+        document.Versions.Add(newVersion);
+        _dbContext.Add(newVersion);
+
+        // Copia fresca (ids nuevos) de cada PaletteColor de la versión origen -- se necesita el
+        // mapeo viejo-Id -> nuevo-Id para poder repuntar Layer.ColorId más abajo sin reutilizar
+        // ninguna fila de la versión origen (misma garantía de inmutabilidad que SaveAsync).
+        var colorIdMap = new Dictionary<Guid, Guid>();
+        foreach (var color in sourceVersion.PaletteColors)
+        {
+            var newColor = new PaletteColor
+            {
+                Id = Guid.NewGuid(),
+                VersionId = newVersion.Id,
+                Hex = color.Hex,
+                Coverage = color.Coverage,
+                IsBackground = color.IsBackground,
+                Order = color.Order,
+            };
+            colorIdMap[color.Id] = newColor.Id;
+            newVersion.PaletteColors.Add(newColor);
+            _dbContext.Add(newColor);
+        }
+
+        // Copia fresca (ids nuevos) de cada Layer de la versión origen -- SvgAssetId se reusa
+        // TAL CUAL (el Asset ya existe en storage, no hace falta volver a subir nada, más
+        // rápido que un Save normal), GroupId también se reusa TAL CUAL (preserva la identidad
+        // conceptual del layer a través de la restauración).
+        foreach (var layer in sourceVersion.Layers)
+        {
+            var newLayer = new Layer
+            {
+                Id = Guid.NewGuid(),
+                GroupId = layer.GroupId,
+                VersionId = newVersion.Id,
+                ColorId = colorIdMap[layer.ColorId],
+                Name = layer.Name,
+                Order = layer.Order,
+                Visible = layer.Visible,
+                Locked = layer.Locked,
+                ManufacturingOperation = layer.ManufacturingOperation,
+                SvgAssetId = layer.SvgAssetId,
+                PathCount = layer.PathCount,
+            };
+            newVersion.Layers.Add(newLayer);
+            _dbContext.Add(newLayer);
+        }
+
+        // Fase 1: inserta DocumentVersion/Layer/PaletteColor -- Project.CurrentVersionId todavía
+        // no se tocó (grafo sin ciclos, ver SaveAsync).
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        project!.CurrentVersionId = newVersion.Id;
+        project.UpdatedAt = now;
+
+        // Fase 2: repunta Project a la versión nueva. Mismo mecanismo de concurrencia optimista
+        // (xmin) que SaveAsync -- un Save/Restore concurrente sobre el mismo Project entre medio
+        // dispara DbUpdateConcurrencyException acá (VectorDocumentService la traduce a 409).
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
+
+        return new VectorDocumentSaveOutcome(project.Id, newVersion.VersionNumber, project.UpdatedAt);
     }
 
     public async Task<Layer?> UpdateLayerAsync(
         Guid projectId, Guid ownerId, Guid layerId, LayerPatch patch, CancellationToken cancellationToken)
     {
-        var layer = await _dbContext.Layers
-            .Include(l => l.Version).ThenInclude(v => v!.VectorDocument)
-            .FirstOrDefaultAsync(l => l.Id == layerId, cancellationToken);
+        var project = await _dbContext.Projects
+            .FirstOrDefaultAsync(p => p.Id == projectId && p.OwnerId == ownerId, cancellationToken);
 
-        if (layer?.Version?.VectorDocument is null)
+        if (project?.CurrentVersionId is null)
         {
             return null;
         }
 
-        var project = await _dbContext.Projects.FirstOrDefaultAsync(
-            p => p.Id == projectId && p.Id == layer.Version.VectorDocument.ProjectId && p.OwnerId == ownerId,
-            cancellationToken);
+        // M2.2-S06: busca por GroupId (el groupId clásico, estable a través de versiones) scopeado
+        // a la DocumentVersion ACTUAL -- ya NO por Layer.Id (esa PK es una fila nueva en cada
+        // checkpoint desde esta tarjeta, ver el conflicto #1 de spec.md M2.2-S06).
+        var layer = await _dbContext.Layers
+            .FirstOrDefaultAsync(l => l.VersionId == project.CurrentVersionId && l.GroupId == layerId, cancellationToken);
 
-        // 404 uniforme: el proyecto de la ruta no coincide con el dueño real del layer, O no
-        // pertenece al usuario efectivo, O el layer pertenece a una versión histórica ya
-        // superada (solo la versión ACTUAL del proyecto es editable vía este endpoint, ver
-        // IVectorDocumentRepository).
-        if (project is null || project.CurrentVersionId != layer.VersionId)
+        if (layer is null)
         {
             return null;
         }

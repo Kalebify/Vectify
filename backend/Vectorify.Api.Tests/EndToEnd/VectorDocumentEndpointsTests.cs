@@ -329,11 +329,13 @@ public sealed class VectorDocumentEndpointsTests : IAsyncLifetime
         var saveBody = await saveResponse.Content.ReadFromJsonAsync<VectorDocumentSaveResponse>();
 
         // Bypass de la API: fuerza un SchemaVersion mayor al que este backend entiende.
+        // M2.2-S06: SchemaVersion vive en DocumentVersion, no en VectorDocument.
         await using (var scope = factory.Services.CreateAsyncScope())
         {
             var dbContext = scope.ServiceProvider.GetRequiredService<VectorizationDbContext>();
-            var document = await dbContext.VectorDocuments.FirstAsync(d => d.ProjectId == saveBody!.ProjectId);
-            document.SchemaVersion = 2;
+            var project = await dbContext.Projects.FirstAsync(p => p.Id == saveBody!.ProjectId);
+            var version = await dbContext.DocumentVersions.FirstAsync(v => v.Id == project.CurrentVersionId);
+            version.SchemaVersion = 2;
             await dbContext.SaveChangesAsync();
         }
 
@@ -436,6 +438,170 @@ public sealed class VectorDocumentEndpointsTests : IAsyncLifetime
 
         var patched = await patchResponse.Content.ReadFromJsonAsync<VectorDocumentLayerResponse>();
         Assert.Equal("unassigned", patched!.ManufacturingOperation);
+    }
+
+    [Fact]
+    public async Task ListVersions_ReturnsAllVersionsNewestFirst_WithoutLayers()
+    {
+        await using var pythonServer = await FakePythonPreprocessServer.StartAsync(
+            _ => (200, "{}"), respondColorPalette: _ => (200, ColorPalettePayloads.SuccessBody()));
+        await using var factory = CreateFactory(pythonServer.BaseUrl);
+        var client = factory.CreateClient();
+
+        var classic = await DetectConfirmAndGenerateLayersAsync(client);
+        var firstSave = await client.PostAsJsonAsync("/api/v2/workspaces/save", new VectorDocumentSaveRequest(
+            null, "V1", classic.ProjectId, classic.ImageId, classic.PaletteId, classic.PaletteVersion, null));
+        var firstBody = await firstSave.Content.ReadFromJsonAsync<VectorDocumentSaveResponse>();
+        await client.PostAsJsonAsync("/api/v2/workspaces/save", new VectorDocumentSaveRequest(
+            firstBody!.ProjectId, null, classic.ProjectId, classic.ImageId, classic.PaletteId, classic.PaletteVersion, null));
+
+        var listResponse = await client.GetAsync($"/api/v2/projects/{firstBody.ProjectId}/versions");
+
+        Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
+        var versions = await listResponse.Content.ReadFromJsonAsync<List<VectorDocumentVersionSummaryResponse>>();
+        Assert.NotNull(versions);
+        Assert.Equal([2, 1], versions!.Select(v => v.VersionNumber));
+        Assert.All(versions, v => Assert.Equal("MANUAL_EDIT", v.Origin));
+    }
+
+    [Fact]
+    public async Task ListVersions_NonexistentProject_ReturnsNotFound()
+    {
+        await using var pythonServer = await FakePythonPreprocessServer.StartAsync(
+            _ => (200, "{}"), respondColorPalette: _ => (200, ColorPalettePayloads.SuccessBody()));
+        await using var factory = CreateFactory(pythonServer.BaseUrl);
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync($"/api/v2/projects/{Guid.NewGuid()}/versions");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetVersion_HistoricalVersionNumber_ReturnsItEvenWhenNoLongerCurrent()
+    {
+        await using var pythonServer = await FakePythonPreprocessServer.StartAsync(
+            _ => (200, "{}"), respondColorPalette: _ => (200, ColorPalettePayloads.SuccessBody()));
+        await using var factory = CreateFactory(pythonServer.BaseUrl);
+        var client = factory.CreateClient();
+
+        var classic = await DetectConfirmAndGenerateLayersAsync(client);
+        var firstSave = await client.PostAsJsonAsync("/api/v2/workspaces/save", new VectorDocumentSaveRequest(
+            null, "V1", classic.ProjectId, classic.ImageId, classic.PaletteId, classic.PaletteVersion, null));
+        var firstBody = await firstSave.Content.ReadFromJsonAsync<VectorDocumentSaveResponse>();
+        await client.PostAsJsonAsync("/api/v2/workspaces/save", new VectorDocumentSaveRequest(
+            firstBody!.ProjectId, null, classic.ProjectId, classic.ImageId, classic.PaletteId, classic.PaletteVersion, null));
+
+        var versionResponse = await client.GetAsync($"/api/v2/projects/{firstBody.ProjectId}/versions/1");
+
+        Assert.Equal(HttpStatusCode.OK, versionResponse.StatusCode);
+        var version = await versionResponse.Content.ReadFromJsonAsync<VectorDocumentResponse>();
+        Assert.Equal(1, version!.VersionNumber);
+    }
+
+    [Fact]
+    public async Task GetVersion_NonexistentVersionNumber_ReturnsNotFound()
+    {
+        await using var pythonServer = await FakePythonPreprocessServer.StartAsync(
+            _ => (200, "{}"), respondColorPalette: _ => (200, ColorPalettePayloads.SuccessBody()));
+        await using var factory = CreateFactory(pythonServer.BaseUrl);
+        var client = factory.CreateClient();
+
+        var classic = await DetectConfirmAndGenerateLayersAsync(client);
+        var saveResponse = await client.PostAsJsonAsync("/api/v2/workspaces/save", new VectorDocumentSaveRequest(
+            null, "Única versión", classic.ProjectId, classic.ImageId, classic.PaletteId, classic.PaletteVersion, null));
+        var saveBody = await saveResponse.Content.ReadFromJsonAsync<VectorDocumentSaveResponse>();
+
+        var response = await client.GetAsync($"/api/v2/projects/{saveBody!.ProjectId}/versions/99");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task RestoreVersion_CreatesANewVersionWithTheSourceContent_AndRepointsCurrentVersion()
+    {
+        await using var pythonServer = await FakePythonPreprocessServer.StartAsync(
+            _ => (200, "{}"), respondColorPalette: _ => (200, ColorPalettePayloads.SuccessBody()));
+        await using var factory = CreateFactory(pythonServer.BaseUrl);
+        var client = factory.CreateClient();
+
+        var classic = await DetectConfirmAndGenerateLayersAsync(client);
+        var firstSave = await client.PostAsJsonAsync("/api/v2/workspaces/save", new VectorDocumentSaveRequest(
+            null, "V1", classic.ProjectId, classic.ImageId, classic.PaletteId, classic.PaletteVersion, null));
+        var firstBody = await firstSave.Content.ReadFromJsonAsync<VectorDocumentSaveResponse>();
+
+        var v1Document = await client.GetFromJsonAsync<VectorDocumentResponse>($"/api/v2/projects/{firstBody!.ProjectId}/versions/1");
+
+        // Segundo Save (mismo contenido clásico): V2 pasa a ser la actual -- V1 queda atrás,
+        // intacta.
+        var secondSave = await client.PostAsJsonAsync("/api/v2/workspaces/save", new VectorDocumentSaveRequest(
+            firstBody.ProjectId, null, classic.ProjectId, classic.ImageId, classic.PaletteId, classic.PaletteVersion, null));
+        secondSave.EnsureSuccessStatusCode();
+
+        // PATCH muta la capa de la DocumentVersion ACTUAL (V2) IN-PLACE -- V1 nunca se toca
+        // (PATCH no es un checkpoint/versión nueva, a diferencia de Save/Restore).
+        var patchResponse = await client.PatchAsJsonAsync(
+            $"/api/v2/projects/{firstBody.ProjectId}/layers/{classic.Layers[0].GroupId}",
+            new UpdateLayerRequest("Nombre cambiado antes de restaurar", null, null, null, null));
+        patchResponse.EnsureSuccessStatusCode();
+
+        var restoreResponse = await client.PostAsync($"/api/v2/projects/{firstBody.ProjectId}/versions/1/restore", null);
+
+        Assert.Equal(HttpStatusCode.OK, restoreResponse.StatusCode);
+        var restoreBody = await restoreResponse.Content.ReadFromJsonAsync<VectorDocumentSaveResponse>();
+        Assert.Equal(3, restoreBody!.VersionNumber); // siguiente número secuencial (V1 Save + V2 Save + PATCH no crea versión = próxima es V3)
+        Assert.Equal(firstBody.ProjectId, restoreBody.ProjectId);
+
+        var currentDocument = await client.GetFromJsonAsync<VectorDocumentResponse>($"/api/v2/projects/{firstBody.ProjectId}/document");
+        Assert.Equal(3, currentDocument!.VersionNumber);
+        // Contenido de V1 restaurado -- el nombre vuelve a ser el original de V1, no el
+        // patcheado sobre V2.
+        Assert.Equal(v1Document!.Layers[0].Name, currentDocument.Layers[0].Name);
+
+        var versions = await client.GetFromJsonAsync<List<VectorDocumentVersionSummaryResponse>>($"/api/v2/projects/{firstBody.ProjectId}/versions");
+        Assert.Contains(versions!, v => v.VersionNumber == 3 && v.Origin == "RESTORE");
+    }
+
+    [Fact]
+    public async Task RestoreVersion_NonexistentVersionNumber_ReturnsNotFound()
+    {
+        await using var pythonServer = await FakePythonPreprocessServer.StartAsync(
+            _ => (200, "{}"), respondColorPalette: _ => (200, ColorPalettePayloads.SuccessBody()));
+        await using var factory = CreateFactory(pythonServer.BaseUrl);
+        var client = factory.CreateClient();
+
+        var classic = await DetectConfirmAndGenerateLayersAsync(client);
+        var saveResponse = await client.PostAsJsonAsync("/api/v2/workspaces/save", new VectorDocumentSaveRequest(
+            null, "Única versión", classic.ProjectId, classic.ImageId, classic.PaletteId, classic.PaletteVersion, null));
+        var saveBody = await saveResponse.Content.ReadFromJsonAsync<VectorDocumentSaveResponse>();
+
+        var response = await client.PostAsync($"/api/v2/projects/{saveBody!.ProjectId}/versions/99/restore", null);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task VersionEndpoints_SoftDeletedProject_AllReturnNotFound()
+    {
+        // "Documento eliminado" (spec.md M2.2-S06, "Tests"): Project soft-eliminado (M2.2-S03)
+        // -> todos los endpoints de versión 404, vía el query filter global de Project.
+        await using var pythonServer = await FakePythonPreprocessServer.StartAsync(
+            _ => (200, "{}"), respondColorPalette: _ => (200, ColorPalettePayloads.SuccessBody()));
+        await using var factory = CreateFactory(pythonServer.BaseUrl);
+        var client = factory.CreateClient();
+
+        var classic = await DetectConfirmAndGenerateLayersAsync(client);
+        var saveResponse = await client.PostAsJsonAsync("/api/v2/workspaces/save", new VectorDocumentSaveRequest(
+            null, "A borrar", classic.ProjectId, classic.ImageId, classic.PaletteId, classic.PaletteVersion, null));
+        var saveBody = await saveResponse.Content.ReadFromJsonAsync<VectorDocumentSaveResponse>();
+
+        var deleteResponse = await client.DeleteAsync($"/api/v2/projects/{saveBody!.ProjectId}");
+        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v2/projects/{saveBody.ProjectId}/document")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v2/projects/{saveBody.ProjectId}/versions")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v2/projects/{saveBody.ProjectId}/versions/1")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.PostAsync($"/api/v2/projects/{saveBody.ProjectId}/versions/1/restore", null)).StatusCode);
     }
 
     private static async Task<UploadImageResponse> UploadAsync(HttpClient client)
@@ -559,6 +725,15 @@ public sealed class VectorDocumentEndpointsTests : IAsyncLifetime
             throw new InvalidOperationException("fallo de base de datos simulado");
 
         public Task<(VectorDocument Document, DocumentVersion Version)?> FindCurrentDocumentAsync(Guid projectId, Guid ownerId, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("fallo de base de datos simulado");
+
+        public Task<(VectorDocument Document, DocumentVersion Version)?> FindVersionAsync(Guid projectId, Guid ownerId, int versionNumber, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("fallo de base de datos simulado");
+
+        public Task<IReadOnlyList<DocumentVersion>?> ListVersionsAsync(Guid projectId, Guid ownerId, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("fallo de base de datos simulado");
+
+        public Task<VectorDocumentSaveOutcome?> RestoreAsync(Guid projectId, Guid ownerId, int versionNumber, CancellationToken cancellationToken) =>
             throw new InvalidOperationException("fallo de base de datos simulado");
 
         public Task<Layer?> UpdateLayerAsync(Guid projectId, Guid ownerId, Guid layerId, LayerPatch patch, CancellationToken cancellationToken) =>

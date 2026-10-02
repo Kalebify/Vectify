@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Vectorify.Api.VectorDocuments;
 
 namespace Vectorify.Api.Data;
 
@@ -147,7 +148,6 @@ public sealed class VectorizationDbContext : DbContext
         {
             entity.ToTable("vector_documents");
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.ViewBox).IsRequired();
 
             entity.HasIndex(e => e.ProjectId);
 
@@ -163,7 +163,15 @@ public sealed class VectorizationDbContext : DbContext
         {
             entity.ToTable("document_versions");
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.Origin).IsRequired();
+            entity.Property(e => e.ViewBox).IsRequired();
+
+            // Vocabulario cerrado (M2.2-S06): la columna sigue siendo texto libre (no un
+            // enum de Postgres), pero la aplicación solo puede escribir/leer uno de los 5
+            // valores de DocumentVersionOrigin -- ver DocumentVersionOriginParser.
+            entity.Property(e => e.Origin)
+                .HasConversion(o => DocumentVersionOriginParser.ToWireValue(o), s => DocumentVersionOriginParser.Parse(s))
+                .IsRequired();
+
             entity.Property(e => e.MetadataJson).HasColumnType("jsonb").IsRequired();
             entity.Property(e => e.CreatedAt).IsRequired();
 
@@ -200,6 +208,12 @@ public sealed class VectorizationDbContext : DbContext
 
             entity.HasIndex(e => e.VersionId);
             entity.HasIndex(e => e.ColorId);
+
+            // Índice único compuesto (M2.2-S06): el groupId clásico es único DENTRO de cada
+            // DocumentVersion (una fila de Layer por groupId por versión), nunca un índice
+            // único global sobre GroupId solo -- el mismo groupId SÍ se repite, a propósito,
+            // en cada versión donde ese layer conceptual estuvo presente (ver Layer.GroupId).
+            entity.HasIndex(e => new { e.VersionId, e.GroupId }).IsUnique();
 
             // DocumentVersion -> Layer: Cascade. Layer es un hijo propio de
             // DocumentVersion, nada más lo referencia -- ver ADR.

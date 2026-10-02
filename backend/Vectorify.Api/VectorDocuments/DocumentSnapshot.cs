@@ -17,7 +17,7 @@ public sealed record DocumentSnapshot(
     double HeightMm,
     string ViewBox,
     int SchemaVersion,
-    string Origin,
+    DocumentVersionOrigin Origin,
     string MetadataJson,
     IReadOnlyList<LayerSnapshot> Layers);
 
@@ -31,11 +31,11 @@ public sealed record PaletteColorSnapshot(string Hex, double Coverage, bool IsBa
 
 /// <summary>
 /// Una capa dentro de un <see cref="DocumentSnapshot"/>. <see cref="LayerId"/> es el
-/// <c>groupId</c> clásico reutilizado VERBATIM (ver spec.md M2.2-S05, "IDs estables de Layer")
-/// -- <see cref="Persistence.IVectorDocumentRepository.SaveAsync"/> hace upsert por este Id
-/// (en vez de insertar siempre una fila nueva) para no violar la unicidad de la PK de
-/// <c>layers</c> cuando el mismo groupId se vuelve a guardar en una versión posterior (ver
-/// el reporte del sprint para el detalle completo de esta decisión).
+/// <c>groupId</c> clásico reutilizado VERBATIM -- desde M2.2-S06 se persiste como
+/// <see cref="Data.Layer.GroupId"/> (columna normal, NO la PK) en una fila 100% NUEVA en
+/// cada checkpoint (<see cref="Persistence.IVectorDocumentRepository.SaveAsync"/> ya no hace
+/// upsert-por-Id, ver el conflicto #1 de spec.md M2.2-S06: el upsert de M2.2-S05 violaba la
+/// inmutabilidad de versiones históricas).
 /// </summary>
 public sealed record LayerSnapshot(
     Guid LayerId,

@@ -158,10 +158,6 @@ public sealed class ProjectRepository : IProjectRepository
             {
                 Id = Guid.NewGuid(),
                 ProjectId = duplicate.Id,
-                WidthMm = document.WidthMm,
-                HeightMm = document.HeightMm,
-                ViewBox = document.ViewBox,
-                SchemaVersion = document.SchemaVersion,
             };
 
             foreach (var version in document.Versions)
@@ -171,6 +167,13 @@ public sealed class ProjectRepository : IProjectRepository
                     Id = Guid.NewGuid(),
                     VectorDocumentId = newDocument.Id,
                     VersionNumber = version.VersionNumber,
+                    // M2.2-S06: WidthMm/HeightMm/ViewBox/SchemaVersion viven ahora POR versión
+                    // (ver el conflicto #2 de spec.md M2.2-S06) -- se copian de la versión
+                    // origen, no del VectorDocument (que ya no los tiene).
+                    WidthMm = version.WidthMm,
+                    HeightMm = version.HeightMm,
+                    ViewBox = version.ViewBox,
+                    SchemaVersion = version.SchemaVersion,
                     // El Asset SVG en sí NO se duplica (binario inmutable, fuera de
                     // alcance -- ver IMPL.md): la versión duplicada referencia el MISMO
                     // Asset que la original.
@@ -206,6 +209,12 @@ public sealed class ProjectRepository : IProjectRepository
                     newVersion.Layers.Add(new Layer
                     {
                         Id = Guid.NewGuid(),
+                        // M2.2-S06: GroupId (el groupId clásico) se copia TAL CUAL -- preserva
+                        // la correlación "mismo layer conceptual" entre la versión original y
+                        // la duplicada. No es la PK (ver Layer.GroupId), así que repetir el
+                        // mismo valor acá no colisiona con el índice único compuesto
+                        // (VersionId, GroupId): VersionId ya es distinto (newVersion.Id nuevo).
+                        GroupId = layer.GroupId,
                         VersionId = newVersion.Id,
                         ColorId = colorIdMap[layer.ColorId],
                         Name = layer.Name,
