@@ -133,6 +133,69 @@ public sealed partial class AssetService : IAssetService
         return new AssetResult.Ready(created);
     }
 
+    public async Task<AssetResult> CreateFromBytesAsync(
+        Guid projectId, string type, string fileName, string contentType, byte[] content, CancellationToken cancellationToken)
+    {
+        var normalizedType = (type ?? string.Empty).Trim().ToLowerInvariant();
+        if (!TypePattern().IsMatch(normalizedType))
+        {
+            return new AssetResult.ValidationFailed(
+                "invalid_type",
+                "El campo 'type' es requerido y solo puede contener letras minúsculas, dígitos, '-' y '_' (máximo 40 caracteres).");
+        }
+
+        if (content is null || content.Length == 0)
+        {
+            return new AssetResult.ValidationFailed("empty_file", "No se recibió contenido para el archivo.");
+        }
+
+        if (!AssetKeyFactory.TryGetExtension(contentType, out var extension))
+        {
+            return new AssetResult.ValidationFailed("unsupported_format", "Formato no soportado.");
+        }
+
+        var assetId = Guid.NewGuid();
+        var storageKey = AssetKeyFactory.BuildKey(projectId, normalizedType, assetId, extension);
+
+        StoredFile stored;
+        try
+        {
+            // Misma política storage-primero-fila-después que UploadAsync (ver esa clase): si
+            // esto falla, nunca se llega a insertar la fila.
+            await using var contentStream = new MemoryStream(content, writable: false);
+            stored = await _fileStorage.SaveAsync(storageKey, contentStream, contentType, cancellationToken);
+        }
+        catch (FileStorageException ex)
+        {
+            _logger.LogError(
+                ex, "Fallo de storage al subir el Asset {AssetId} ({Type}) del proyecto {ProjectId} desde bytes server-side",
+                assetId, normalizedType, projectId);
+            return new AssetResult.StorageFailed(
+                "storage_failure", "No se pudo guardar el archivo. Intentá de nuevo en unos minutos.");
+        }
+
+        var asset = new Asset
+        {
+            Id = assetId,
+            ProjectId = projectId,
+            Type = normalizedType,
+            StorageKey = stored.Key,
+            MimeType = contentType,
+            FileName = Path.GetFileName(fileName),
+            Size = stored.SizeBytes,
+            Checksum = stored.Checksum,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+
+        var created = await _repository.CreateAsync(asset, cancellationToken);
+
+        _logger.LogInformation(
+            "Asset {AssetId} ({Type}) subido para el proyecto {ProjectId} desde bytes server-side ({Bytes} bytes, {MimeType})",
+            assetId, normalizedType, projectId, stored.SizeBytes, contentType);
+
+        return new AssetResult.Ready(created);
+    }
+
     public async Task<AssetResult> DownloadAsync(Guid projectId, Guid assetId, CancellationToken cancellationToken)
     {
         var ownerId = _userContext.GetEffectiveUserId();

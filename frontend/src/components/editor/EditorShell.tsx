@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useCanvasTransform } from "../../hooks/useCanvasTransform";
 import { useLaserWarnings } from "../../hooks/useLaserWarnings";
 import { useManufacturingOperations } from "../../hooks/useManufacturingOperations";
 import { useVectorDocument } from "../../hooks/useVectorDocument";
+import { useWorkspaceSave } from "../../hooks/useWorkspaceSave";
 import { EditorHeader } from "./EditorHeader";
 import { EditorLayersPanel } from "./EditorLayersPanel";
 import { EditorStatusBar } from "./EditorStatusBar";
@@ -19,6 +20,12 @@ export interface EditorShellProps {
   /** Sesión de paleta YA CONFIRMADA -- precondición para abrir el Workspace (ver useVectorDocument). */
   paletteId: string;
   projectName: string;
+  /** Project.Id v2 ya guardado (M2.2-S05, deep-link/reapertura) -- null si esta sesión todavía no se guardó nunca. */
+  savedProjectId?: string | null;
+  /** Último DimensionResponse.DimensionId aplicado en el flujo clásico antes de abrir el Workspace, o null si nunca se aplicaron dimensiones físicas (ver spec.md, "Dimensiones físicas"). */
+  dimensionId?: string | null;
+  /** Notifica al padre (App.tsx) cuando el primer Save resuelve un Project.Id v2 nuevo, para agregarlo a la URL sin recargar la página (ver workspaceLocation.ts). */
+  onSaved?: (savedProjectId: string) => void;
   onClose: () => void;
 }
 
@@ -40,7 +47,16 @@ const EMPTY_REASON_COPY: Record<string, string> = {
  * PreviewNavigator/EditorStatusBar -- ningún panel visual guarda su propia
  * copia divergente de ninguno de los dos.
  */
-export function EditorShell({ projectId, imageId, paletteId, projectName, onClose }: EditorShellProps) {
+export function EditorShell({
+  projectId,
+  imageId,
+  paletteId,
+  projectName,
+  savedProjectId = null,
+  dimensionId = null,
+  onSaved,
+  onClose,
+}: EditorShellProps) {
   const {
     status,
     document,
@@ -58,8 +74,27 @@ export function EditorShell({ projectId, imageId, paletteId, projectName, onClos
     selectGroup,
     selectedPathKeys,
     selectAllInLayer,
-  } = useVectorDocument(projectId, imageId, paletteId);
+  } = useVectorDocument(projectId, imageId, paletteId, savedProjectId);
   const laserWarnings = useLaserWarnings(projectId, imageId);
+
+  // Guardado real del VectorDocument (M2.2-S05) -- ver useWorkspaceSave para la máquina de
+  // estados completa (idle/dirty/saving/saved/error).
+  const workspaceSave = useWorkspaceSave({
+    initialSavedProjectId: savedProjectId,
+    projectName,
+    classicProjectId: projectId,
+    imageId,
+    paletteId,
+    paletteVersion: document?.paletteVersion ?? null,
+    dimensionId,
+  });
+
+  useEffect(() => {
+    if (workspaceSave.state === "saved" && workspaceSave.savedProjectId && workspaceSave.savedProjectId !== savedProjectId) {
+      onSaved?.(workspaceSave.savedProjectId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceSave.state, workspaceSave.savedProjectId]);
 
   // Operación de fabricación CUT/ENGRAVE/IGNORE (fix round M2.1-S07): el
   // Workspace leía `manufacturingOperation` solo de lectura vía el
@@ -86,9 +121,41 @@ export function EditorShell({ projectId, imageId, paletteId, projectName, onClos
     fitToScreen(canvasSize, { width: document.sourceWidthPx, height: document.sourceHeightPx });
   };
 
+  // Cualquier mutación del VectorDocument marca "dirty" (M2.2-S05, idle/dirty ->
+  // useWorkspaceSave): el Save sigue siendo una acción explícita del botón Guardar, esto solo
+  // refleja que hay cambios sin guardar desde el último Save exitoso.
+  const { markDirty } = workspaceSave;
+  const handleToggleVisibility = (groupId: string) => {
+    markDirty();
+    toggleVisibility(groupId);
+  };
+  const handleToggleLocked = (groupId: string) => {
+    markDirty();
+    toggleLocked(groupId);
+  };
+  const handleRenameLayer = (groupId: string, name: string) => {
+    markDirty();
+    renameLayer(groupId, name);
+  };
+  const handleReorderLayers = (orderedGroupIds: string[]) => {
+    markDirty();
+    reorderLayers(orderedGroupIds);
+  };
+  const handleChangeOperation: typeof assignManufacturingOperation = (groupId, operation) => {
+    markDirty();
+    assignManufacturingOperation(groupId, operation);
+  };
+
   return (
     <div className="editor-shell">
-      <EditorHeader projectName={projectName} onClose={onClose} />
+      <EditorHeader
+        projectName={projectName}
+        onClose={onClose}
+        saveState={workspaceSave.state}
+        saveErrorMessage={workspaceSave.errorMessage}
+        canSave={status === "ready" && Boolean(document)}
+        onSave={workspaceSave.save}
+      />
 
       <div className="editor-shell__body">
         <EditorToolbar activeTool={activeTool} onSelectTool={setActiveTool} />
@@ -140,14 +207,14 @@ export function EditorShell({ projectId, imageId, paletteId, projectName, onClos
           <EditorLayersPanel
             layers={document?.layers ?? []}
             visibility={visibility}
-            onToggleVisibility={toggleVisibility}
-            onToggleLocked={toggleLocked}
-            onReorder={reorderLayers}
+            onToggleVisibility={handleToggleVisibility}
+            onToggleLocked={handleToggleLocked}
+            onReorder={handleReorderLayers}
             selectedGroupId={selectedGroupId}
             onSelectGroup={selectGroup}
-            onRename={renameLayer}
+            onRename={handleRenameLayer}
             operations={manufacturingOperations}
-            onChangeOperation={assignManufacturingOperation}
+            onChangeOperation={handleChangeOperation}
             mutatingGroupId={manufacturingMutatingGroupId}
           />
 
@@ -165,12 +232,12 @@ export function EditorShell({ projectId, imageId, paletteId, projectName, onClos
             }}
             selectedPathCount={selectedPathKeys.size}
             onToggleLocked={() => {
-              if (selectedGroupId) toggleLocked(selectedGroupId);
+              if (selectedGroupId) handleToggleLocked(selectedGroupId);
             }}
             laserWarnings={laserWarnings}
-            onRename={renameLayer}
+            onRename={handleRenameLayer}
             operations={manufacturingOperations}
-            onChangeOperation={assignManufacturingOperation}
+            onChangeOperation={handleChangeOperation}
             mutatingGroupId={manufacturingMutatingGroupId}
           />
         </aside>

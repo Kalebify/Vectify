@@ -25,6 +25,8 @@ using Vectorify.Api.Storage;
 using Vectorify.Api.Threshold;
 using Vectorify.Api.Users;
 using Vectorify.Api.Validation;
+using Vectorify.Api.VectorDocuments;
+using Vectorify.Api.VectorDocuments.Persistence;
 using Vectorify.Api.VectorLayers;
 using Vectorify.Api.Vectorization;
 
@@ -549,6 +551,19 @@ builder.Services.AddSingleton<IAssetUploadValidator, AssetUploadValidator>();
 builder.Services.AddScoped<IAssetRepository, AssetRepository>();
 builder.Services.AddScoped<IAssetService, AssetService>();
 
+// Persistencia completa del VectorDocument (M2.2-S05): QUINTA tarjeta de MVP2.2, primera que
+// escribe filas ORIGINALES en VectorDocument/DocumentVersion/Layer/PaletteColor (hasta acá solo
+// ProjectRepository.DuplicateAsync las copiaba). Mismo patrón arquitectónico que
+// ProjectService/AssetService: Endpoint -> IVectorDocumentService -> IVectorDocumentRepository
+// (EF Core), orquestando además IVectorLayerService/IColorPaletteService/ILayerLayoutService/
+// IManufacturingOperationService/IDimensionService (lectura del estado clásico vigente) e
+// IAssetService (sube cada SVG de capa como Asset propio, vía la nueva
+// IAssetService.CreateFromBytesAsync). Ver spec.md para las decisiones de diseño (puente
+// Project clásico <-> v2, cutover de los sidecars LayerLayout/ManufacturingOperation, IDs
+// estables de Layer).
+builder.Services.AddScoped<IVectorDocumentRepository, VectorDocumentRepository>();
+builder.Services.AddScoped<IVectorDocumentService, VectorDocumentService>();
+
 var app = builder.Build();
 
 // Aplica las migraciones de EF Core/PostgreSQL versionadas automáticamente al
@@ -708,6 +723,7 @@ app.MapManufacturingOperationEndpoints();
 app.MapLayerLayoutEndpoints();
 app.MapProjectV2Endpoints();
 app.MapAssetEndpoints();
+app.MapVectorDocumentEndpoints();
 
 app.Run();
 

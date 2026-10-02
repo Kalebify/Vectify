@@ -441,6 +441,81 @@ describe("useVectorDocument — Select All in Layer (M2.1-S07, primera selecció
   });
 });
 
+const SAVED_PROJECT_ID = "99999999-9999-9999-9999-999999999999";
+
+function savedDocumentResponse(overrides: Record<string, unknown> = {}) {
+  return {
+    projectId: SAVED_PROJECT_ID,
+    schemaVersion: 1,
+    widthMm: 320,
+    heightMm: 240,
+    viewBox: "0 0 320 240",
+    versionNumber: 1,
+    createdAt: "2026-01-01T00:00:00Z",
+    layers: [
+      {
+        id: GROUP_A_ID, name: "Rojo", order: 0, visible: true, locked: false,
+        manufacturingOperation: "cut", colorHex: "#ff0000", coverage: 60, isBackground: false,
+        svgAssetId: "ffffffff-ffff-ffff-ffff-ffffffffffff", svgUrl: `/api/v2/projects/${SAVED_PROJECT_ID}/assets/ffffffff-ffff-ffff-ffff-ffffffffffff`,
+        pathCount: 5,
+      },
+      {
+        id: GROUP_B_ID, name: "Azul", order: 1, visible: true, locked: false,
+        manufacturingOperation: "unassigned", colorHex: "#0000ff", coverage: 40, isBackground: false,
+        svgAssetId: null, svgUrl: null, pathCount: 2,
+      },
+    ],
+    ...overrides,
+  };
+}
+
+describe("useVectorDocument — reapertura vía savedProjectId (M2.2-S05)", () => {
+  it("reconstruye el documento directo desde GET .../document, sin pasar por la agregación clásica de 3 endpoints", async () => {
+    const fetch = stubFetchSequence([
+      (url) => (url.includes(`/api/v2/projects/${SAVED_PROJECT_ID}/document`) ? jsonResponse(savedDocumentResponse()) : undefined!),
+    ]);
+
+    const { result } = renderHook(() => useVectorDocument(PROJECT_ID, IMAGE_ID, PALETTE_ID, SAVED_PROJECT_ID));
+
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    expect(result.current.document?.layers).toHaveLength(2);
+    expect(result.current.document?.layers[0]).toMatchObject({
+      groupId: GROUP_A_ID,
+      name: "Rojo",
+      colorHex: "#ff0000",
+      manufacturingOperation: "cut",
+      visible: true,
+      locked: false,
+      // Bug real encontrado en revisión (ver Data.Layer.PathCount/AddLayerPathCount): sin esto
+      // quedaba hardcodeado en 0, mostrando un dato falso en el Inspector y rompiendo
+      // silenciosamente "Seleccionar todo en la capa" para cualquier proyecto reabierto.
+      pathCount: 5,
+    });
+    expect(result.current.document?.sourceWidthPx).toBe(320);
+    expect(result.current.document?.sourceHeightPx).toBe(240);
+
+    // Ninguna llamada al flujo clásico de 3 endpoints (paleta/layers/consolidado).
+    expect(fetch.mock.calls.some((call) => String(call[0]).includes("/color-palette/"))).toBe(false);
+    expect(fetch.mock.calls.some((call) => String(call[0]).match(/\/layers$/))).toBe(false);
+    expect(fetch.mock.calls.some((call) => String(call[0]).includes("/layers/consolidated"))).toBe(false);
+  });
+
+  it("documento guardado inexistente (404) -> 'empty' (palette_not_found), igual criterio que el flujo clásico", async () => {
+    stubFetchSequence([
+      (url) =>
+        url.includes(`/api/v2/projects/${SAVED_PROJECT_ID}/document`)
+          ? jsonResponse({ code: "not_found", message: "No existe." }, 404)
+          : undefined!,
+    ]);
+
+    const { result } = renderHook(() => useVectorDocument(PROJECT_ID, IMAGE_ID, PALETTE_ID, SAVED_PROJECT_ID));
+
+    await waitFor(() => expect(result.current.status).toBe("empty"));
+    expect(result.current.emptyReason).toBe("palette_not_found");
+  });
+});
+
 describe("useVectorDocument — reload conserva order/visible/locked persistidos", () => {
   it("después de recargar (reload/remount), los valores de order/visible/locked vuelven a leerse de la Web API tal como quedaron persistidos", async () => {
     stubFetchSequence([

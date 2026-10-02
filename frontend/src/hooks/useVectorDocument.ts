@@ -8,9 +8,11 @@ import {
   setLayerName as setLayerNameRequest,
   setLayerVisible as setLayerVisibleRequest,
 } from "../api/layerLayoutApi";
+import { getVectorDocument } from "../api/vectorDocumentApi";
 import { getVectorLayers } from "../api/vectorLayersApi";
 import type { LayerLayoutEntryPayload } from "../types/layerLayout";
 import type { ManufacturingOperationValue } from "../types/manufacturingOperations";
+import type { VectorDocumentResponse } from "../types/vectorDocument";
 
 /**
  * `VectorDocument`: estado de dominio del Workspace (M2.1-S06, extendido en
@@ -202,6 +204,55 @@ function toDocument(
   };
 }
 
+/**
+ * Reconstruye el `VectorDocument` directo desde `GET /api/v2/projects/{projectId}/document`
+ * (M2.2-S05, "Reapertura") -- SIN pasar por la agregación de 3 endpoints clásicos de
+ * `toDocument`. `classicProjectId`/`imageId`/`paletteId` se preservan igual (vienen de la URL,
+ * ver `App.tsx`): las mutaciones del documento (toggle/rename/reorder/operación) siguen
+ * resolviéndose contra los sidecars clásicos en esta tarjeta -- el cutover de esas llamadas a
+ * los endpoints PATCH v2 nuevos queda fuera del alcance frontend de esta tarjeta (ver
+ * supuestos del reporte del sprint). `paletteVersion`/`layerSetId`/`version` no tienen
+ * equivalente real en la respuesta v2 (es un documento ya desacoplado del triple clásico) --
+ * se completan con valores de relleno inertes (0/el propio projectId/versionNumber) que ningún
+ * panel usa para mostrar datos falsos: ninguno de los paneles existentes LEE esos tres campos
+ * para texto visible al usuario.
+ */
+function fromSavedDocument(classicProjectId: string, imageId: string, paletteId: string, response: VectorDocumentResponse): VectorDocument {
+  const [, , viewBoxWidth, viewBoxHeight] = response.viewBox.split(" ").map(Number);
+
+  const layers: VectorDocumentLayer[] = response.layers
+    .map((layer) => ({
+      groupId: layer.id,
+      name: layer.name,
+      colorHex: layer.colorHex,
+      fill: layer.colorHex,
+      vectorId: layer.id,
+      svgUrl: layer.svgUrl ? new URL(layer.svgUrl, `${API_BASE_URL}/`).toString() : "",
+      pathCount: layer.pathCount,
+      componentCount: null,
+      manufacturingOperation: layer.manufacturingOperation as ManufacturingOperationValue,
+      order: layer.order,
+      visible: layer.visible,
+      locked: layer.locked,
+      areaPercent: layer.coverage,
+      hasPartialAlpha: false,
+      isExcluded: layer.isBackground,
+    }))
+    .sort((a, b) => a.order - b.order);
+
+  return {
+    projectId: classicProjectId,
+    imageId,
+    paletteId,
+    paletteVersion: 0,
+    layerSetId: response.projectId,
+    version: response.versionNumber,
+    sourceWidthPx: Number.isFinite(viewBoxWidth) ? viewBoxWidth : 0,
+    sourceHeightPx: Number.isFinite(viewBoxHeight) ? viewBoxHeight : 0,
+    layers,
+  };
+}
+
 /** Aplica la respuesta AUTORITATIVA de la Web API (POST visibility/lock/rename/reorder) sobre el documento en memoria -- reemplaza el optimismo local por lo que realmente quedó persistido, re-ordenando por el `order` vigente. */
 function applyLayoutEntries(document: VectorDocument, entries: LayerLayoutEntryPayload[]): VectorDocument {
   const byGroupId = new Map(entries.map((entry) => [entry.groupId, entry]));
@@ -221,6 +272,13 @@ export function useVectorDocument(
   projectId: string,
   imageId: string,
   paletteId: string | null,
+  /**
+   * Project.Id v2 ya guardado (M2.2-S05, "Reapertura") -- si está presente, `load()` reconstruye
+   * el documento directo desde `GET /api/v2/projects/{savedProjectId}/document`
+   * (`fromSavedDocument`), SIN pasar por la agregación clásica de 3 endpoints. Null/undefined =
+   * comportamiento existente sin cambios (flujo clásico de staging).
+   */
+  savedProjectId?: string | null,
 ): UseVectorDocumentState {
   const [status, setStatus] = useState<VectorDocumentStatus>("idle");
   const [document, setDocument] = useState<VectorDocument | null>(null);
@@ -254,6 +312,33 @@ export function useVectorDocument(
     setErrorMessage(null);
     setIsolatedGroupId(null);
     setSelectedPathKeys(new Set());
+
+    if (savedProjectId) {
+      getVectorDocument(savedProjectId, controller.signal)
+        .then((response) => {
+          setDocument(fromSavedDocument(projectId, imageId, paletteId, response));
+          setStatus("ready");
+        })
+        .catch((error: unknown) => {
+          if (error instanceof ApiClientError && error.isAborted) {
+            return;
+          }
+          if (error instanceof ApiClientError && !error.isNetworkError && error.body) {
+            const body = error.body as { code?: string; message?: string };
+            if (body.code === "not_found") {
+              setStatus("empty");
+              setEmptyReason("palette_not_found");
+              return;
+            }
+            setErrorMessage(body.message ?? GENERIC_ERROR_MESSAGE);
+            setStatus("error");
+            return;
+          }
+          setErrorMessage(GENERIC_ERROR_MESSAGE);
+          setStatus("error");
+        });
+      return;
+    }
 
     (async () => {
       const palette = await getColorPalette(projectId, imageId, paletteId, controller.signal);
@@ -319,17 +404,17 @@ export function useVectorDocument(
       setErrorMessage(GENERIC_ERROR_MESSAGE);
       setStatus("error");
     });
-  }, [projectId, imageId, paletteId]);
+  }, [projectId, imageId, paletteId, savedProjectId]);
 
   useEffect(() => {
-    const key = `${projectId}:${imageId}:${paletteId ?? ""}`;
+    const key = `${projectId}:${imageId}:${paletteId ?? ""}:${savedProjectId ?? ""}`;
     if (requestedForRef.current === key) {
       return;
     }
     requestedForRef.current = key;
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, imageId, paletteId]);
+  }, [projectId, imageId, paletteId, savedProjectId]);
 
   const reload = useCallback(() => {
     load();

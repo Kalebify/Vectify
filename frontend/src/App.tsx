@@ -4,6 +4,7 @@ import { ApiClientError } from "./api/httpClient";
 import { getOriginalImageUrl, getProjectImage } from "./api/projectsApi";
 import { getPreviewImageUrl } from "./api/preprocessApi";
 import { getSimplificationSvgUrl } from "./api/simplifyApi";
+import { getVectorDocument } from "./api/vectorDocumentApi";
 import { getVectorSvgUrl } from "./api/vectorizeApi";
 import { ServiceCard } from "./components/ServiceCard";
 import type { StatusTone } from "./components/StatusPill";
@@ -193,6 +194,12 @@ function App() {
   const { status, response, errorMessage, lastCheckedAt } = useSystemHealth();
   const [activeProject, setActiveProject] = useState<UploadImageResponse | null>(null);
   const [confirmedPalette, setConfirmedPalette] = useState<ColorPaletteResponse | null>(null);
+  // paletteId del triple clásico que EditorShell necesita como prop (M2.2-S05): se mantiene
+  // aparte de `confirmedPalette` porque la reapertura vía `savedProjectId` NO llama a
+  // GET .../color-palette/{paletteId} (ver resolveWorkspaceDeepLink) y por lo tanto nunca
+  // resuelve ese objeto completo, pero igual necesita el id para las mutaciones del Workspace
+  // (que siguen resolviéndose contra los sidecars clásicos en esta tarjeta).
+  const [workspacePaletteId, setWorkspacePaletteId] = useState<string | null>(null);
   // Selección COMPARTIDA paleta<->Layers (M2.1-S04): un único groupId
   // "seleccionado", resaltado a la vez en ColorSwatchList y LayerList --
   // vive acá (padre común de ambos paneles) en vez de en cualquiera de los
@@ -206,6 +213,10 @@ function App() {
   // generan las capas (precondiciones del Workspace), y ninguna tarjeta
   // pidió todavía retirarlo.
   const [isWorkspaceOpen, setIsWorkspaceOpen] = useState(false);
+  // Project.Id v2 ya guardado de la sesión actual del Workspace (M2.2-S05) -- null hasta que el
+  // primer Save exitoso lo resuelva (ver EditorShell.onSaved más abajo), o ya conocido de
+  // entrada si la URL lo traía (reapertura/reload, ver resolveWorkspaceDeepLink).
+  const [savedProjectId, setSavedProjectId] = useState<string | null>(null);
   const [readyPreview, setReadyPreview] = useState<PreprocessResponse | null>(null);
   const [readyMask, setReadyMask] = useState<ThresholdResponse | null>(null);
   const [readyVector, setReadyVector] = useState<VectorizeResponse | null>(null);
@@ -246,6 +257,37 @@ function App() {
         return;
       }
 
+      // Reapertura de un Workspace YA GUARDADO (M2.2-S05): si la URL trae
+      // savedProjectId, se prioriza GET /api/v2/projects/{id}/document para
+      // validar que el documento guardado sigue existiendo -- en vez de
+      // GET .../color-palette/{paletteId} (que valida el estado clásico de
+      // staging, ya no la fuente de verdad una vez que hay un Project.Id v2).
+      // useVectorDocument hace la reconstrucción real del documento (sin pasar
+      // por la agregación clásica de 3 endpoints) una vez que EditorShell
+      // recibe savedProjectId -- acá solo se valida que el deep-link es
+      // válido antes de abrir el Workspace.
+      if (location.savedProjectId) {
+        try {
+          await getVectorDocument(location.savedProjectId);
+        } catch (error) {
+          clearWorkspaceLocation();
+          setDeepLinkStatus("invalid");
+          setDeepLinkMessage(
+            error instanceof ApiClientError && !error.isNetworkError
+              ? "El documento guardado de esta URL ya no existe."
+              : "No se pudo recuperar el documento guardado de esta URL. Intentá de nuevo más tarde.",
+          );
+          return;
+        }
+
+        setActiveProject(project);
+        setWorkspacePaletteId(location.paletteId);
+        setSavedProjectId(location.savedProjectId);
+        setIsWorkspaceOpen(true);
+        setDeepLinkStatus("idle");
+        return;
+      }
+
       let palette: ColorPaletteResponse;
       try {
         palette = await getColorPalette(location.projectId, location.imageId, location.paletteId);
@@ -265,6 +307,7 @@ function App() {
       // criterio reusado tal cual, sin duplicar esa lógica acá).
       setActiveProject(project);
       setConfirmedPalette(palette);
+      setWorkspacePaletteId(palette.paletteId);
       setIsWorkspaceOpen(true);
       setDeepLinkStatus("idle");
     })();
@@ -282,6 +325,8 @@ function App() {
 
   const handleProjectCreated = (project: UploadImageResponse | null) => {
     setConfirmedPalette(null);
+    setWorkspacePaletteId(null);
+    setSavedProjectId(null);
     setSelectedLayerGroupId(null);
     setIsWorkspaceOpen(false);
     setReadyPreview(null);
@@ -299,6 +344,11 @@ function App() {
   // imagen original.
   const handlePaletteConfirmed = (palette: ColorPaletteResponse) => {
     setConfirmedPalette(palette);
+    setWorkspacePaletteId(palette.paletteId);
+    // Una paleta recién confirmada/reconfirmada reinicia cualquier Project.Id v2 de una sesión
+    // anterior del Workspace: el triple clásico cambió, así que un Save nuevo debe resolver su
+    // propio Project (M2.2-S05).
+    setSavedProjectId(null);
   };
 
   const handlePreviewReady = (preview: PreprocessResponse) => {
@@ -348,13 +398,27 @@ function App() {
         ? "Desconocido"
         : PYTHON_STATUS_LABEL[response!.python.status];
 
-  if (isWorkspaceOpen && activeProject && confirmedPalette) {
+  if (isWorkspaceOpen && activeProject && workspacePaletteId) {
     return (
       <EditorShell
         projectId={activeProject.projectId}
         imageId={activeProject.imageId}
-        paletteId={confirmedPalette.paletteId}
+        paletteId={workspacePaletteId}
         projectName={activeProject.filename}
+        savedProjectId={savedProjectId}
+        dimensionId={readyDimension?.dimensionId ?? null}
+        onSaved={(newSavedProjectId) => {
+          setSavedProjectId(newSavedProjectId);
+          // Agrega savedProjectId a la URL SIN recargar la página (M2.2-S05, "Reapertura") --
+          // un reload inmediatamente después reconstruye la misma sesión YA GUARDADA vía
+          // GET /api/v2/projects/{id}/document, en vez de volver a pasar por el flujo clásico.
+          pushWorkspaceLocation({
+            projectId: activeProject.projectId,
+            imageId: activeProject.imageId,
+            paletteId: workspacePaletteId,
+            savedProjectId: newSavedProjectId,
+          });
+        }}
         onClose={() => {
           setIsWorkspaceOpen(false);
           clearWorkspaceLocation();

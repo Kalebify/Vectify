@@ -19,28 +19,45 @@ export interface WorkspaceLocation {
   projectId: string;
   imageId: string;
   paletteId: string;
+  /**
+   * Project.Id v2 (M2.2-S05, "Reapertura") -- presente solo después de un primer Save exitoso
+   * en esta sesión del Workspace (agregado a la URL sin recargar la página, ver
+   * `pushWorkspaceLocation`/`useWorkspaceSave`) o si el deep-link lo trae de entrada (reload
+   * dentro del Workspace ya guardado). Cuando está presente, `App.tsx` lo prioriza para
+   * reconstruir el VectorDocument vía `GET /api/v2/projects/{savedProjectId}/document` en vez
+   * del flujo clásico de 3 endpoints -- ver ese archivo. Opcional: el triple clásico
+   * (projectId/imageId/paletteId) sigue siendo obligatorio incluso con `savedProjectId`
+   * presente, porque las mutaciones del Workspace (toggle/rename/reorder/operación) siguen
+   * resolviéndose contra los sidecars clásicos en esta tarjeta (ver spec.md, cutover de
+   * sidecars: el frontend no migra esas llamadas a los PATCH v2 nuevos todavía).
+   */
+  savedProjectId?: string;
 }
 
 const PROJECT_PARAM = "projectId";
 const IMAGE_PARAM = "imageId";
 const PALETTE_PARAM = "paletteId";
+const SAVED_PROJECT_PARAM = "savedProjectId";
 
 /**
- * Lee projectId/imageId/paletteId de una query string (default: la URL
- * actual del navegador). Devuelve `null` si falta cualquiera de los tres --
- * un deep-link parcial no alcanza para reconstruir el Workspace.
+ * Lee projectId/imageId/paletteId (+ savedProjectId opcional) de una query string (default: la
+ * URL actual del navegador). Devuelve `null` si falta cualquiera de los tres PRIMEROS -- un
+ * deep-link parcial no alcanza para reconstruir el Workspace. `savedProjectId` nunca es
+ * obligatorio: su ausencia simplemente significa "sesión todavía no guardada" (comportamiento
+ * de M2.1-S08 sin cambios).
  */
 export function readWorkspaceLocation(search: string = window.location.search): WorkspaceLocation | null {
   const params = new URLSearchParams(search);
   const projectId = params.get(PROJECT_PARAM);
   const imageId = params.get(IMAGE_PARAM);
   const paletteId = params.get(PALETTE_PARAM);
+  const savedProjectId = params.get(SAVED_PROJECT_PARAM);
 
   if (!projectId || !imageId || !paletteId) {
     return null;
   }
 
-  return { projectId, imageId, paletteId };
+  return { projectId, imageId, paletteId, ...(savedProjectId ? { savedProjectId } : {}) };
 }
 
 /** Construye la query string (con el `?` inicial) para una ubicación del Workspace. */
@@ -49,6 +66,9 @@ export function buildWorkspaceSearch(location: WorkspaceLocation): string {
   params.set(PROJECT_PARAM, location.projectId);
   params.set(IMAGE_PARAM, location.imageId);
   params.set(PALETTE_PARAM, location.paletteId);
+  if (location.savedProjectId) {
+    params.set(SAVED_PROJECT_PARAM, location.savedProjectId);
+  }
   return `?${params.toString()}`;
 }
 

@@ -52,4 +52,42 @@ internal static class ColorPalettePayloads
 
     public static string ErrorBody(string code, string message) =>
         $$"""{"code": "{{code}}", "message": "{{message}}"}""";
+
+    /// <summary>
+    /// Paleta con VARIOS grupos de color (M2.2-S05, "Documento multicolor"), ninguno
+    /// pre-excluido (<c>touches_border: false</c> para todos) para no tener que lidiar con el
+    /// heurístico de "fondo dominante" en tests que no lo necesitan. Área repartida en partes
+    /// iguales entre los colores dados.
+    /// </summary>
+    public static string MultiGroupSuccessBody(int width, int height, params string[] colorHexes)
+    {
+        var areaPercentPerGroup = 100.0 / colorHexes.Length;
+        var groups = string.Join(",", colorHexes.Select((hex, index) => string.Create(
+            System.Globalization.CultureInfo.InvariantCulture,
+            $$"""
+            {
+              "id": {{index}},
+              "color_hex": "{{hex}}",
+              "pixel_count": 4,
+              "area_percent": {{areaPercentPerGroup}},
+              "has_partial_alpha": false,
+              "touches_border": false,
+              "mask_base64": "{{TinyPngBase64}}"
+            }
+            """)));
+
+        return string.Create(
+            System.Globalization.CultureInfo.InvariantCulture,
+            $$"""
+            {
+              "width": {{width}},
+              "height": {{height}},
+              "content_type": "image/png",
+              "effective_params": { "tolerance": 12.0, "max_colors": null, "tiny_area_ratio": 0.001 },
+              "metrics": { "color_count": {{colorHexes.Length}}, "transparent_percent": 0.0 },
+              "groups": [{{groups}}],
+              "quantized_preview_base64": "{{TinyPngBase64}}"
+            }
+            """);
+    }
 }

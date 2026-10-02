@@ -87,6 +87,11 @@
   white-space: nowrap;
 }
 
+/* Guardado real (M2.2-S05): estado "error" honesto -- mensaje visible en rojo, nunca un "Saved" falso. */
+.editor-header__dirty-state--error {
+  color: var(--error);
+}
+
 .editor-header__actions {
   display: flex;
   align-items: center;
