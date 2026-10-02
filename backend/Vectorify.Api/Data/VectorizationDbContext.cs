@@ -218,6 +218,15 @@ public sealed class VectorizationDbContext : DbContext
                 .WithMany(c => c.Layers)
                 .HasForeignKey(e => e.ColorId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // Layer.SvgAssetId -> Asset: SetNull (M2.2-S05, migración AddLayerSvgAsset).
+            // Borrar el Asset no debe cascadear el borrado del Layer -- es metadata
+            // recuperable con un nuevo Save, distinto del resto de FKs de Layer (que SÍ
+            // cascadean porque Layer es un hijo propio de esa versión/color).
+            entity.HasOne(e => e.SvgAsset)
+                .WithMany()
+                .HasForeignKey(e => e.SvgAssetId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<PaletteColor>(entity =>

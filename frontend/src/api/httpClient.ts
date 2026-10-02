@@ -67,6 +67,14 @@ export const httpClient = {
       headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
       body: JSON.stringify(body),
     }),
+  /** PATCH con cuerpo JSON parcial (Content-Type: application/json) -- mismo criterio que postJson. */
+  patchJson: <T>(path: string, body: unknown, init?: RequestInit) =>
+    request<T>(path, {
+      ...init,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+      body: JSON.stringify(body),
+    }),
 };
 
 export interface UploadFileOptions {
