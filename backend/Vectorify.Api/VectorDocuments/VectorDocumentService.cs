@@ -259,7 +259,9 @@ public sealed class VectorDocumentService : IVectorDocumentService
             HeightMm: heightMm,
             ViewBox: viewBox,
             SchemaVersion: CurrentSchemaVersion,
-            Origin: "workspace_save",
+            // M2.2-S06: vocabulario cerrado DocumentVersionOrigin -- reemplaza el string libre
+            // "workspace_save" que M2.2-S05 emitía (ver spec.md M2.2-S06, "Origin").
+            Origin: DocumentVersionOrigin.ManualEdit,
             MetadataJson: "{}",
             Layers: layerSnapshots);
 
@@ -288,25 +290,69 @@ public sealed class VectorDocumentService : IVectorDocumentService
         }
     }
 
-    public async Task<VectorDocumentResult> GetDocumentAsync(Guid projectId, CancellationToken cancellationToken)
+    public async Task<VectorDocumentResult> GetDocumentAsync(Guid projectId, int? versionNumber, CancellationToken cancellationToken)
     {
         var ownerId = _userContext.GetEffectiveUserId();
-        var found = await _repository.FindCurrentDocumentAsync(projectId, ownerId, cancellationToken);
+
+        // MISMO método para "la versión actual" (GET .../document, versionNumber null) y "una
+        // versión explícita" (GET .../versions/{n}, M2.2-S06) -- ver IVectorDocumentService.
+        var found = versionNumber is null
+            ? await _repository.FindCurrentDocumentAsync(projectId, ownerId, cancellationToken)
+            : await _repository.FindVersionAsync(projectId, ownerId, versionNumber.Value, cancellationToken);
+
         if (found is null)
         {
             return new VectorDocumentResult.NotFound(
-                "not_found", "No existe un proyecto con ese Id, o todavía no tiene ningún documento guardado.");
+                "not_found", "No existe un proyecto con ese Id, o esa versión no existe para su documento.");
         }
 
         var (document, version) = found.Value;
-        if (document.SchemaVersion > CurrentSchemaVersion)
+        if (version.SchemaVersion > CurrentSchemaVersion)
         {
             return new VectorDocumentResult.UpstreamError(
                 "unsupported_schema_version",
-                $"Este documento usa una versión de esquema ({document.SchemaVersion}) que este backend todavía no soporta.");
+                $"Este documento usa una versión de esquema ({version.SchemaVersion}) que este backend todavía no soporta.");
         }
 
         return new VectorDocumentResult.DocumentReady(document, version);
+    }
+
+    public async Task<VectorDocumentResult> ListVersionsAsync(Guid projectId, CancellationToken cancellationToken)
+    {
+        var ownerId = _userContext.GetEffectiveUserId();
+        var versions = await _repository.ListVersionsAsync(projectId, ownerId, cancellationToken);
+        return versions is null
+            ? new VectorDocumentResult.NotFound(
+                "not_found", "No existe un proyecto con ese Id, o todavía no tiene ningún documento guardado.")
+            : new VectorDocumentResult.VersionListReady(versions);
+    }
+
+    public async Task<VectorDocumentResult> RestoreAsync(Guid projectId, int versionNumber, CancellationToken cancellationToken)
+    {
+        var ownerId = _userContext.GetEffectiveUserId();
+
+        try
+        {
+            var outcome = await _repository.RestoreAsync(projectId, ownerId, versionNumber, cancellationToken);
+            if (outcome is null)
+            {
+                return new VectorDocumentResult.NotFound(
+                    "not_found", "No existe un proyecto con ese Id, o esa versión no existe para su documento.");
+            }
+
+            _logger.LogInformation(
+                "VectorDocument del proyecto {ProjectId} restaurado desde la versión {SourceVersionNumber} (nueva versión {VersionNumber})",
+                outcome.ProjectId, versionNumber, outcome.VersionNumber);
+
+            return new VectorDocumentResult.Saved(outcome.ProjectId, outcome.VersionNumber, outcome.SavedAt);
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            _logger.LogWarning(ex, "Conflicto de concurrencia restaurando el VectorDocument del proyecto {ProjectId}", projectId);
+            return new VectorDocumentResult.Conflict(
+                "concurrency_conflict",
+                "El proyecto fue modificado por otro Save/Restore concurrente mientras tanto. Volvé a cargarlo e intentá de nuevo.");
+        }
     }
 
     public async Task<VectorDocumentResult> UpdateLayerAsync(

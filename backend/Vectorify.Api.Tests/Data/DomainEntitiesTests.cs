@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Testcontainers.PostgreSql;
 using Vectorify.Api.Data;
 using Vectorify.Api.ManufacturingOperations;
+using Vectorify.Api.VectorDocuments;
 
 namespace Vectorify.Api.Tests.Data;
 
@@ -65,10 +66,6 @@ public sealed class DomainEntitiesTests : IAsyncLifetime
             {
                 Id = Guid.NewGuid(),
                 ProjectId = project.Id,
-                WidthMm = 100,
-                HeightMm = 50,
-                ViewBox = "0 0 1000 500",
-                SchemaVersion = 1,
             };
 
             var version = new DocumentVersion
@@ -76,7 +73,11 @@ public sealed class DomainEntitiesTests : IAsyncLifetime
                 Id = Guid.NewGuid(),
                 VectorDocumentId = document.Id,
                 VersionNumber = 1,
-                Origin = "upload",
+                WidthMm = 100,
+                HeightMm = 50,
+                ViewBox = "0 0 1000 500",
+                SchemaVersion = 1,
+                Origin = DocumentVersionOrigin.Vectorize,
                 MetadataJson = "{\"engine\":\"test\"}",
                 CreatedAt = DateTimeOffset.UtcNow,
             };
@@ -188,7 +189,8 @@ public sealed class DomainEntitiesTests : IAsyncLifetime
             Id = Guid.NewGuid(),
             VectorDocumentId = documentA.Id,
             VersionNumber = 1,
-            Origin = "upload",
+            ViewBox = "0 0 1 1",
+            Origin = DocumentVersionOrigin.Vectorize,
             MetadataJson = "{}",
             CreatedAt = DateTimeOffset.UtcNow,
         };
@@ -271,17 +273,17 @@ public sealed class DomainEntitiesTests : IAsyncLifetime
         {
             Id = Guid.NewGuid(),
             ProjectId = project.Id,
-            WidthMm = 10,
-            HeightMm = 10,
-            ViewBox = "0 0 100 100",
-            SchemaVersion = 1,
         };
         var version = new DocumentVersion
         {
             Id = Guid.NewGuid(),
             VectorDocumentId = document.Id,
             VersionNumber = versionNumber,
-            Origin = "upload",
+            WidthMm = 10,
+            HeightMm = 10,
+            ViewBox = "0 0 100 100",
+            SchemaVersion = 1,
+            Origin = DocumentVersionOrigin.Vectorize,
             MetadataJson = "{}",
             CreatedAt = DateTimeOffset.UtcNow,
         };

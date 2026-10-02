@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Testcontainers.PostgreSql;
 using Vectorify.Api.Data;
 using Vectorify.Api.Projects.Persistence;
+using Vectorify.Api.VectorDocuments;
 
 namespace Vectorify.Api.Tests.Projects.Persistence;
 
@@ -326,17 +327,17 @@ public sealed class ProjectRepositoryTests : IAsyncLifetime
         {
             Id = Guid.NewGuid(),
             ProjectId = source.Id,
-            WidthMm = 100,
-            HeightMm = 50,
-            ViewBox = "0 0 1000 500",
-            SchemaVersion = 1,
         };
         var version = new DocumentVersion
         {
             Id = Guid.NewGuid(),
             VectorDocumentId = document.Id,
             VersionNumber = 1,
-            Origin = "upload",
+            WidthMm = 100,
+            HeightMm = 50,
+            ViewBox = "0 0 1000 500",
+            SchemaVersion = 1,
+            Origin = DocumentVersionOrigin.Vectorize,
             MetadataJson = "{\"engine\":\"test\"}",
             CreatedAt = DateTimeOffset.UtcNow,
         };
@@ -352,6 +353,7 @@ public sealed class ProjectRepositoryTests : IAsyncLifetime
         var layer = new Layer
         {
             Id = Guid.NewGuid(),
+            GroupId = Guid.NewGuid(),
             VersionId = version.Id,
             ColorId = color.Id,
             Name = "Capa 1",
@@ -383,12 +385,14 @@ public sealed class ProjectRepositoryTests : IAsyncLifetime
 
         var duplicatedDocument = Assert.Single(reloadedDuplicate.VectorDocuments);
         Assert.NotEqual(document.Id, duplicatedDocument.Id);
-        Assert.Equal(document.WidthMm, duplicatedDocument.WidthMm);
-        Assert.Equal(document.ViewBox, duplicatedDocument.ViewBox);
 
         var duplicatedVersion = Assert.Single(duplicatedDocument.Versions);
         Assert.NotEqual(version.Id, duplicatedVersion.Id);
         Assert.Equal(version.VersionNumber, duplicatedVersion.VersionNumber);
+        // M2.2-S06: WidthMm/HeightMm/ViewBox/SchemaVersion viven en DocumentVersion -- se
+        // copian de la versión origen, no del VectorDocument (que ya no los tiene).
+        Assert.Equal(version.WidthMm, duplicatedVersion.WidthMm);
+        Assert.Equal(version.ViewBox, duplicatedVersion.ViewBox);
         // Comparado contra el valor releído de jsonb (no el string en memoria original):
         // PostgreSQL normaliza el whitespace de jsonb al guardar (ej. agrega un espacio
         // después de ":"), así que el string crudo post-round-trip no es byte-a-byte
@@ -406,6 +410,7 @@ public sealed class ProjectRepositoryTests : IAsyncLifetime
 
         var duplicatedLayer = Assert.Single(duplicatedVersion.Layers);
         Assert.NotEqual(layer.Id, duplicatedLayer.Id);
+        Assert.Equal(layer.GroupId, duplicatedLayer.GroupId); // groupId clásico preservado TAL CUAL
         Assert.Equal(duplicatedColor.Id, duplicatedLayer.ColorId); // apunta al color DUPLICADO, no al original
         Assert.Equal(layer.Name, duplicatedLayer.Name);
 

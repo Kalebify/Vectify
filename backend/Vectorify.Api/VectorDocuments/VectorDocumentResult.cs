@@ -18,8 +18,14 @@ public abstract record VectorDocumentResult
     /// <summary>Un Save exitoso (crea o agrega una versión), el endpoint responde 201/200 según corresponda.</summary>
     public sealed record Saved(Guid ProjectId, int VersionNumber, DateTimeOffset SavedAt) : VectorDocumentResult;
 
-    /// <summary>La DocumentVersion ACTUAL de un proyecto, completa (GET .../document), el endpoint responde 200.</summary>
+    /// <summary>
+    /// Una DocumentVersion completa -- la ACTUAL (GET .../document) o una histórica cualquiera
+    /// (GET .../versions/{versionNumber}, M2.2-S06) -- el endpoint responde 200.
+    /// </summary>
     public sealed record DocumentReady(VectorDocument Document, DocumentVersion Version) : VectorDocumentResult;
+
+    /// <summary>TODAS las DocumentVersion de un documento, solo metadata (GET .../versions, M2.2-S06), el endpoint responde 200.</summary>
+    public sealed record VersionListReady(IReadOnlyList<DocumentVersion> Versions) : VectorDocumentResult;
 
     /// <summary>Un Layer individual recién actualizado (PATCH .../layers/{layerId}), el endpoint responde 200.</summary>
     public sealed record LayerReady(Layer Layer) : VectorDocumentResult;

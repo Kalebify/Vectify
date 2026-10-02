@@ -17,6 +17,16 @@ namespace Vectorify.Api.Data;
 /// criterio que la ausencia de un <see cref="ManufacturingOperationAssignment"/> hoy (nunca
 /// asumir "Corte" por defecto silenciosamente).
 ///
+/// <see cref="Id"/> (M2.2-S06, migración <c>AddLayerGroupId</c>): vuelve a ser una PK
+/// REALMENTE inmutable por fila -- cada checkpoint (Save/Restore) inserta una fila 100%
+/// nueva, nunca reutiliza/actualiza una fila de una versión anterior (ver el conflicto #1
+/// de spec.md M2.2-S06: el upsert-por-Id de M2.2-S05 "robaba" la fila de la versión
+/// anterior, violando la inmutabilidad que esta tarjeta exige). <see cref="GroupId"/> es el
+/// que ahora preserva la correlación "esta fila representa el mismo layer conceptual que
+/// esa otra fila de otra versión" (el <c>groupId</c> clásico reutilizado VERBATIM en cada
+/// checkpoint) -- columna normal, NO la PK, con índice único compuesto
+/// <c>(VersionId, GroupId)</c> (ver <see cref="VectorizationDbContext.OnModelCreating"/>).
+///
 /// <see cref="SvgAssetId"/> (M2.2-S05, migración aditiva <c>AddLayerSvgAsset</c>): el SVG ya
 /// coloreado de esta capa, subido como <see cref="Asset"/> propio (<c>type: "layer-svg"</c>)
 /// en vez de inventar un formato de SVG compuesto con un <c>&lt;g&gt;</c> por layer -- ver el
@@ -38,6 +48,17 @@ namespace Vectorify.Api.Data;
 public sealed class Layer
 {
     public Guid Id { get; set; }
+
+    /// <summary>
+    /// El <c>groupId</c> clásico (M2.2-S06), reutilizado VERBATIM en la fila de Layer de
+    /// CADA versión donde ese layer conceptual estuvo presente -- NO es la PK (ver
+    /// <see cref="Id"/>), columna normal con índice único compuesto
+    /// <c>(VersionId, GroupId)</c>. <c>PATCH .../layers/{layerId}</c>
+    /// (<see cref="Persistence.IVectorDocumentRepository.UpdateLayerAsync"/>) resuelve el
+    /// Layer a editar por este campo (scopeado a la versión ACTUAL), no por <see cref="Id"/>
+    /// -- <see cref="Id"/> cambia en cada checkpoint, <see cref="GroupId"/> no.
+    /// </summary>
+    public Guid GroupId { get; set; }
 
     public Guid VersionId { get; set; }
 

@@ -1,0 +1,20 @@
+{
+  "card_id": "3e8d77b2-6398-81e5-9b41-e4bdd94a9d67",
+  "card_url": "https://app.notion.com/p/3e8d77b2639881e59b41e4bdd94a9d67",
+  "title": "M2.2-S06 · Versionado persistente de documentos",
+  "stack": "ASP.NET Core, Vector -- expone la historia de DocumentVersion (List/Get/Restore) y corrige dos conflictos reales de inmutabilidad detectados contra M2.2-S05 (upsert-por-Id de Layer, dimensiones/viewBox/schemaVersion fuera de DocumentVersion)",
+  "branch": "sprint/3e8d77b2-versionado-documentos",
+  "column": "Done",
+  "phase": "review",
+  "fix_rounds": 0,
+  "preview_url": null,
+  "pr_url": "https://github.com/Kalebify/Vectorify/pull/37",
+  "started_at": "2026-10-02T00:00:00Z",
+  "exceptions": [
+    "Corrida en modo autonomo dentro del backlog MVP2.2 (confirmado explicitamente por el usuario para las 10 tarjetas del milestone).",
+    "CONFLICTO REAL DETECTADO Y RESUELTO UNILATERALMENTE (correccion tecnica, no decision de producto -- igual criterio que el route collision de M2.2-S03): el upsert-por-Id de Layer de M2.2-S05 violaba la inmutabilidad que esta tarjeta exige explicitamente. Fix: siempre insertar Layer/PaletteColor nuevos por checkpoint, Layer.GroupId nuevo (columna normal, no PK) reemplaza la reutilizacion verbatim de Layer.Id.",
+    "CONFLICTO REAL DETECTADO Y RESUELTO UNILATERALMENTE: WidthMm/HeightMm/ViewBox/SchemaVersion vivian en VectorDocument (no versionados) en vez de en DocumentVersion -- se mueven a DocumentVersion via migracion para que restaurar una version vieja tambien restaure sus dimensiones.",
+    "DECISION TECNICA PROPIA: Origin de M2.2-S05 ('workspace_save') se renombra a 'MANUAL_EDIT' para alinear con el vocabulario cerrado de esta tarjeta (VECTORIZE/MANUAL_EDIT/AUTOSAVE/RESTORE/AI_EDIT). Solo MANUAL_EDIT y RESTORE se producen realmente hoy.",
+    "POST /api/v2/workspaces/save (M2.2-S05) ES el 'crear checkpoint' que pide esta tarjeta -- no se crea un endpoint nuevo separado para eso."
+  ]
+}
